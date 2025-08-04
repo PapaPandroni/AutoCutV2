@@ -6,6 +6,7 @@ motion analysis, and face detection.
 """
 
 from typing import Dict, List, Tuple, Optional
+import os
 import cv2
 import numpy as np
 try:
@@ -241,13 +242,87 @@ def detect_motion(video: VideoFileClip, start_time: float, end_time: float) -> f
         end_time: End time of segment in seconds
         
     Returns:
-        Motion score (higher means more motion/activity)
+        Motion score (0-100, higher means more motion/activity)
     """
-    # TODO: Implement motion detection
-    # - Use optical flow between frames
-    # - Calculate motion vectors
-    # - Return motion intensity score
-    pass
+    if VideoFileClip is None:
+        raise ImportError("MoviePy not available. Please install moviepy>=1.0.3")
+    
+    duration = end_time - start_time
+    if duration < 0.3:  # Need at least 0.3s for motion detection
+        return 0.0
+    
+    try:
+        # Sample frames for motion analysis (every 0.5 seconds, max 6 frames)
+        sample_interval = max(0.5, duration / 6)
+        sample_times = []
+        current_time = start_time
+        while current_time <= end_time - 0.1:  # Leave small buffer
+            sample_times.append(current_time)
+            current_time += sample_interval
+        
+        if len(sample_times) < 2:
+            return 0.0
+        
+        motion_scores = []
+        
+        # Calculate optical flow between consecutive frames
+        prev_frame = None
+        for t in sample_times:
+            # Get frame and convert to grayscale
+            frame = video.get_frame(t)
+            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+            
+            if prev_frame is not None:
+                # Calculate optical flow using Lucas-Kanade method
+                # First, detect corner points in previous frame
+                corners = cv2.goodFeaturesToTrack(
+                    prev_frame, 
+                    maxCorners=100,
+                    qualityLevel=0.3,
+                    minDistance=7,
+                    blockSize=7
+                )
+                
+                if corners is not None and len(corners) > 10:
+                    # Calculate optical flow
+                    next_corners, status, error = cv2.calcOpticalFlowPyrLK(
+                        prev_frame, gray, corners, None
+                    )
+                    
+                    # Select good points
+                    good_new = next_corners[status == 1]
+                    good_old = corners[status == 1]
+                    
+                    if len(good_new) > 5:
+                        # Calculate motion vectors
+                        motion_vectors = good_new - good_old
+                        
+                        # Calculate motion magnitude
+                        motion_magnitudes = np.sqrt(
+                            motion_vectors[:, 0] ** 2 + motion_vectors[:, 1] ** 2
+                        )
+                        
+                        # Average motion magnitude
+                        avg_motion = np.mean(motion_magnitudes)
+                        motion_scores.append(avg_motion)
+            
+            prev_frame = gray
+        
+        if not motion_scores:
+            return 0.0
+        
+        # Calculate final motion score
+        avg_motion = np.mean(motion_scores)
+        
+        # Normalize to 0-100 scale
+        # Typical motion values range from 0-20 pixels per frame
+        motion_score = min(100, avg_motion * 5)
+        
+        return float(motion_score)
+        
+    except Exception:
+        # Return 0 if motion detection fails
+        return 0.0
 
 
 def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> int:
@@ -261,11 +336,82 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
     Returns:
         Number of faces detected (higher is better for family videos)
     """
-    # TODO: Implement face detection
-    # - Use OpenCV's cascade classifier
-    # - Sample frames throughout segment
-    # - Count unique faces
-    pass
+    if VideoFileClip is None:
+        raise ImportError("MoviePy not available. Please install moviepy>=1.0.3")
+    
+    duration = end_time - start_time
+    if duration < 0.1:
+        return 0
+    
+    try:
+        # Load the face cascade classifier
+        # Try different possible locations for the cascade file
+        cascade_paths = [
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml',
+            'haarcascade_frontalface_default.xml',
+            '/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml',
+            '/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_default.xml'
+        ]
+        
+        face_cascade = None
+        for path in cascade_paths:
+            try:
+                if os.path.exists(path):
+                    face_cascade = cv2.CascadeClassifier(path)
+                    if not face_cascade.empty():
+                        break
+            except:
+                continue
+        
+        if face_cascade is None or face_cascade.empty():
+            # Fallback: return 0 if no face detection available
+            return 0
+        
+        # Sample 3-5 frames throughout the segment for face detection
+        if duration <= 1.0:
+            sample_times = [start_time + duration / 2]
+        elif duration <= 3.0:
+            sample_times = [start_time + duration * 0.3, start_time + duration * 0.7]
+        else:
+            sample_times = [
+                start_time + duration * 0.2,
+                start_time + duration * 0.5,
+                start_time + duration * 0.8
+            ]
+        
+        face_counts = []
+        
+        for t in sample_times:
+            try:
+                # Get frame and convert to grayscale
+                frame = video.get_frame(t)
+                gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                
+                # Detect faces
+                faces = face_cascade.detectMultiScale(
+                    gray,
+                    scaleFactor=1.1,
+                    minNeighbors=5,
+                    minSize=(30, 30),
+                    flags=cv2.CASCADE_SCALE_IMAGE
+                )
+                
+                face_counts.append(len(faces))
+                
+            except Exception:
+                # Skip problematic frames
+                continue
+        
+        if not face_counts:
+            return 0
+        
+        # Return maximum faces detected in any frame
+        # (assumption: family videos benefit from more faces visible)
+        return int(max(face_counts))
+        
+    except Exception:
+        # Return 0 if face detection fails
+        return 0
 
 
 def analyze_video_file(file_path: str, min_scene_duration: float = 2.0) -> List[VideoChunk]:
@@ -288,13 +434,89 @@ def analyze_video_file(file_path: str, min_scene_duration: float = 2.0) -> List[
         FileNotFoundError: If video file doesn't exist
         ValueError: If video format is unsupported
     """
-    # TODO: Implement complete video analysis pipeline
-    # - Load video
-    # - Detect scenes
-    # - Score each scene
-    # - Add motion and face detection
-    # - Return sorted VideoChunk objects
-    pass
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Video file not found: {file_path}")
+    
+    try:
+        # Load video
+        video, metadata = load_video(file_path)
+        
+        # Detect scenes
+        scenes = detect_scenes(video, threshold=30.0)
+        
+        # Filter scenes by minimum duration
+        valid_scenes = [
+            (start, end) for start, end in scenes 
+            if (end - start) >= min_scene_duration
+        ]
+        
+        if not valid_scenes:
+            # If no scenes meet minimum duration, use the original scenes
+            valid_scenes = scenes
+        
+        # Analyze each scene and create VideoChunk objects
+        chunks = []
+        
+        for start_time, end_time in valid_scenes:
+            try:
+                # Calculate basic quality score
+                quality_score = score_scene(video, start_time, end_time)
+                
+                # Calculate motion score
+                motion_score = detect_motion(video, start_time, end_time)
+                
+                # Calculate face count
+                face_count = detect_faces(video, start_time, end_time)
+                
+                # Create enhanced metadata
+                chunk_metadata = {
+                    'source_file': os.path.basename(file_path),
+                    'video_width': metadata['width'],
+                    'video_height': metadata['height'],
+                    'video_fps': metadata['fps'],
+                    'video_duration': metadata['duration'],
+                    'quality_score': quality_score,
+                    'motion_score': motion_score,
+                    'face_count': face_count
+                }
+                
+                # Calculate enhanced combined score
+                # Base quality: 60% weight
+                # Motion: 25% weight (normalized to 0-100)
+                # Faces: 15% weight (cap at 100 for 4+ faces)
+                face_score = min(100, face_count * 25)  # 4+ faces = 100 points
+                
+                enhanced_score = (
+                    0.60 * quality_score +
+                    0.25 * motion_score +
+                    0.15 * face_score
+                )
+                
+                # Create VideoChunk
+                chunk = VideoChunk(
+                    start_time=start_time,
+                    end_time=end_time,
+                    score=enhanced_score,
+                    video_path=file_path,
+                    metadata=chunk_metadata
+                )
+                
+                chunks.append(chunk)
+                
+            except Exception:
+                # Skip problematic scenes but continue processing
+                continue
+        
+        # Clean up video object
+        video.close()
+        
+        # Sort chunks by score (highest first)
+        chunks.sort(key=lambda x: x.score, reverse=True)
+        
+        return chunks
+        
+    except Exception as e:
+        raise ValueError(f"Failed to analyze video file {file_path}: {str(e)}")
 
 
 if __name__ == "__main__":
