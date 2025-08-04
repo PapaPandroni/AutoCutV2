@@ -50,6 +50,90 @@ class ClipTimeline:
     def get_total_duration(self) -> float:
         """Get total duration of all clips."""
         return sum(clip['duration'] for clip in self.clips)
+    
+    def get_clips_sorted_by_beat(self) -> List[Dict[str, Any]]:
+        """Get clips sorted by their beat position."""
+        return sorted(self.clips, key=lambda x: x['beat_position'])
+    
+    def get_summary_stats(self) -> Dict[str, Any]:
+        """Get summary statistics about the timeline."""
+        if not self.clips:
+            return {
+                'total_clips': 0,
+                'total_duration': 0.0,
+                'avg_score': 0.0,
+                'unique_videos': 0,
+                'score_range': (0.0, 0.0)
+            }
+        
+        scores = [clip['score'] for clip in self.clips]
+        unique_videos = len(set(clip['video_file'] for clip in self.clips))
+        
+        return {
+            'total_clips': len(self.clips),
+            'total_duration': self.get_total_duration(),
+            'avg_score': sum(scores) / len(scores),
+            'unique_videos': unique_videos,
+            'score_range': (min(scores), max(scores)),
+            'duration_range': (
+                min(clip['duration'] for clip in self.clips),
+                max(clip['duration'] for clip in self.clips)
+            )
+        }
+    
+    def validate_timeline(self, song_duration: float = None) -> Dict[str, Any]:
+        """Validate timeline for common issues.
+        
+        Args:
+            song_duration: Total duration of the song for coverage check
+            
+        Returns:
+            Dictionary with validation results
+        """
+        issues = []
+        warnings = []
+        
+        if not self.clips:
+            issues.append("Timeline is empty")
+            return {'valid': False, 'issues': issues, 'warnings': warnings}
+        
+        # Sort clips by beat position for analysis
+        sorted_clips = self.get_clips_sorted_by_beat()
+        
+        # Check for very short clips
+        short_clips = [clip for clip in self.clips if clip['duration'] < 0.5]
+        if short_clips:
+            warnings.append(f"{len(short_clips)} clips are very short (<0.5s)")
+        
+        # Check for very long clips
+        long_clips = [clip for clip in self.clips if clip['duration'] > 8.0]
+        if long_clips:
+            warnings.append(f"{len(long_clips)} clips are very long (>8s)")
+        
+        # Check score distribution
+        scores = [clip['score'] for clip in self.clips]
+        avg_score = sum(scores) / len(scores)
+        if avg_score < 50:
+            warnings.append(f"Average clip quality is low: {avg_score:.1f}")
+        
+        # Check video variety
+        unique_videos = len(set(clip['video_file'] for clip in self.clips))
+        if len(self.clips) > 5 and unique_videos == 1:
+            warnings.append("All clips are from the same video - low variety")
+        
+        # Check timeline coverage if song duration provided
+        if song_duration:
+            timeline_span = sorted_clips[-1]['beat_position'] - sorted_clips[0]['beat_position']
+            coverage = timeline_span / song_duration
+            if coverage < 0.8:
+                warnings.append(f"Timeline covers only {coverage*100:.1f}% of song")
+        
+        return {
+            'valid': len(issues) == 0,
+            'issues': issues,
+            'warnings': warnings,
+            'stats': self.get_summary_stats()
+        }
 
 
 def match_clips_to_beats(video_chunks: List[VideoChunk], beats: List[float], 
@@ -65,12 +149,157 @@ def match_clips_to_beats(video_chunks: List[VideoChunk], beats: List[float],
     Returns:
         ClipTimeline object with matched clips
     """
-    # TODO: Implement beat matching logic
-    # - Apply variety pattern
-    # - Match clips to beat grid
-    # - Respect minimum/maximum durations
-    # - Fill entire song duration
-    pass
+    if not video_chunks or not beats or len(beats) < 2:
+        return ClipTimeline()
+    
+    # Calculate beat interval (average time between beats)
+    beat_intervals = [beats[i+1] - beats[i] for i in range(len(beats)-1)]
+    avg_beat_interval = sum(beat_intervals) / len(beat_intervals)
+    
+    # Apply variety pattern to get beat multipliers
+    total_beats = len(beats) - 1  # Don't count the last beat as start of a clip
+    beat_multipliers = apply_variety_pattern(pattern, total_beats)
+    
+    # Convert beat multipliers to target durations
+    target_durations = [multiplier * avg_beat_interval for multiplier in beat_multipliers]
+    
+    # Estimate total clips needed
+    estimated_clips = len(target_durations)
+    
+    # Select best clips with variety (request more than needed for flexibility)
+    selected_clips = select_best_clips(video_chunks, 
+                                     target_count=min(estimated_clips * 2, len(video_chunks)),
+                                     variety_factor=0.3)
+    
+    timeline = ClipTimeline()
+    current_beat_index = 0
+    used_clips = set()  # Track used clips to avoid repetition
+    
+    for i, target_duration in enumerate(target_durations):
+        if current_beat_index >= len(beats):
+            break
+            
+        # Find best matching clip for this target duration
+        best_clip = None
+        best_fit_score = -1
+        
+        for clip in selected_clips:
+            if id(clip) in used_clips:
+                continue
+                
+            # Calculate fit score based on:
+            # 1. How close clip duration is to target duration
+            # 2. Clip quality score
+            # 3. Whether clip can be trimmed to fit exactly
+            
+            duration_fit = _calculate_duration_fit(clip.duration, target_duration, allowed_durations)
+            if duration_fit < 0:  # Clip can't be used for this duration
+                continue
+                
+            # Combined score: 70% quality, 30% duration fit
+            fit_score = 0.7 * (clip.score / 100.0) + 0.3 * duration_fit
+            
+            if fit_score > best_fit_score:
+                best_fit_score = fit_score
+                best_clip = clip
+        
+        if best_clip is None:
+            # No suitable clip found, skip this position
+            current_beat_index += beat_multipliers[i]
+            continue
+            
+        # Mark clip as used
+        used_clips.add(id(best_clip))
+        
+        # Determine actual clip timing
+        beat_position = beats[current_beat_index]
+        clip_start, clip_end, clip_duration = _fit_clip_to_duration(
+            best_clip, target_duration, allowed_durations
+        )
+        
+        # Add to timeline
+        timeline.add_clip(
+            video_file=best_clip.video_path,
+            start=clip_start,
+            end=clip_end,
+            beat_position=beat_position,
+            score=best_clip.score
+        )
+        
+        # Move to next beat position
+        current_beat_index += beat_multipliers[i]
+    
+    return timeline
+
+
+def _calculate_duration_fit(clip_duration: float, target_duration: float, 
+                           allowed_durations: List[float]) -> float:
+    """Calculate how well a clip duration fits the target duration.
+    
+    Args:
+        clip_duration: Duration of the video clip
+        target_duration: Desired duration for this position
+        allowed_durations: List of musically appropriate durations
+        
+    Returns:
+        Fit score between 0.0 and 1.0, or -1 if clip can't be used
+    """
+    # Check if target duration is in allowed durations (with small tolerance)
+    duration_allowed = False
+    for allowed in allowed_durations:
+        if abs(target_duration - allowed) < 0.1:
+            duration_allowed = True
+            break
+    
+    if not duration_allowed:
+        return -1  # Target duration is not musically appropriate
+    
+    # Perfect match
+    if abs(clip_duration - target_duration) < 0.1:
+        return 1.0
+    
+    # Clip is longer than target - can be trimmed
+    if clip_duration > target_duration:
+        # Prefer clips that are close to target but slightly longer
+        excess = clip_duration - target_duration
+        if excess <= 2.0:  # Can trim up to 2 seconds
+            return 1.0 - (excess / 4.0)  # Gentle penalty for trimming
+        else:
+            return 0.3  # Heavy penalty for lots of trimming
+    
+    # Clip is shorter than target
+    else:
+        shortage = target_duration - clip_duration
+        if shortage <= 0.5:  # Small shortage is acceptable
+            return 0.8 - (shortage / 1.0)
+        else:
+            return -1  # Too short, can't use
+
+
+def _fit_clip_to_duration(clip: VideoChunk, target_duration: float, 
+                         allowed_durations: List[float]) -> Tuple[float, float, float]:
+    """Fit a clip to the target duration by trimming if necessary.
+    
+    Args:
+        clip: Video chunk to fit
+        target_duration: Desired duration
+        allowed_durations: List of allowed durations
+        
+    Returns:
+        Tuple of (start_time, end_time, actual_duration)
+    """
+    if clip.duration <= target_duration + 0.1:
+        # Clip fits as-is
+        return clip.start_time, clip.end_time, clip.duration
+    
+    # Clip needs trimming - trim from the end to preserve the beginning
+    new_end_time = clip.start_time + target_duration
+    
+    # Make sure we don't exceed the original clip bounds
+    new_end_time = min(new_end_time, clip.end_time)
+    actual_duration = new_end_time - clip.start_time
+    
+    return clip.start_time, new_end_time, actual_duration
 
 
 def select_best_clips(video_chunks: List[VideoChunk], target_count: int, 
@@ -85,12 +314,113 @@ def select_best_clips(video_chunks: List[VideoChunk], target_count: int,
     Returns:
         List of selected VideoChunk objects
     """
-    # TODO: Implement clip selection
-    # - Sort clips by score
-    # - Ensure variety in source videos
-    # - Avoid using same scene twice
-    # - Balance quality vs. variety
-    pass
+    if not video_chunks:
+        return []
+    
+    if target_count <= 0:
+        return []
+        
+    if len(video_chunks) <= target_count:
+        return video_chunks.copy()
+    
+    # Group clips by video file for variety management
+    clips_by_video = {}
+    for chunk in video_chunks:
+        if chunk.video_path not in clips_by_video:
+            clips_by_video[chunk.video_path] = []
+        clips_by_video[chunk.video_path].append(chunk)
+    
+    # Sort clips within each video by score (descending)
+    for video_path in clips_by_video:
+        clips_by_video[video_path].sort(key=lambda x: x.score, reverse=True)
+    
+    selected_clips = []
+    
+    if variety_factor >= 0.9:
+        # High variety: Round-robin selection from each video
+        video_paths = list(clips_by_video.keys())
+        video_index = 0
+        
+        while len(selected_clips) < target_count:
+            video_path = video_paths[video_index % len(video_paths)]
+            
+            # Find next non-overlapping clip from this video
+            available_clips = clips_by_video[video_path]
+            for clip in available_clips:
+                if clip not in selected_clips and not _clips_overlap(clip, selected_clips):
+                    selected_clips.append(clip)
+                    break
+            
+            video_index += 1
+            
+            # Safety check: if we've tried all videos and can't find more clips
+            if video_index > len(video_paths) * 10:
+                break
+                
+    elif variety_factor <= 0.1:
+        # High quality: Just take the best clips regardless of source
+        all_clips_sorted = sorted(video_chunks, key=lambda x: x.score, reverse=True)
+        for clip in all_clips_sorted:
+            if len(selected_clips) >= target_count:
+                break
+            if not _clips_overlap(clip, selected_clips):
+                selected_clips.append(clip)
+                
+    else:
+        # Balanced approach: Weighted selection
+        # Calculate how many clips per video (with some variety)
+        num_videos = len(clips_by_video)
+        base_clips_per_video = max(1, target_count // num_videos)
+        remaining_clips = target_count - (base_clips_per_video * num_videos)
+        
+        # First pass: Get base clips from each video (highest quality)
+        for video_path in clips_by_video:
+            clips_from_video = 0
+            for clip in clips_by_video[video_path]:
+                if clips_from_video >= base_clips_per_video:
+                    break
+                if not _clips_overlap(clip, selected_clips):
+                    selected_clips.append(clip)
+                    clips_from_video += 1
+        
+        # Second pass: Fill remaining slots with highest quality clips
+        if remaining_clips > 0:
+            all_remaining_clips = []
+            for video_path in clips_by_video:
+                for clip in clips_by_video[video_path][base_clips_per_video:]:
+                    if clip not in selected_clips:
+                        all_remaining_clips.append(clip)
+            
+            all_remaining_clips.sort(key=lambda x: x.score, reverse=True)
+            
+            for clip in all_remaining_clips:
+                if len(selected_clips) >= target_count:
+                    break
+                if not _clips_overlap(clip, selected_clips):
+                    selected_clips.append(clip)
+    
+    return selected_clips[:target_count]
+
+
+def _clips_overlap(clip: VideoChunk, existing_clips: List[VideoChunk], 
+                  min_gap: float = 1.0) -> bool:
+    """Check if a clip overlaps with any existing clips from the same video.
+    
+    Args:
+        clip: Clip to check
+        existing_clips: List of already selected clips
+        min_gap: Minimum gap required between clips from same video (seconds)
+        
+    Returns:
+        True if clip overlaps with any existing clip from same video
+    """
+    for existing in existing_clips:
+        if existing.video_path == clip.video_path:
+            # Check for overlap or too close proximity
+            if (clip.start_time < existing.end_time + min_gap and 
+                clip.end_time > existing.start_time - min_gap):
+                return True
+    return False
 
 
 def apply_variety_pattern(pattern_name: str, beat_count: int) -> List[int]:
@@ -191,12 +521,113 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
         ValueError: If no suitable clips found
         RuntimeError: If rendering fails
     """
-    # TODO: Implement complete assembly pipeline
-    # - Analyze all videos
-    # - Analyze audio
-    # - Create timeline
-    # - Render final video
-    pass
+    import os
+    from .audio_analyzer import analyze_audio
+    from .video_analyzer import analyze_video_file
+    
+    def report_progress(step: str, progress: float):
+        """Helper to report progress if callback provided."""
+        if progress_callback:
+            progress_callback(step, progress)
+    
+    # Validate input files
+    if not os.path.exists(audio_file):
+        raise FileNotFoundError(f"Audio file not found: {audio_file}")
+    
+    missing_videos = [vf for vf in video_files if not os.path.exists(vf)]
+    if missing_videos:
+        raise FileNotFoundError(f"Video files not found: {missing_videos}")
+    
+    if not video_files:
+        raise ValueError("No video files provided")
+    
+    report_progress("Starting analysis", 0.0)
+    
+    # Step 1: Analyze audio file
+    report_progress("Analyzing audio", 0.1)
+    try:
+        audio_data = analyze_audio(audio_file)
+        beats = audio_data['beats']
+        allowed_durations = audio_data['allowed_durations']
+        
+        if len(beats) < 2:
+            raise ValueError(f"Insufficient beats detected in audio file: {len(beats)} beats")
+            
+        report_progress("Audio analysis complete", 0.2)
+        
+    except Exception as e:
+        raise RuntimeError(f"Failed to analyze audio file: {str(e)}")
+    
+    # Step 2: Analyze all video files
+    report_progress("Analyzing videos", 0.3)
+    all_video_chunks = []
+    
+    for i, video_file in enumerate(video_files):
+        try:
+            video_chunks = analyze_video_file(video_file)
+            if video_chunks:
+                all_video_chunks.extend(video_chunks)
+                
+            # Update progress for each video
+            video_progress = 0.3 + (0.4 * (i + 1) / len(video_files))
+            report_progress(f"Analyzed video {i+1}/{len(video_files)}", video_progress)
+            
+        except Exception as e:
+            # Log error but continue with other videos
+            print(f"Warning: Failed to analyze video {video_file}: {str(e)}")
+            continue
+    
+    if not all_video_chunks:
+        raise ValueError("No suitable video clips found in any input files")
+    
+    report_progress(f"Video analysis complete: {len(all_video_chunks)} clips found", 0.7)
+    
+    # Step 3: Match clips to beats
+    report_progress("Matching clips to beats", 0.75)
+    try:
+        timeline = match_clips_to_beats(
+            video_chunks=all_video_chunks,
+            beats=beats,
+            allowed_durations=allowed_durations,
+            pattern=pattern
+        )
+        
+        if not timeline.clips:
+            raise ValueError("No clips could be matched to the beat pattern")
+            
+        report_progress(f"Beat matching complete: {len(timeline.clips)} clips selected", 0.8)
+        
+    except Exception as e:
+        raise RuntimeError(f"Failed to match clips to beats: {str(e)}")
+    
+    # Step 4: Render final video
+    report_progress("Rendering video", 0.85)
+    try:
+        def render_progress(step_name: str, progress: float):
+            # Scale render progress to final 15% of overall progress
+            overall_progress = 0.85 + (0.15 * progress)
+            report_progress(f"Rendering: {step_name}", overall_progress)
+        
+        final_video_path = render_video(
+            timeline=timeline,
+            audio_file=audio_file,
+            output_path=output_path,
+            progress_callback=render_progress
+        )
+        
+        report_progress("Video rendering complete", 1.0)
+        return final_video_path
+        
+    except Exception as e:
+        raise RuntimeError(f"Failed to render video: {str(e)}")
+    
+    # Export timeline JSON for debugging (optional)
+    try:
+        timeline_path = output_path.replace('.mp4', '_timeline.json')
+        timeline.export_json(timeline_path)
+        print(f"Debug: Timeline exported to {timeline_path}")
+    except Exception:
+        pass  # Non-critical, ignore errors
 
 
 if __name__ == "__main__":
