@@ -7,12 +7,24 @@ applying variety patterns, and rendering the final video.
 
 from typing import Dict, List, Tuple, Optional, Any
 import json
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
 try:
     from moviepy.editor import VideoFileClip, CompositeVideoClip, concatenate_videoclips
 except ImportError:
-    # Fallback for testing without full moviepy installation
-    VideoFileClip = CompositeVideoClip = concatenate_videoclips = None
-from .video_analyzer import VideoChunk
+    try:
+        # Fallback for MoviePy 2.x direct imports
+        from moviepy import VideoFileClip, CompositeVideoClip, concatenate_videoclips
+    except ImportError:
+        # Final fallback for testing without moviepy installation
+        VideoFileClip = CompositeVideoClip = concatenate_videoclips = None
+try:
+    from .video_analyzer import VideoChunk
+except ImportError:
+    # Direct import for testing
+    from video_analyzer import VideoChunk
 
 
 # Variety patterns to prevent monotonous cutting
@@ -22,6 +34,198 @@ VARIETY_PATTERNS = {
     'balanced': [2, 1, 2, 4, 2, 1],   # Mixed pacing
     'dramatic': [1, 1, 1, 1, 8],      # Fast cuts then long hold
 }
+
+
+class VideoCache:
+    """Thread-safe cache for loaded video files to prevent duplicate loading."""
+    
+    def __init__(self):
+        self._cache: Dict[str, VideoFileClip] = {}
+        self._lock = threading.Lock()
+        self._ref_counts: Dict[str, int] = defaultdict(int)
+    
+    def get_or_load(self, video_path: str) -> VideoFileClip:
+        """Get cached video or load it if not cached.
+        
+        Args:
+            video_path: Path to video file
+            
+        Returns:
+            VideoFileClip instance
+            
+        Raises:
+            FileNotFoundError: If video file doesn't exist
+            RuntimeError: If video cannot be loaded
+        """
+        if VideoFileClip is None:
+            raise RuntimeError("MoviePy not available. Please install moviepy>=1.0.3")
+            
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
+        
+        with self._lock:
+            if video_path not in self._cache:
+                try:
+                    video_clip = VideoFileClip(video_path)
+                    self._cache[video_path] = video_clip
+                except Exception as e:
+                    raise RuntimeError(f"Failed to load video {video_path}: {str(e)}")
+            
+            # Increment reference count
+            self._ref_counts[video_path] += 1
+            return self._cache[video_path]
+    
+    def release(self, video_path: str) -> None:
+        """Release reference to cached video.
+        
+        Args:
+            video_path: Path to video file to release
+        """
+        with self._lock:
+            if video_path in self._ref_counts:
+                self._ref_counts[video_path] -= 1
+                
+                # Remove from cache if no more references
+                if self._ref_counts[video_path] <= 0:
+                    if video_path in self._cache:
+                        try:
+                            self._cache[video_path].close()
+                        except Exception:
+                            pass  # Ignore cleanup errors
+                        del self._cache[video_path]
+                    del self._ref_counts[video_path]
+    
+    def get_cached_paths(self) -> List[str]:
+        """Get list of currently cached video paths.
+        
+        Returns:
+            List of cached video file paths
+        """
+        with self._lock:
+            return list(self._cache.keys())
+    
+    def clear(self) -> None:
+        """Clear all cached videos and close resources."""
+        with self._lock:
+            for video_clip in self._cache.values():
+                try:
+                    video_clip.close()
+                except Exception:
+                    pass  # Ignore cleanup errors
+            self._cache.clear()
+            self._ref_counts.clear()
+
+
+def load_video_segment(clip_data: Dict[str, Any], video_cache: VideoCache) -> Optional[Tuple[Dict[str, Any], Any]]:
+    """Load a single video segment in parallel processing.
+    
+    Args:
+        clip_data: Dictionary containing video_file, start, end times
+        video_cache: Shared video cache instance
+        
+    Returns:
+        Tuple of (clip_data, video_segment) or None if failed
+    """
+    try:
+        # Get cached video (thread-safe)
+        source_video = video_cache.get_or_load(clip_data['video_file'])
+        
+        # Extract the specific segment
+        try:
+            segment = source_video.subclip(clip_data['start'], clip_data['end'])
+        except AttributeError:
+            # MoviePy 2.x uses subclipped
+            segment = source_video.subclipped(clip_data['start'], clip_data['end'])
+        
+        return (clip_data, segment)
+        
+    except Exception as e:
+        print(f"Warning: Failed to load clip {clip_data['video_file']}: {str(e)}")
+        return None
+
+
+def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]], 
+                             progress_callback: Optional[callable] = None,
+                             max_workers: int = 6) -> Tuple[List[Any], VideoCache]:
+    """Load video clips in parallel with intelligent caching.
+    
+    Args:
+        sorted_clips: List of clip data dictionaries sorted by beat position
+        progress_callback: Optional callback for progress updates
+        max_workers: Maximum number of parallel workers (default: 6)
+        
+    Returns:
+        Tuple of (video_clips_list, video_cache) for resource management
+        
+    Raises:
+        RuntimeError: If no clips could be loaded successfully
+    """
+    def report_progress(step: str, progress: float):
+        """Helper to report progress if callback provided."""
+        if progress_callback:
+            progress_callback(step, progress)
+    
+    if not sorted_clips:
+        raise ValueError("No clips provided for loading")
+    
+    # Initialize cache and results
+    video_cache = VideoCache()
+    video_clips = []
+    clip_mapping = {}  # Map to maintain order
+    
+    # Calculate optimal worker count (limit to prevent resource exhaustion)
+    optimal_workers = min(max_workers, len(sorted_clips), 8)
+    
+    report_progress(f"Loading {len(sorted_clips)} clips with {optimal_workers} workers", 0.1)
+    
+    try:
+        with ThreadPoolExecutor(max_workers=optimal_workers) as executor:
+            # Submit all clip loading tasks
+            future_to_index = {}
+            for i, clip_data in enumerate(sorted_clips):
+                future = executor.submit(load_video_segment, clip_data, video_cache)
+                future_to_index[future] = i
+            
+            # Collect results as they complete
+            completed_count = 0
+            for future in as_completed(future_to_index):
+                completed_count += 1
+                index = future_to_index[future]
+                
+                try:
+                    result = future.result()
+                    if result is not None:
+                        clip_data, segment = result
+                        clip_mapping[index] = segment
+                    
+                except Exception as e:
+                    print(f"Warning: Future failed for clip {index}: {str(e)}")
+                
+                # Update progress
+                progress = 0.1 + (0.6 * completed_count / len(sorted_clips))
+                report_progress(f"Loaded {completed_count}/{len(sorted_clips)} clips", progress)
+    
+    except Exception as e:
+        # Clean up cache on error
+        video_cache.clear()
+        raise RuntimeError(f"Parallel video loading failed: {str(e)}")
+    
+    # Reconstruct clips in original order
+    for i in range(len(sorted_clips)):
+        if i in clip_mapping:
+            video_clips.append(clip_mapping[i])
+    
+    if not video_clips:
+        video_cache.clear()
+        raise RuntimeError("No video clips could be loaded successfully")
+    
+    report_progress(f"Successfully loaded {len(video_clips)} clips", 0.7)
+    
+    # Log cache statistics
+    cached_files = video_cache.get_cached_paths()
+    print(f"Video cache: {len(cached_files)} unique files loaded")
+    
+    return video_clips, video_cache
 
 
 class ClipTimeline:
@@ -497,38 +701,12 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         # Get clips sorted by beat position
         sorted_clips = timeline.get_clips_sorted_by_beat()
         
-        # Load video clips and keep source videos open until final render
-        video_clips = []
-        source_videos = []  # Keep references to avoid premature cleanup
-        
-        for i, clip_data in enumerate(sorted_clips):
-            try:
-                # Load source video
-                if not os.path.exists(clip_data['video_file']):
-                    print(f"Warning: Video file not found: {clip_data['video_file']}")
-                    continue
-                
-                source_video = VideoFileClip(clip_data['video_file'])
-                source_videos.append(source_video)  # Keep reference
-                
-                # Extract the specific segment
-                try:
-                    segment = source_video.subclip(clip_data['start'], clip_data['end'])
-                except AttributeError:
-                    # MoviePy 2.x uses subclipped
-                    segment = source_video.subclipped(clip_data['start'], clip_data['end'])
-                
-                # For sequential concatenation, don't set start times
-                # Just add the segment directly
-                video_clips.append(segment)
-                
-                # Progress update
-                clip_progress = 0.1 + (0.6 * (i + 1) / len(sorted_clips))
-                report_progress(f"Loaded clip {i+1}/{len(sorted_clips)}", clip_progress)
-                
-            except Exception as e:
-                print(f"Warning: Failed to load clip {clip_data['video_file']}: {str(e)}")
-                continue
+        # Load video clips in parallel with intelligent caching
+        video_clips, video_cache = load_video_clips_parallel(
+            sorted_clips, 
+            progress_callback=progress_callback,
+            max_workers=6  # Optimal for video I/O without overwhelming system
+        )
         
         if not video_clips:
             raise RuntimeError("No video clips could be loaded successfully")
@@ -580,8 +758,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         # Clean up all resources
         final_video.close()
         audio_clip.close()
-        for source_video in source_videos:
-            source_video.close()
+        video_cache.clear()  # Clean up cached videos
         
         report_progress("Rendering complete", 1.0)
         
@@ -597,9 +774,8 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 final_video.close()
             if 'audio_clip' in locals():
                 audio_clip.close()
-            if 'source_videos' in locals():
-                for source_video in source_videos:
-                    source_video.close()
+            if 'video_cache' in locals():
+                video_cache.clear()
         except:
             pass
         
