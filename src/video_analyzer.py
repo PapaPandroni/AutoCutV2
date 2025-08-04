@@ -48,11 +48,33 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
         FileNotFoundError: If video file doesn't exist
         ValueError: If video format is unsupported
     """
-    # TODO: Implement video loading
-    # - Use MoviePy to load video
-    # - Extract metadata (duration, fps, resolution)
-    # - Handle unsupported formats gracefully
-    pass
+    import os
+    
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Video file not found: {file_path}")
+    
+    if VideoFileClip is None:
+        raise ImportError("MoviePy not available. Please install moviepy>=1.0.3")
+    
+    try:
+        # Load video with MoviePy
+        video = VideoFileClip(file_path)
+        
+        # Extract metadata
+        metadata = {
+            'duration': video.duration,
+            'fps': video.fps,
+            'size': video.size,  # (width, height)
+            'width': video.w,
+            'height': video.h,
+            'filename': os.path.basename(file_path),
+            'file_path': file_path
+        }
+        
+        return video, metadata
+        
+    except Exception as e:
+        raise ValueError(f"Failed to load video file {file_path}: {str(e)}")
 
 
 def detect_scenes(video: VideoFileClip, threshold: float = 30.0) -> List[Tuple[float, float]]:
@@ -65,11 +87,61 @@ def detect_scenes(video: VideoFileClip, threshold: float = 30.0) -> List[Tuple[f
     Returns:
         List of (start_time, end_time) tuples for each scene
     """
-    # TODO: Implement scene detection
-    # - Analyze frame differences
-    # - Detect significant changes
-    # - Return scene boundaries
-    pass
+    if VideoFileClip is None:
+        raise ImportError("MoviePy not available. Please install moviepy>=1.0.3")
+    
+    scenes = []
+    duration = video.duration
+    
+    # Sample frames every 0.5 seconds for performance
+    sample_interval = 0.5
+    timestamps = np.arange(0, duration, sample_interval)
+    
+    if len(timestamps) < 2:
+        # Video too short, return as single scene
+        return [(0.0, duration)]
+    
+    # Get frames and calculate differences
+    prev_frame = None
+    scene_changes = [0.0]  # Always start with beginning
+    
+    for t in timestamps[1:]:  # Skip first timestamp
+        try:
+            # Get frame as numpy array
+            frame = video.get_frame(t)
+            
+            if prev_frame is not None:
+                # Calculate frame difference (mean absolute difference)
+                diff = np.mean(np.abs(frame.astype(float) - prev_frame.astype(float)))
+                
+                # If difference exceeds threshold, mark as scene change
+                if diff > threshold:
+                    scene_changes.append(t)
+            
+            prev_frame = frame
+            
+        except Exception:
+            # Skip problematic frames
+            continue
+    
+    # Always end with video duration
+    if scene_changes[-1] != duration:
+        scene_changes.append(duration)
+    
+    # Convert to (start, end) tuples
+    for i in range(len(scene_changes) - 1):
+        start_time = scene_changes[i]
+        end_time = scene_changes[i + 1]
+        
+        # Only include scenes longer than 1 second
+        if end_time - start_time >= 1.0:
+            scenes.append((start_time, end_time))
+    
+    # If no scenes found, return entire video as one scene
+    if not scenes:
+        scenes = [(0.0, duration)]
+    
+    return scenes
 
 
 def score_scene(video: VideoFileClip, start_time: float, end_time: float) -> float:
@@ -88,11 +160,73 @@ def score_scene(video: VideoFileClip, start_time: float, end_time: float) -> flo
     Returns:
         Quality score from 0-100 (higher is better)
     """
-    # TODO: Implement scene scoring
-    # - Calculate sharpness using Laplacian variance
-    # - Calculate brightness and contrast
-    # - Combine metrics into single score
-    pass
+    if VideoFileClip is None:
+        raise ImportError("MoviePy not available. Please install moviepy>=1.0.3")
+    
+    # Sample 3-5 frames throughout the scene for analysis
+    duration = end_time - start_time
+    if duration < 0.1:
+        return 0.0  # Too short to analyze
+    
+    # Calculate sample points
+    if duration <= 1.0:
+        sample_times = [start_time + duration / 2]  # Middle frame only
+    elif duration <= 3.0:
+        sample_times = [start_time + duration * 0.25, start_time + duration * 0.75]
+    else:
+        sample_times = [
+            start_time + duration * 0.2,
+            start_time + duration * 0.5,
+            start_time + duration * 0.8
+        ]
+    
+    scores = []
+    
+    for t in sample_times:
+        try:
+            # Get frame as RGB numpy array
+            frame = video.get_frame(t)
+            
+            # Convert to grayscale for sharpness calculation
+            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+            
+            # 1. Sharpness (Laplacian variance) - higher is sharper
+            laplacian = cv2.Laplacian(gray, cv2.CV_64F)
+            sharpness = laplacian.var()
+            
+            # 2. Brightness (mean pixel value) - prefer moderate brightness
+            brightness = np.mean(gray)
+            # Score brightness: peak at 128, drop off for too dark/bright
+            brightness_score = 100 * (1 - abs(brightness - 128) / 128)
+            
+            # 3. Contrast (standard deviation) - higher is better
+            contrast = np.std(gray)
+            
+            # Normalize and combine scores
+            # Sharpness: log scale to handle wide range of values
+            sharpness_score = min(100, max(0, 20 * np.log10(max(sharpness, 1))))
+            
+            # Contrast: linear scale, max around 60-80 std
+            contrast_score = min(100, contrast * 1.5)
+            
+            # Weighted combination
+            frame_score = (
+                0.4 * sharpness_score +
+                0.3 * brightness_score +
+                0.3 * contrast_score
+            )
+            
+            scores.append(frame_score)
+            
+        except Exception:
+            # Skip problematic frames
+            continue
+    
+    if not scores:
+        return 0.0
+    
+    # Return average score
+    return float(np.mean(scores))
 
 
 def detect_motion(video: VideoFileClip, start_time: float, end_time: float) -> float:
