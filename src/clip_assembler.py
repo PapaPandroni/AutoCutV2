@@ -341,27 +341,37 @@ class ClipTimeline:
 
 
 def match_clips_to_beats(video_chunks: List[VideoChunk], beats: List[float], 
-                        allowed_durations: List[float], pattern: str = 'balanced') -> ClipTimeline:
-    """Match video chunks to beat grid using variety patterns.
+                        allowed_durations: List[float], pattern: str = 'balanced',
+                        musical_start_time: float = 0.0) -> ClipTimeline:
+    """Match video chunks to beat grid using variety patterns with musical intelligence.
     
     Args:
         video_chunks: List of scored video chunks
-        beats: List of beat timestamps in seconds
+        beats: List of beat timestamps in seconds (compensated and filtered)
         allowed_durations: List of musically appropriate durations
         pattern: Variety pattern to use ('energetic', 'buildup', 'balanced', 'dramatic')
+        musical_start_time: First significant beat timestamp (skip intro/buildup)
         
     Returns:
-        ClipTimeline object with matched clips
+        ClipTimeline object with matched clips starting from musical content
     """
     if not video_chunks or not beats or len(beats) < 2:
         return ClipTimeline()
     
+    # MUSICAL INTELLIGENCE: Filter beats to start from actual musical content
+    # This fixes the 1-2 second intro misalignment issue
+    effective_beats = [b for b in beats if b >= musical_start_time] if musical_start_time > 0 else beats
+    
+    if len(effective_beats) < 2:
+        # Fallback to all beats if musical start filtering leaves too few
+        effective_beats = beats
+    
     # Calculate beat interval (average time between beats)
-    beat_intervals = [beats[i+1] - beats[i] for i in range(len(beats)-1)]
+    beat_intervals = [effective_beats[i+1] - effective_beats[i] for i in range(len(effective_beats)-1)]
     avg_beat_interval = sum(beat_intervals) / len(beat_intervals)
     
     # Apply variety pattern to get beat multipliers
-    total_beats = len(beats) - 1  # Don't count the last beat as start of a clip
+    total_beats = len(effective_beats) - 1  # Don't count the last beat as start of a clip
     beat_multipliers = apply_variety_pattern(pattern, total_beats)
     
     # Convert beat multipliers to target durations
@@ -380,7 +390,7 @@ def match_clips_to_beats(video_chunks: List[VideoChunk], beats: List[float],
     used_clips = set()  # Track used clips to avoid repetition
     
     for i, target_duration in enumerate(target_durations):
-        if current_beat_index >= len(beats):
+        if current_beat_index >= len(effective_beats):
             break
             
         # Find best matching clip for this target duration
@@ -416,7 +426,7 @@ def match_clips_to_beats(video_chunks: List[VideoChunk], beats: List[float],
         used_clips.add(id(best_clip))
         
         # Determine actual clip timing
-        beat_position = beats[current_beat_index]
+        beat_position = effective_beats[current_beat_index]
         clip_start, clip_end, clip_duration = _fit_clip_to_duration(
             best_clip, target_duration, allowed_durations
         )
@@ -715,7 +725,10 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         # For simplicity, concatenate clips sequentially instead of compositing
         # This avoids the complex timing issues with CompositeVideoClip
-        final_video = concatenate_videoclips(video_clips, method="compose")
+        # PERFORMANCE OPTIMIZATION: Use optimized concatenation method
+        # For many clips (>10), chain is faster than compose
+        concatenation_method = "chain" if len(video_clips) > 10 else "compose"
+        final_video = concatenate_videoclips(video_clips, method=concatenation_method)
         
         # Set the duration to match the audio
         try:
@@ -744,14 +757,15 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 overall_progress = 0.8 + (0.2 * render_progress)
                 report_progress(f"Rendering: {render_progress*100:.1f}%", overall_progress)
         
+        # PERFORMANCE OPTIMIZATION: Hardware acceleration and optimized codec settings
+        codec_params = detect_optimal_codec_settings()
+        
         final_video.write_videofile(
             output_path,
-            codec='libx264',
-            audio_codec='aac',
+            **codec_params,
             temp_audiofile='temp-audio.m4a',
             remove_temp=True,
             fps=24,  # Standard frame rate
-            preset='medium',  # Balance between speed and quality
             logger=None  # Suppress MoviePy logging - None or 'bar'
         )
         
@@ -896,7 +910,12 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
     report_progress("Analyzing audio", 0.1)
     try:
         audio_data = analyze_audio(audio_file)
-        beats = audio_data['beats']
+        # CRITICAL FIX: Use compensated beats instead of raw beats to fix sync issues
+        beats = audio_data['compensated_beats']  # Offset-corrected and filtered beats
+        
+        # Get musical timing information for professional synchronization
+        musical_start_time = audio_data['musical_start_time']
+        intro_duration = audio_data['intro_duration']
         allowed_durations = audio_data['allowed_durations']
         
         if len(beats) < 2:
@@ -938,7 +957,8 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
             video_chunks=all_video_chunks,
             beats=beats,
             allowed_durations=allowed_durations,
-            pattern=pattern
+            pattern=pattern,
+            musical_start_time=musical_start_time  # Use musical intelligence for sync
         )
         
         if not timeline.clips:
@@ -977,6 +997,74 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
         print(f"Debug: Timeline exported to {timeline_path}")
     except Exception:
         pass  # Non-critical, ignore errors
+
+
+def detect_optimal_codec_settings() -> Dict[str, Any]:
+    """Detect and return optimal codec settings for hardware acceleration.
+    
+    Returns optimized codec parameters based on available hardware:
+    - NVIDIA GPU: h264_nvenc with fastest presets
+    - Intel GPU: h264_qsv with optimized settings
+    - CPU only: libx264 with ultrafast preset (3-4x faster than medium)
+    
+    Returns:
+        Dictionary of codec parameters for MoviePy write_videofile()
+    """
+    import subprocess
+    import os
+    
+    # Default high-performance CPU settings (3-4x faster than 'medium')
+    default_params = {
+        'codec': 'libx264',
+        'audio_codec': 'aac',
+        'preset': 'ultrafast',  # CRITICAL: Much faster than 'medium'
+        'crf': 23,  # Constant Rate Factor for quality control
+        'threads': os.cpu_count() or 4,  # Use all CPU cores
+    }
+    
+    try:
+        # Test for NVIDIA GPU acceleration (h264_nvenc)
+        result = subprocess.run(['ffmpeg', '-encoders'], 
+                              capture_output=True, text=True, timeout=5)
+        if 'h264_nvenc' in result.stdout:
+            try:
+                # Test if NVENC actually works
+                test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'testsrc2=duration=1:size=320x240:rate=1', 
+                           '-c:v', 'h264_nvenc', '-f', 'null', '-']
+                subprocess.run(test_cmd, capture_output=True, timeout=10, check=True)
+                
+                return {
+                    'codec': 'h264_nvenc',
+                    'audio_codec': 'aac',
+                    'preset': 'p1',  # Fastest NVENC preset
+                    'rc': 'vbr',     # Variable bitrate
+                    'cq': 23,        # NVENC quality parameter
+                    'threads': 1,    # NVENC doesn't need many threads
+                }
+            except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+                pass  # NVENC test failed, fall through to next option
+                
+        # Test for Intel Quick Sync (h264_qsv)
+        if 'h264_qsv' in result.stdout:
+            try:
+                test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'testsrc2=duration=1:size=320x240:rate=1', 
+                           '-c:v', 'h264_qsv', '-f', 'null', '-']
+                subprocess.run(test_cmd, capture_output=True, timeout=10, check=True)
+                
+                return {
+                    'codec': 'h264_qsv',
+                    'audio_codec': 'aac',
+                    'preset': 'veryfast',
+                    'threads': 2,
+                }
+            except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+                pass  # QSV test failed, use CPU
+                
+    except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # ffmpeg not available or failed, use CPU encoding
+    
+    # Return optimized CPU settings if hardware acceleration unavailable
+    return default_params
 
 
 if __name__ == "__main__":
