@@ -13,6 +13,13 @@ def test_video_analysis():
     print("🎬 Testing Video Analysis Functions")
     print("=" * 50)
     
+    # Check for quick test flag
+    import sys
+    max_videos = None
+    if "--quick" in sys.argv:
+        max_videos = 3
+        print("⚡ Quick mode: Processing first 3 videos only")
+    
     # Find video files in test_media
     video_extensions = ['*.mp4', '*.avi', '*.mov', '*.mkv', '*.webm']
     video_files = []
@@ -34,9 +41,12 @@ def test_video_analysis():
     print("\nAnalyzing each video:")
     print("-" * 30)
     
-    for video_file in video_files:
+    # Limit videos if max_videos is set
+    test_videos = video_files[:max_videos] if max_videos else video_files
+    
+    for i, video_file in enumerate(test_videos, 1):
         filename = os.path.basename(video_file)
-        print(f"\n🎬 {filename}")
+        print(f"\n🎬 [{i}/{len(test_videos)}] {filename}")
         
         try:
             # Test load_video function
@@ -47,9 +57,9 @@ def test_video_analysis():
             print(f"   FPS: {metadata['fps']:.1f}")
             
             # Test scene detection
-            print("   Detecting scenes...")
+            print("   Detecting scenes...", end=" ", flush=True)
             scenes = detect_scenes(video, threshold=30.0)
-            print(f"   Found {len(scenes)} scenes:")
+            print(f"Found {len(scenes)} scenes:")
             
             # Score each scene
             scored_scenes = []

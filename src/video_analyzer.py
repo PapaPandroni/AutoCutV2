@@ -9,10 +9,13 @@ from typing import Dict, List, Tuple, Optional
 import cv2
 import numpy as np
 try:
-    from moviepy.editor import VideoFileClip
+    from moviepy import VideoFileClip
 except ImportError:
-    # Fallback for testing without full moviepy installation
-    VideoFileClip = None
+    try:
+        from moviepy.editor import VideoFileClip
+    except ImportError:
+        # Fallback for testing without full moviepy installation
+        VideoFileClip = None
 
 
 class VideoChunk:
@@ -93,8 +96,8 @@ def detect_scenes(video: VideoFileClip, threshold: float = 30.0) -> List[Tuple[f
     scenes = []
     duration = video.duration
     
-    # Sample frames every 0.5 seconds for performance
-    sample_interval = 0.5
+    # Sample frames every 1.0 seconds for performance (was 0.5s)
+    sample_interval = 1.0
     timestamps = np.arange(0, duration, sample_interval)
     
     if len(timestamps) < 2:
