@@ -865,7 +865,12 @@ def apply_variety_pattern(pattern_name: str, beat_count: int) -> List[int]:
 
 def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 progress_callback: Optional[callable] = None) -> str:
-    """Render final video with music synchronization using MoviePy API compatibility layer.
+    """Render final video with music synchronization and frame-accurate audio handling.
+    
+    This version includes fixes for MoviePy 2.2.1 audio-video sync issues:
+    - Frame-accurate audio trimming to prevent 1-2 frame cuts
+    - Precise duration validation before concatenation
+    - Enhanced sync debugging and validation
     
     Args:
         timeline: ClipTimeline with all clips and timing
@@ -905,6 +910,8 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
     try:
         # Load audio track for duration calculation
         audio_clip = AudioFileClip(audio_file)
+        original_audio_duration = audio_clip.duration
+        print(f"Debug: Original audio duration: {original_audio_duration:.6f}s")
         
         # Get clips sorted by beat position
         sorted_clips = timeline.get_clips_sorted_by_beat()
@@ -936,25 +943,75 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         print(f"Debug: Final clip count - video_clips: {len(video_clips)}, timeline.clips: {len(timeline.clips)}")
         
+        # ENHANCED: Validate individual clip durations before concatenation
+        total_expected_duration = 0
+        for i, clip in enumerate(video_clips):
+            clip_duration = clip.duration
+            expected_duration = timeline.clips[i]['duration']
+            print(f"Debug: Clip {i+1}: actual={clip_duration:.6f}s, expected={expected_duration:.6f}s")
+            
+            # Check for significant duration discrepancies
+            duration_diff = abs(clip_duration - expected_duration)
+            if duration_diff > 0.1:  # More than 100ms difference
+                print(f"Warning: Clip {i+1} duration mismatch: {duration_diff:.6f}s difference")
+            
+            total_expected_duration += clip_duration
+        
+        print(f"Debug: Total expected video duration: {total_expected_duration:.6f}s")
+        
         report_progress("Concatenating video", 0.6)
         
         # Use "chain" method for reliable concatenation
         print(f"Debug: Using concatenation method 'chain' for {len(video_clips)} clips")
         final_video = concatenate_videoclips(video_clips, method="chain")
         
-        print(f"Debug: Concatenation successful, final video duration: {final_video.duration}")
+        actual_video_duration = final_video.duration
+        print(f"Debug: Concatenation successful, final video duration: {actual_video_duration:.6f}s")
         
-        # SIMPLIFIED APPROACH: Use MoviePy native audio attachment with full compatibility
-        report_progress("Attaching audio", 0.8)
+        # Validate concatenation didn't introduce timing errors
+        duration_error = abs(actual_video_duration - total_expected_duration)
+        if duration_error > 0.05:  # More than 50ms error
+            print(f"Warning: Concatenation timing error: {duration_error:.6f}s discrepancy")
         
-        # Trim audio to match video duration if needed using safe subclip method
-        if audio_clip.duration > final_video.duration:
-            print(f"Debug: Trimming audio from {audio_clip.duration}s to {final_video.duration}s")
-            audio_clip = subclip_safely(audio_clip, 0, final_video.duration, compatibility_info)
+        # ENHANCED AUDIO HANDLING: Frame-accurate trimming with sync compensation
+        report_progress("Preparing audio", 0.75)
+        
+        # Calculate precise audio duration needed (accounting for MoviePy sync bugs)
+        target_audio_duration = actual_video_duration
+        
+        # CRITICAL FIX: Add small buffer to prevent audio cutoff (addresses 1-2 frame cut bug)
+        video_fps = final_video.fps if hasattr(final_video, 'fps') and final_video.fps else 24
+        frame_duration = 1.0 / video_fps
+        sync_buffer = frame_duration * 2  # 2-frame buffer to prevent cutoff
+        
+        print(f"Debug: Video FPS: {video_fps}, Frame duration: {frame_duration:.6f}s")
+        print(f"Debug: Adding sync buffer: {sync_buffer:.6f}s to prevent audio cutoff")
+        
+        # Prepare audio with precise timing
+        if original_audio_duration > target_audio_duration:
+            # Trim audio to match video, but add sync buffer
+            audio_end_time = min(target_audio_duration + sync_buffer, original_audio_duration)
+            print(f"Debug: Trimming audio from {original_audio_duration:.6f}s to {audio_end_time:.6f}s")
+            trimmed_audio = subclip_safely(audio_clip, 0, audio_end_time, compatibility_info)
+        else:
+            # Audio is shorter than video - use full audio
+            print(f"Debug: Audio ({original_audio_duration:.6f}s) shorter than video ({target_audio_duration:.6f}s)")
+            trimmed_audio = audio_clip
+        
+        final_audio_duration = trimmed_audio.duration
+        print(f"Debug: Final audio duration: {final_audio_duration:.6f}s")
+        
+        # ENHANCED: Final sync validation
+        sync_difference = abs(final_audio_duration - actual_video_duration)
+        print(f"Debug: Audio-video sync difference: {sync_difference:.6f}s")
+        
+        if sync_difference > 0.1:  # More than 100ms difference
+            print(f"Warning: Significant audio-video sync difference: {sync_difference:.6f}s")
         
         # Attach audio using version-compatible method
+        report_progress("Attaching audio", 0.8)
         print(f"Debug: Attaching audio using method: {compatibility_info['method_mappings']['set_audio']}")
-        final_video = attach_audio_safely(final_video, audio_clip, compatibility_info)
+        final_video = attach_audio_safely(final_video, trimmed_audio, compatibility_info)
         
         report_progress("Rendering final video", 0.85)
         
@@ -976,14 +1033,44 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
             'logger': None  # Suppress MoviePy logging
         }
         
+        # ENHANCED: Add audio-specific parameters for better sync
+        write_params.update({
+            'audio_fps': 44100,  # Standard audio sample rate
+            'audio_codec': 'aac',  # Compatible audio codec
+            'audio_bitrate': '128k'  # Good quality audio bitrate
+        })
+        
+        print(f"Debug: Write parameters: {list(write_params.keys())}")
+        
         # Render with version-compatible parameter checking
         write_videofile_safely(final_video, output_path, compatibility_info, **write_params)
         
         print(f"Debug: Rendering completed successfully")
         
+        # ENHANCED: Post-render validation
+        if os.path.exists(output_path):
+            # Quick validation of output file
+            try:
+                output_clip = VideoFileClip(output_path)
+                output_duration = output_clip.duration
+                output_has_audio = output_clip.audio is not None
+                output_clip.close()
+                
+                print(f"Debug: Output validation - Duration: {output_duration:.6f}s, Has audio: {output_has_audio}")
+                
+                # Check for major duration discrepancies
+                duration_loss = abs(output_duration - actual_video_duration)
+                if duration_loss > 0.2:  # More than 200ms loss
+                    print(f"Warning: Significant duration loss in output: {duration_loss:.6f}s")
+                
+            except Exception as validation_error:
+                print(f"Warning: Could not validate output file: {validation_error}")
+        
         # Clean up resources
         final_video.close()
         audio_clip.close()
+        if 'trimmed_audio' in locals() and trimmed_audio != audio_clip:
+            trimmed_audio.close()
         video_cache.clear()  # Clean up cached videos
         
         report_progress("Rendering complete", 1.0)
@@ -1000,6 +1087,8 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 final_video.close()
             if 'audio_clip' in locals():
                 audio_clip.close()
+            if 'trimmed_audio' in locals() and 'audio_clip' in locals() and trimmed_audio != audio_clip:
+                trimmed_audio.close()
             if 'video_cache' in locals():
                 video_cache.clear()
         except:
