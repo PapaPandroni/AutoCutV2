@@ -23,6 +23,28 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.clip_assembler import assemble_clips
+from src.utils import SUPPORTED_VIDEO_FORMATS
+
+def find_all_video_files(directory: str) -> list:
+    """Find all supported video files in directory using enhanced format support."""
+    video_files = []
+    search_patterns = []
+    
+    # Create search patterns for all supported formats (case-insensitive)
+    for ext in SUPPORTED_VIDEO_FORMATS:
+        # Add both lowercase and uppercase variants
+        search_patterns.append(f"{directory}/*{ext}")
+        search_patterns.append(f"{directory}/*{ext.upper()}")
+    
+    # Search for all patterns
+    for pattern in search_patterns:
+        found_files = glob.glob(pattern)
+        video_files.extend(found_files)
+    
+    # Remove duplicates and sort
+    video_files = sorted(list(set(video_files)))
+    
+    return video_files
 
 def main():
     parser = argparse.ArgumentParser(description='AutoCut Demo - Create beat-synced videos')
@@ -37,10 +59,16 @@ def main():
     print("🎬 AutoCut Demo Test")
     print("=" * 50)
     
-    # Find all video files
-    video_files = glob.glob('test_media/*.mp4')
+    # Find all video files using enhanced format support
+    print(f"🔍 Searching for video files in test_media/")
+    print(f"   Supported formats: {', '.join(sorted(SUPPORTED_VIDEO_FORMATS))}")
+    
+    video_files = find_all_video_files('test_media')
     if not video_files:
-        print("❌ No video files found in test_media/")
+        print("❌ No supported video files found in test_media/")
+        print(f"   Searched for: {len(SUPPORTED_VIDEO_FORMATS)} different formats")
+        print(f"   Including: .mp4, .mov, .avi, .mkv, .webm, .3gp, .mts, .m2ts, etc.")
+        print("   Make sure your video files are in the test_media/ directory")
         return False
     
     # Limit videos if requested
@@ -48,9 +76,19 @@ def main():
         video_files = video_files[:args.videos]
     
     print(f"📁 Found {len(video_files)} video files:")
+    
+    # Group by file extension for better display
+    format_counts = {}
+    for vf in video_files:
+        ext = Path(vf).suffix.lower()
+        format_counts[ext] = format_counts.get(ext, 0) + 1
+    
+    print(f"   Format breakdown: {dict(sorted(format_counts.items()))}")
+    
     for i, vf in enumerate(video_files, 1):
         name = Path(vf).name
-        print(f"   {i:2d}. {name}")
+        ext = Path(vf).suffix.upper()
+        print(f"   {i:2d}. {name} ({ext})")
     
     # Find audio file
     if args.audio:
