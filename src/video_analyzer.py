@@ -443,43 +443,114 @@ def analyze_video_file(file_path: str, min_scene_duration: float = 2.0) -> List[
         FileNotFoundError: If video file doesn't exist
         ValueError: If video format is unsupported
     """
+    import logging
+    
+    # Set up detailed logging for video analysis
+    logger = logging.getLogger('autocut.video_analyzer')
+    logger.setLevel(logging.INFO)
+    
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Video file not found: {file_path}")
     
+    filename = os.path.basename(file_path)
+    logger.info(f"Starting analysis of video: {filename}")
+    
+    # Track processing statistics for detailed reporting
+    processing_stats = {
+        'file_path': file_path,
+        'filename': filename,
+        'load_success': False,
+        'scene_detection_success': False,
+        'scenes_found': 0,
+        'valid_scenes': 0,
+        'chunks_created': 0,
+        'chunks_failed': 0,
+        'errors': []
+    }
+    
     try:
-        # Load video
-        video, metadata = load_video(file_path)
+        # Step 1: Load video with detailed error tracking
+        logger.info(f"Loading video file: {filename}")
+        try:
+            video, metadata = load_video(file_path)
+            processing_stats['load_success'] = True
+            logger.info(f"Video loaded successfully: {metadata['width']}x{metadata['height']}, {metadata['duration']:.2f}s, {metadata['fps']:.2f}fps")
+            
+            # Log transcoding information if applicable
+            if metadata.get('was_transcoded', False):
+                logger.info(f"Video was transcoded from: {file_path} -> {metadata['processed_file_path']}")
+        except Exception as e:
+            error_msg = f"Failed to load video {filename}: {str(e)}"
+            processing_stats['errors'].append(error_msg)
+            logger.error(error_msg)
+            raise ValueError(error_msg)
         
-        # Detect scenes
-        scenes = detect_scenes(video, threshold=30.0)
+        # Step 2: Scene detection with detailed logging
+        logger.info(f"Starting scene detection for: {filename}")
+        try:
+            scenes = detect_scenes(video, threshold=30.0)
+            processing_stats['scene_detection_success'] = True
+            processing_stats['scenes_found'] = len(scenes)
+            logger.info(f"Scene detection complete: {len(scenes)} scenes found")
+            
+            if not scenes:
+                error_msg = f"No scenes detected in {filename} - video may be too short or uniform"
+                processing_stats['errors'].append(error_msg)
+                logger.warning(error_msg)
+        except Exception as e:
+            error_msg = f"Scene detection failed for {filename}: {str(e)}"
+            processing_stats['errors'].append(error_msg)
+            logger.error(error_msg)
+            # Don't raise here, try to continue with single scene
+            scenes = [(0.0, metadata['duration'])]
+            logger.info(f"Fallback: Using entire video as single scene")
         
-        # Filter scenes by minimum duration
+        # Step 3: Filter scenes by minimum duration
         valid_scenes = [
             (start, end) for start, end in scenes 
             if (end - start) >= min_scene_duration
         ]
+        processing_stats['valid_scenes'] = len(valid_scenes)
         
         if not valid_scenes:
             # If no scenes meet minimum duration, use the original scenes
+            logger.warning(f"No scenes meet minimum duration {min_scene_duration}s, using all {len(scenes)} scenes")
             valid_scenes = scenes
+            processing_stats['valid_scenes'] = len(valid_scenes)
         
-        # Analyze each scene and create VideoChunk objects
+        logger.info(f"Scene filtering complete: {len(valid_scenes)} valid scenes (min duration: {min_scene_duration}s)")
+        
+        # Step 4: Analyze each scene and create VideoChunk objects
         chunks = []
+        scene_errors = []
         
-        for start_time, end_time in valid_scenes:
+        for scene_idx, (start_time, end_time) in enumerate(valid_scenes):
+            scene_duration = end_time - start_time
+            logger.debug(f"Analyzing scene {scene_idx+1}/{len(valid_scenes)}: {start_time:.2f}-{end_time:.2f}s ({scene_duration:.2f}s)")
+            
             try:
                 # Calculate basic quality score
                 quality_score = score_scene(video, start_time, end_time)
+                logger.debug(f"Scene {scene_idx+1} quality score: {quality_score:.2f}")
                 
                 # Calculate motion score
                 motion_score = detect_motion(video, start_time, end_time)
+                logger.debug(f"Scene {scene_idx+1} motion score: {motion_score:.2f}")
                 
                 # Calculate face count
                 face_count = detect_faces(video, start_time, end_time)
+                logger.debug(f"Scene {scene_idx+1} face count: {face_count}")
                 
                 # Create enhanced metadata
                 chunk_metadata = {
                     'source_file': os.path.basename(file_path),
+                    'scene_index': scene_idx,
                     'video_width': metadata['width'],
                     'video_height': metadata['height'],
                     'video_fps': metadata['fps'],
@@ -511,21 +582,60 @@ def analyze_video_file(file_path: str, min_scene_duration: float = 2.0) -> List[
                 )
                 
                 chunks.append(chunk)
+                processing_stats['chunks_created'] += 1
+                logger.debug(f"Scene {scene_idx+1} chunk created: score={enhanced_score:.2f}")
                 
-            except Exception:
-                # Skip problematic scenes but continue processing
+            except Exception as e:
+                # Log detailed error for this specific scene but continue processing
+                error_msg = f"Scene {scene_idx+1} analysis failed: {str(e)}"
+                scene_errors.append(error_msg)
+                processing_stats['chunks_failed'] += 1
+                logger.warning(f"Scene {scene_idx+1} failed ({start_time:.2f}-{end_time:.2f}s): {str(e)}")
                 continue
         
         # Clean up video object
         video.close()
         
+        # Final processing statistics and warnings
+        logger.info(f"Video analysis complete for {filename}:")
+        logger.info(f"  - Scenes detected: {processing_stats['scenes_found']}")
+        logger.info(f"  - Valid scenes: {processing_stats['valid_scenes']}")
+        logger.info(f"  - Chunks created: {processing_stats['chunks_created']}")
+        logger.info(f"  - Chunks failed: {processing_stats['chunks_failed']}")
+        
+        if scene_errors:
+            logger.warning(f"Scene processing errors for {filename}:")
+            for error in scene_errors:
+                logger.warning(f"  - {error}")
+        
+        if not chunks:
+            error_msg = f"No usable chunks created from {filename} - all {len(valid_scenes)} scenes failed analysis"
+            processing_stats['errors'].append(error_msg)
+            logger.error(error_msg)
+            logger.error(f"Scene errors: {scene_errors}")
+            
+            # Provide detailed diagnosis
+            if processing_stats['scenes_found'] == 0:
+                logger.error(f"Root cause: No scenes detected - check if video is valid and not corrupted")
+            elif processing_stats['valid_scenes'] == 0:
+                logger.error(f"Root cause: No scenes meet minimum duration {min_scene_duration}s")
+            else:
+                logger.error(f"Root cause: All scene analysis steps failed - check video codec compatibility")
+            
+            return []  # Return empty list instead of raising exception
+        
         # Sort chunks by score (highest first)
         chunks.sort(key=lambda x: x.score, reverse=True)
         
+        logger.info(f"Successfully created {len(chunks)} chunks from {filename} (scores: {chunks[0].score:.1f}-{chunks[-1].score:.1f})")
         return chunks
         
     except Exception as e:
-        raise ValueError(f"Failed to analyze video file {file_path}: {str(e)}")
+        error_msg = f"Critical error analyzing {filename}: {str(e)}"
+        processing_stats['errors'].append(error_msg)
+        logger.error(error_msg)
+        logger.error(f"Processing stats: {processing_stats}")
+        raise ValueError(error_msg)
 
 
 if __name__ == "__main__":

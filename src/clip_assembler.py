@@ -1533,28 +1533,66 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
         RuntimeError: If rendering fails
     """
     import os
+    import logging
     from .audio_analyzer import analyze_audio
     from .video_analyzer import analyze_video_file
+    
+    # Set up detailed logging for the main pipeline
+    logger = logging.getLogger('autocut.clip_assembler')
+    logger.setLevel(logging.INFO)
+    
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
     
     def report_progress(step: str, progress: float):
         """Helper to report progress if callback provided."""
         if progress_callback:
             progress_callback(step, progress)
     
+    # Initialize comprehensive processing statistics
+    processing_summary = {
+        'total_videos': len(video_files),
+        'videos_processed': 0,
+        'videos_successful': 0,
+        'videos_failed': 0,
+        'total_chunks': 0,
+        'file_results': [],  # Detailed per-file results
+        'errors': []
+    }
+    
+    logger.info(f"=== AutoCut Video Processing Started ===")
+    logger.info(f"Input videos: {len(video_files)} files")
+    logger.info(f"Audio file: {os.path.basename(audio_file)}")
+    logger.info(f"Output path: {output_path}")
+    logger.info(f"Pattern: {pattern}")
+    
     # Validate input files
+    logger.info("Validating input files...")
     if not os.path.exists(audio_file):
-        raise FileNotFoundError(f"Audio file not found: {audio_file}")
+        error_msg = f"Audio file not found: {audio_file}"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
     
     missing_videos = [vf for vf in video_files if not os.path.exists(vf)]
     if missing_videos:
-        raise FileNotFoundError(f"Video files not found: {missing_videos}")
+        error_msg = f"Video files not found: {missing_videos}"
+        logger.error(error_msg)
+        processing_summary['errors'].append(error_msg)
+        raise FileNotFoundError(error_msg)
     
     if not video_files:
-        raise ValueError("No video files provided")
+        error_msg = "No video files provided"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
+    logger.info("✅ All input files exist and are accessible")
     report_progress("Starting analysis", 0.0)
     
     # Step 1: Analyze audio file
+    logger.info("=== Step 1: Audio Analysis ===")
     report_progress("Analyzing audio", 0.1)
     try:
         audio_data = analyze_audio(audio_file)
@@ -1567,38 +1605,129 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
         allowed_durations = audio_data['allowed_durations']
         
         if len(beats) < 2:
-            raise ValueError(f"Insufficient beats detected in audio file: {len(beats)} beats")
+            error_msg = f"Insufficient beats detected in audio file: {len(beats)} beats"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
             
+        logger.info(f"✅ Audio analysis successful:")
+        logger.info(f"  - Beats detected: {len(beats)}")
+        logger.info(f"  - Musical start: {musical_start_time:.2f}s")
+        logger.info(f"  - Intro duration: {intro_duration:.2f}s")
         report_progress("Audio analysis complete", 0.2)
         
     except Exception as e:
-        raise RuntimeError(f"Failed to analyze audio file: {str(e)}")
+        error_msg = f"Failed to analyze audio file: {str(e)}"
+        logger.error(error_msg)
+        processing_summary['errors'].append(error_msg)
+        raise RuntimeError(error_msg)
     
-    # Step 2: Analyze all video files
+    # Step 2: Analyze all video files with detailed per-file tracking
+    logger.info("=== Step 2: Video Analysis ===")
     report_progress("Analyzing videos", 0.3)
     all_video_chunks = []
     
     for i, video_file in enumerate(video_files):
+        processing_summary['videos_processed'] += 1
+        filename = os.path.basename(video_file)
+        
+        file_result = {
+            'file_path': video_file,
+            'filename': filename,
+            'index': i + 1,
+            'status': 'processing',
+            'chunks_created': 0,
+            'error_message': None,
+            'processing_time': 0
+        }
+        
+        logger.info(f"--- Processing video {i+1}/{len(video_files)}: {filename} ---")
+        
+        import time
+        start_time = time.time()
+        
         try:
             video_chunks = analyze_video_file(video_file)
+            processing_time = time.time() - start_time
+            file_result['processing_time'] = processing_time
+            
             if video_chunks:
                 all_video_chunks.extend(video_chunks)
+                file_result['chunks_created'] = len(video_chunks)
+                file_result['status'] = 'success'
+                processing_summary['videos_successful'] += 1
+                processing_summary['total_chunks'] += len(video_chunks)
                 
-            # Update progress for each video
-            video_progress = 0.3 + (0.4 * (i + 1) / len(video_files))
-            report_progress(f"Analyzed video {i+1}/{len(video_files)}", video_progress)
-            
+                logger.info(f"✅ {filename}: {len(video_chunks)} chunks created ({processing_time:.2f}s)")
+                
+                # Log chunk quality summary
+                if video_chunks:
+                    scores = [chunk.score for chunk in video_chunks]
+                    logger.info(f"   Chunk scores: {min(scores):.1f}-{max(scores):.1f} (avg: {sum(scores)/len(scores):.1f})")
+            else:
+                file_result['status'] = 'failed'
+                file_result['error_message'] = "No chunks created - check logs above for detailed error analysis"
+                processing_summary['videos_failed'] += 1
+                
+                logger.error(f"❌ {filename}: No chunks created ({processing_time:.2f}s)")
+                logger.error(f"   → This video will be excluded from the final output")
+                
         except Exception as e:
-            # Log error but continue with other videos
-            print(f"Warning: Failed to analyze video {video_file}: {str(e)}")
-            continue
+            processing_time = time.time() - start_time
+            file_result['processing_time'] = processing_time
+            file_result['status'] = 'failed'
+            file_result['error_message'] = str(e)
+            processing_summary['videos_failed'] += 1
+            processing_summary['errors'].append(f"{filename}: {str(e)}")
+            
+            logger.error(f"❌ {filename}: Processing failed ({processing_time:.2f}s)")
+            logger.error(f"   Error: {str(e)}")
+            logger.error(f"   → This video will be excluded from the final output")
+            
+        processing_summary['file_results'].append(file_result)
+            
+        # Update progress for each video
+        video_progress = 0.3 + (0.4 * (i + 1) / len(video_files))
+        report_progress(f"Analyzed video {i+1}/{len(video_files)}", video_progress)
     
+    # Comprehensive processing summary
+    logger.info("=== Video Processing Summary ===")
+    logger.info(f"Total videos: {processing_summary['total_videos']}")
+    logger.info(f"✅ Successful: {processing_summary['videos_successful']}")
+    logger.info(f"❌ Failed: {processing_summary['videos_failed']}")
+    logger.info(f"📊 Total chunks created: {processing_summary['total_chunks']}")
+    
+    # Detailed per-file results
+    if processing_summary['videos_failed'] > 0:
+        logger.warning("Failed video details:")
+        for file_result in processing_summary['file_results']:
+            if file_result['status'] == 'failed':
+                logger.warning(f"  - {file_result['filename']}: {file_result['error_message']}")
+    
+    # Check if we have any usable content
     if not all_video_chunks:
-        raise ValueError("No suitable video clips found in any input files")
+        error_msg = (
+            f"No suitable video clips found in any of the {len(video_files)} input files.\n"
+            f"Processing results:\n"
+            f"  - Successful videos: {processing_summary['videos_successful']}\n"
+            f"  - Failed videos: {processing_summary['videos_failed']}\n"
+            f"  - Total chunks created: {processing_summary['total_chunks']}\n"
+            f"\nDetailed errors:\n" + 
+            "\n".join([f"  - {error}" for error in processing_summary['errors'][-10:]])  # Last 10 errors
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+    
+    # Calculate success rate
+    success_rate = (processing_summary['videos_successful'] / processing_summary['total_videos']) * 100
+    logger.info(f"Processing success rate: {success_rate:.1f}%")
+    
+    if success_rate < 50:
+        logger.warning(f"⚠️  Low success rate ({success_rate:.1f}%) - check video format compatibility")
     
     report_progress(f"Video analysis complete: {len(all_video_chunks)} clips found", 0.7)
     
     # Step 3: Match clips to beats
+    logger.info("=== Step 3: Beat Matching ===")
     report_progress("Matching clips to beats", 0.75)
     try:
         timeline = match_clips_to_beats(
@@ -1610,14 +1739,29 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
         )
         
         if not timeline.clips:
-            raise ValueError("No clips could be matched to the beat pattern")
+            error_msg = f"No clips could be matched to the beat pattern using {len(all_video_chunks)} available chunks"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
             
+        logger.info(f"✅ Beat matching successful: {len(timeline.clips)} clips selected")
+        
+        # Log timeline statistics
+        timeline_stats = timeline.get_summary_stats()
+        logger.info(f"Timeline statistics:")
+        logger.info(f"  - Total duration: {timeline_stats['total_duration']:.2f}s")
+        logger.info(f"  - Average score: {timeline_stats['avg_score']:.1f}")
+        logger.info(f"  - Score range: {timeline_stats['score_range'][0]:.1f}-{timeline_stats['score_range'][1]:.1f}")
+        logger.info(f"  - Unique videos used: {timeline_stats['unique_videos']}")
+        
         report_progress(f"Beat matching complete: {len(timeline.clips)} clips selected", 0.8)
         
     except Exception as e:
-        raise RuntimeError(f"Failed to match clips to beats: {str(e)}")
+        error_msg = f"Failed to match clips to beats: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
     
     # Step 4: Render final video
+    logger.info("=== Step 4: Video Rendering ===")
     report_progress("Rendering video", 0.85)
     try:
         def render_progress(step_name: str, progress: float):
@@ -1632,19 +1776,39 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
             progress_callback=render_progress
         )
         
+        logger.info(f"✅ Video rendering complete: {final_video_path}")
         report_progress("Video rendering complete", 1.0)
+        
+        # Final success summary
+        logger.info("=== AutoCut Processing Complete ===")
+        logger.info(f"✅ Successfully created video: {os.path.basename(final_video_path)}")
+        logger.info(f"📊 Processing summary:")
+        logger.info(f"  - Videos processed: {processing_summary['videos_successful']}/{processing_summary['total_videos']}")
+        logger.info(f"  - Chunks used: {len(timeline.clips)}/{processing_summary['total_chunks']}")
+        logger.info(f"  - Final video duration: {timeline_stats['total_duration']:.2f}s")
+        
         return final_video_path
         
     except Exception as e:
-        raise RuntimeError(f"Failed to render video: {str(e)}")
+        error_msg = f"Failed to render video: {str(e)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
     
     # Export timeline JSON for debugging (optional)
     try:
         timeline_path = output_path.replace('.mp4', '_timeline.json')
         timeline.export_json(timeline_path)
-        print(f"Debug: Timeline exported to {timeline_path}")
+        logger.info(f"Debug: Timeline exported to {timeline_path}")
+        
+        # Export processing summary for debugging
+        summary_path = output_path.replace('.mp4', '_processing_summary.json')
+        import json
+        with open(summary_path, 'w') as f:
+            json.dump(processing_summary, f, indent=2)
+        logger.info(f"Debug: Processing summary exported to {summary_path}")
+        
     except Exception:
-        pass  # Non-critical, ignore errors
+        pass  # Non-critical, ignore errors  # Non-critical, ignore errors
 
 
 def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
