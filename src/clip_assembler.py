@@ -718,6 +718,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         # Get clips sorted by beat position
         sorted_clips = timeline.get_clips_sorted_by_beat()
+        print(f"Debug: Timeline has {len(sorted_clips)} clips to load")
         
         # Load video clips in parallel with intelligent caching
         video_clips, video_cache, failed_indices = load_video_clips_parallel(
@@ -728,6 +729,8 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         if not video_clips:
             raise RuntimeError("No video clips could be loaded successfully")
+        
+        print(f"Debug: Loaded {len(video_clips)} video clips successfully")
         
         # CRITICAL FIX: If some clips failed to load, we need to remove them from the timeline
         # to prevent index mismatch during composition
@@ -740,18 +743,23 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
             # Temporarily replace timeline clips for rendering
             timeline.clips = adjusted_clips
             
+            print(f"Debug: Timeline adjusted from {len(original_clips)} to {len(adjusted_clips)} clips")
+            
             # Ensure we have the right number of clips
             if len(video_clips) != len(timeline.clips):
                 raise RuntimeError(f"Clip count mismatch after adjustment: {len(video_clips)} loaded vs {len(timeline.clips)} in timeline")
         
-        report_progress("Compositing video", 0.7)
+        print(f"Debug: Final clip count - video_clips: {len(video_clips)}, timeline.clips: {len(timeline.clips)}")
         
-        # For simplicity, concatenate clips sequentially instead of compositing
-        # This avoids the complex timing issues with CompositeVideoClip
-        # PERFORMANCE OPTIMIZATION: Use optimized concatenation method
-        # For many clips (>10), chain is faster than compose
-        concatenation_method = "chain" if len(video_clips) > 10 else "compose"
-        final_video = concatenate_videoclips(video_clips, method=concatenation_method)
+        report_progress("Concatenating video", 0.7)
+        
+        # CRITICAL FIX: Always use "chain" method to avoid CompositeVideoClip
+        # The "compose" method uses CompositeVideoClip internally which causes IndexError
+        # The "chain" method is safer and avoids the composition timing issues
+        print(f"Debug: Using concatenation method 'chain' for {len(video_clips)} clips")
+        final_video = concatenate_videoclips(video_clips, method="chain")
+        
+        print(f"Debug: Concatenation successful, final video duration: {final_video.duration}")
         
         # Set the duration to match the audio
         try:
