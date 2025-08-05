@@ -758,11 +758,12 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 report_progress(f"Rendering: {render_progress*100:.1f}%", overall_progress)
         
         # PERFORMANCE OPTIMIZATION: Hardware acceleration and optimized codec settings
-        codec_params = detect_optimal_codec_settings()
+        moviepy_params, ffmpeg_params = detect_optimal_codec_settings()
         
         final_video.write_videofile(
             output_path,
-            **codec_params,
+            **moviepy_params,
+            ffmpeg_params=ffmpeg_params,
             temp_audiofile='temp-audio.m4a',
             remove_temp=True,
             fps=24,  # Standard frame rate
@@ -999,7 +1000,7 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
         pass  # Non-critical, ignore errors
 
 
-def detect_optimal_codec_settings() -> Dict[str, Any]:
+def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
     """Detect and return optimal codec settings for hardware acceleration.
     
     Returns optimized codec parameters based on available hardware:
@@ -1008,19 +1009,24 @@ def detect_optimal_codec_settings() -> Dict[str, Any]:
     - CPU only: libx264 with ultrafast preset (3-4x faster than medium)
     
     Returns:
-        Dictionary of codec parameters for MoviePy write_videofile()
+        Tuple containing:
+        - Dictionary of MoviePy parameters for write_videofile()
+        - List of FFmpeg-specific parameters for ffmpeg_params argument
     """
     import subprocess
     import os
     
     # Default high-performance CPU settings (3-4x faster than 'medium')
-    default_params = {
+    default_moviepy_params = {
         'codec': 'libx264',
         'audio_codec': 'aac',
-        'preset': 'ultrafast',  # CRITICAL: Much faster than 'medium'
-        'crf': 23,  # Constant Rate Factor for quality control
         'threads': os.cpu_count() or 4,  # Use all CPU cores
     }
+    
+    default_ffmpeg_params = [
+        '-preset', 'ultrafast',  # CRITICAL: Much faster than 'medium'
+        '-crf', '23',            # Constant Rate Factor for quality control
+    ]
     
     try:
         # Test for NVIDIA GPU acceleration (h264_nvenc)
@@ -1033,14 +1039,20 @@ def detect_optimal_codec_settings() -> Dict[str, Any]:
                            '-c:v', 'h264_nvenc', '-f', 'null', '-']
                 subprocess.run(test_cmd, capture_output=True, timeout=10, check=True)
                 
-                return {
+                moviepy_params = {
                     'codec': 'h264_nvenc',
                     'audio_codec': 'aac',
-                    'preset': 'p1',  # Fastest NVENC preset
-                    'rc': 'vbr',     # Variable bitrate
-                    'cq': 23,        # NVENC quality parameter
                     'threads': 1,    # NVENC doesn't need many threads
                 }
+                
+                ffmpeg_params = [
+                    '-preset', 'p1',     # Fastest NVENC preset
+                    '-rc', 'vbr',        # Variable bitrate
+                    '-cq', '23',         # NVENC quality parameter
+                ]
+                
+                return moviepy_params, ffmpeg_params
+                
             except (subprocess.SubprocessError, subprocess.TimeoutExpired):
                 pass  # NVENC test failed, fall through to next option
                 
@@ -1051,12 +1063,18 @@ def detect_optimal_codec_settings() -> Dict[str, Any]:
                            '-c:v', 'h264_qsv', '-f', 'null', '-']
                 subprocess.run(test_cmd, capture_output=True, timeout=10, check=True)
                 
-                return {
+                moviepy_params = {
                     'codec': 'h264_qsv',
                     'audio_codec': 'aac',
-                    'preset': 'veryfast',
                     'threads': 2,
                 }
+                
+                ffmpeg_params = [
+                    '-preset', 'veryfast',
+                ]
+                
+                return moviepy_params, ffmpeg_params
+                
             except (subprocess.SubprocessError, subprocess.TimeoutExpired):
                 pass  # QSV test failed, use CPU
                 
@@ -1064,7 +1082,7 @@ def detect_optimal_codec_settings() -> Dict[str, Any]:
         pass  # ffmpeg not available or failed, use CPU encoding
     
     # Return optimized CPU settings if hardware acceleration unavailable
-    return default_params
+    return default_moviepy_params, default_ffmpeg_params
 
 
 if __name__ == "__main__":
