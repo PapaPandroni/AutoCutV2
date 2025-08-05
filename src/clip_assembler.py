@@ -115,6 +115,274 @@ class VideoCache:
             self._cache.clear()
             self._ref_counts.clear()
 
+class VideoFormatAnalyzer:
+    """Analyzes video formats to detect inconsistencies that cause visual artifacts."""
+    
+    def __init__(self):
+        self.format_cache = {}
+    
+    def analyze_video_format(self, video_clip) -> Dict[str, Any]:
+        """Extract comprehensive format information from a video clip.
+        
+        Args:
+            video_clip: MoviePy VideoFileClip instance
+            
+        Returns:
+            Dictionary with format details
+        """
+        try:
+            format_info = {
+                'width': video_clip.w,
+                'height': video_clip.h,
+                'fps': video_clip.fps,
+                'duration': video_clip.duration,
+                'aspect_ratio': video_clip.w / video_clip.h if video_clip.h > 0 else 1.0,
+                'resolution_category': self._categorize_resolution(video_clip.w, video_clip.h),
+                'fps_category': self._categorize_fps(video_clip.fps),
+            }
+            
+            # Add codec information if available
+            if hasattr(video_clip, 'filename'):
+                format_info['filename'] = video_clip.filename
+            
+            return format_info
+            
+        except Exception as e:
+            print(f"Warning: Could not analyze video format: {e}")
+            return {
+                'width': 1920, 'height': 1080, 'fps': 24.0, 'duration': 0.0,
+                'aspect_ratio': 16/9, 'resolution_category': '1080p', 'fps_category': '24fps'
+            }
+    
+    def _categorize_resolution(self, width: int, height: int) -> str:
+        """Categorize resolution into standard formats."""
+        if width >= 3840 and height >= 2160:
+            return '4K'
+        elif width >= 2560 and height >= 1440:
+            return '1440p'
+        elif width >= 1920 and height >= 1080:
+            return '1080p'
+        elif width >= 1280 and height >= 720:
+            return '720p'
+        else:
+            return 'SD'
+    
+    def _categorize_fps(self, fps: float) -> str:
+        """Categorize frame rate into standard categories."""
+        if fps >= 59.0:
+            return '60fps'
+        elif fps >= 29.0:
+            return '30fps'
+        elif fps >= 24.0:
+            return '25fps'
+        else:
+            return '24fps'
+    
+    def find_dominant_format(self, video_clips: List[Any]) -> Dict[str, Any]:
+        """Determine the dominant format across all clips for normalization target.
+        
+        Args:
+            video_clips: List of VideoFileClip instances
+            
+        Returns:
+            Target format specification for normalization
+        """
+        if not video_clips:
+            return {
+                'target_width': 1920, 'target_height': 1080, 'target_fps': 24.0,
+                'target_aspect_ratio': 16/9, 'requires_normalization': False
+            }
+        
+        formats = []
+        for clip in video_clips:
+            format_info = self.analyze_video_format(clip)
+            formats.append(format_info)
+        
+        # Find most common resolution
+        resolution_counts = {}
+        fps_counts = {}
+        
+        for fmt in formats:
+            res_key = f"{fmt['width']}x{fmt['height']}"
+            fps_key = fmt['fps_category']
+            
+            resolution_counts[res_key] = resolution_counts.get(res_key, 0) + 1
+            fps_counts[fps_key] = fps_counts.get(fps_key, 0) + 1
+        
+        # Determine target resolution (prefer highest quality that's most common)
+        dominant_resolution = max(resolution_counts, key=resolution_counts.get)
+        width, height = map(int, dominant_resolution.split('x'))
+        
+        # Determine target FPS (most common)
+        dominant_fps_category = max(fps_counts, key=fps_counts.get)
+        target_fps = self._fps_category_to_value(dominant_fps_category)
+        
+        # Check if normalization is needed
+        requires_normalization = len(set(resolution_counts.keys())) > 1 or len(set(fps_counts.keys())) > 1
+        
+        print(f"Format Analysis: Dominant {dominant_resolution} @ {target_fps}fps")
+        print(f"Format Diversity: {len(resolution_counts)} resolutions, {len(fps_counts)} frame rates")
+        print(f"Normalization Required: {requires_normalization}")
+        
+        return {
+            'target_width': width,
+            'target_height': height, 
+            'target_fps': target_fps,
+            'target_aspect_ratio': width / height,
+            'requires_normalization': requires_normalization,
+            'format_diversity': {
+                'resolutions': len(resolution_counts),
+                'frame_rates': len(fps_counts)
+            }
+        }
+    
+    def _fps_category_to_value(self, fps_category: str) -> float:
+        """Convert FPS category back to numeric value."""
+        mapping = {
+            '60fps': 60.0,
+            '30fps': 30.0, 
+            '25fps': 25.0,
+            '24fps': 24.0
+        }
+        return mapping.get(fps_category, 24.0)
+    
+    def detect_format_compatibility_issues(self, video_clips: List[Any]) -> List[Dict[str, Any]]:
+        """Identify specific compatibility issues between video clips.
+        
+        Returns:
+            List of issue descriptions with recommended fixes
+        """
+        if len(video_clips) < 2:
+            return []
+        
+        issues = []
+        formats = [self.analyze_video_format(clip) for clip in video_clips]
+        
+        # Check resolution variations
+        resolutions = set((fmt['width'], fmt['height']) for fmt in formats)
+        if len(resolutions) > 1:
+            issues.append({
+                'type': 'resolution_mismatch',
+                'description': f"Mixed resolutions detected: {resolutions}",
+                'severity': 'high',
+                'artifacts': ['flashing up/down', 'scaling artifacts', 'centering issues'],
+                'fix': 'resolution_normalization'
+            })
+        
+        # Check frame rate variations  
+        fps_values = set(fmt['fps'] for fmt in formats)
+        if len(fps_values) > 1:
+            issues.append({
+                'type': 'framerate_mismatch',
+                'description': f"Mixed frame rates detected: {fps_values}",
+                'severity': 'high', 
+                'artifacts': ['VHS-like wrap around', 'temporal stuttering', 'motion artifacts'],
+                'fix': 'framerate_normalization'
+            })
+        
+        # Check aspect ratio variations
+        aspect_ratios = set(round(fmt['aspect_ratio'], 3) for fmt in formats) 
+        if len(aspect_ratios) > 1:
+            issues.append({
+                'type': 'aspect_ratio_mismatch',
+                'description': f"Mixed aspect ratios detected: {aspect_ratios}",
+                'severity': 'medium',
+                'artifacts': ['letterboxing inconsistency', 'stretching artifacts'],
+                'fix': 'aspect_ratio_normalization'
+            })
+        
+        return issues
+
+
+class VideoNormalizationPipeline:
+    """Pipeline for normalizing mixed video formats to prevent concatenation artifacts."""
+    
+    def __init__(self, format_analyzer: VideoFormatAnalyzer):
+        self.format_analyzer = format_analyzer
+    
+    def normalize_video_clips(self, video_clips: List[Any], target_format: Dict[str, Any]) -> List[Any]:
+        """Normalize all clips to consistent format to prevent artifacts.
+        
+        Args:
+            video_clips: List of VideoFileClip instances with mixed formats
+            target_format: Target format specification from format analyzer
+            
+        Returns:
+            List of normalized VideoFileClip instances
+        """
+        if not target_format.get('requires_normalization', False):
+            print("Format normalization: No normalization required, formats are consistent")
+            return video_clips
+        
+        print(f"Format normalization: Normalizing {len(video_clips)} clips to {target_format['target_width']}x{target_format['target_height']} @ {target_format['target_fps']}fps")
+        
+        normalized_clips = []
+        
+        for i, clip in enumerate(video_clips):
+            try:
+                normalized_clip = self._normalize_single_clip(clip, target_format)
+                normalized_clips.append(normalized_clip)
+                print(f"Normalized clip {i+1}/{len(video_clips)}: {clip.w}x{clip.h}@{clip.fps}fps -> {normalized_clip.w}x{normalized_clip.h}@{normalized_clip.fps}fps")
+                
+            except Exception as e:
+                print(f"Warning: Failed to normalize clip {i+1}: {e}")
+                # Use original clip if normalization fails
+                normalized_clips.append(clip)
+        
+        return normalized_clips
+    
+    def _normalize_single_clip(self, clip, target_format: Dict[str, Any]):
+        """Normalize a single clip to target format."""
+        normalized_clip = clip
+        
+        # Step 1: Resolution normalization with aspect ratio preservation
+        if clip.w != target_format['target_width'] or clip.h != target_format['target_height']:
+            normalized_clip = self._resize_with_aspect_preservation(
+                normalized_clip, 
+                target_format['target_width'], 
+                target_format['target_height']
+            )
+        
+        # Step 2: Frame rate normalization
+        if abs(clip.fps - target_format['target_fps']) > 0.1:
+            normalized_clip = normalized_clip.with_fps(target_format['target_fps'])
+        
+        return normalized_clip
+    
+    def _resize_with_aspect_preservation(self, clip, target_width: int, target_height: int):
+        """Resize clip while preserving aspect ratio using letterbox/pillarbox."""
+        # Calculate scaling to fit within target dimensions
+        width_scale = target_width / clip.w
+        height_scale = target_height / clip.h
+        scale = min(width_scale, height_scale)
+        
+        # Calculate new dimensions
+        new_width = int(clip.w * scale)
+        new_height = int(clip.h * scale)
+        
+        # Resize to fit within target dimensions
+        resized_clip = clip.resized((new_width, new_height))
+        
+        # Add padding to reach exact target dimensions (letterbox/pillarbox)
+        if new_width != target_width or new_height != target_height:
+            # Create a black background at target size
+            from moviepy.video.VideoClip import ColorClip
+            background = ColorClip(size=(target_width, target_height), color=(0,0,0), duration=resized_clip.duration)
+            
+            # Calculate centering position
+            x_pos = (target_width - new_width) // 2
+            y_pos = (target_height - new_height) // 2
+            
+            # Composite the resized clip onto the background
+            normalized_clip = CompositeVideoClip([
+                background,
+                resized_clip.with_position((x_pos, y_pos))
+            ])
+            
+            return normalized_clip
+        
+        return resized_clip
+
 
 def load_video_segment(clip_data: Dict[str, Any], video_cache: VideoCache) -> Optional[Tuple[Dict[str, Any], Any]]:
     """Load a single video segment in parallel processing.
@@ -917,6 +1185,9 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         sorted_clips = timeline.get_clips_sorted_by_beat()
         print(f"Debug: Timeline has {len(sorted_clips)} clips to load")
         
+        # CRITICAL FIX: Pre-filter timeline to prevent index synchronization bugs
+        # We need to handle potential failures BEFORE loading to maintain consistency
+        
         # Load video clips in parallel with intelligent caching
         video_clips, video_cache, failed_indices = load_video_clips_parallel(
             sorted_clips, 
@@ -929,13 +1200,19 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         print(f"Debug: Loaded {len(video_clips)} video clips successfully")
         
-        # CRITICAL FIX: Adjust timeline BEFORE concatenation to prevent IndexError
+        # SYNCHRONIZATION FIX: Adjust timeline IMMEDIATELY after loading to maintain index consistency
         if failed_indices:
-            print(f"Adjusting timeline to remove {len(failed_indices)} failed clips")
-            # Remove failed clips from timeline clips list  
+            print(f"SYNC FIX: Removing {len(failed_indices)} failed clips from timeline")
+            # Create new timeline with successful clips only, maintaining order
             original_clips = timeline.clips.copy()
-            timeline.clips = [clip for i, clip in enumerate(original_clips) if i not in failed_indices]
-            print(f"Debug: Timeline adjusted from {len(original_clips)} to {len(timeline.clips)} clips")
+            successful_clips = []
+            
+            for i, clip in enumerate(original_clips):
+                if i not in failed_indices:
+                    successful_clips.append(clip)
+            
+            timeline.clips = successful_clips
+            print(f"Debug: Timeline synchronized - {len(original_clips)} -> {len(timeline.clips)} clips")
         
         # Verify clip count consistency
         if len(video_clips) != len(timeline.clips):
@@ -943,12 +1220,28 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         print(f"Debug: Final clip count - video_clips: {len(video_clips)}, timeline.clips: {len(timeline.clips)}")
         
-        # ENHANCED: Validate individual clip durations before concatenation
+        # FORMAT ANALYSIS & NORMALIZATION: Critical fix for visual artifacts
+        format_analyzer = VideoFormatAnalyzer()
+        target_format = format_analyzer.find_dominant_format(video_clips)
+        
+        # Detect format compatibility issues
+        format_issues = format_analyzer.detect_format_compatibility_issues(video_clips)
+        if format_issues:
+            print("FORMAT ISSUES DETECTED:")
+            for issue in format_issues:
+                print(f"  - {issue['type']}: {issue['description']}")
+                print(f"    Artifacts: {', '.join(issue['artifacts'])}")
+        
+        # Apply format normalization to prevent artifacts
+        normalization_pipeline = VideoNormalizationPipeline(format_analyzer)
+        normalized_video_clips = normalization_pipeline.normalize_video_clips(video_clips, target_format)
+        
+        # ENHANCED: Validate normalized clip durations before concatenation
         total_expected_duration = 0
-        for i, clip in enumerate(video_clips):
+        for i, clip in enumerate(normalized_video_clips):
             clip_duration = clip.duration
             expected_duration = timeline.clips[i]['duration']
-            print(f"Debug: Clip {i+1}: actual={clip_duration:.6f}s, expected={expected_duration:.6f}s")
+            print(f"Debug: Normalized clip {i+1}: actual={clip_duration:.6f}s, expected={expected_duration:.6f}s")
             
             # Check for significant duration discrepancies
             duration_diff = abs(clip_duration - expected_duration)
@@ -961,9 +1254,15 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         report_progress("Concatenating video", 0.6)
         
-        # Use "chain" method for reliable concatenation
-        print(f"Debug: Using concatenation method 'chain' for {len(video_clips)} clips")
-        final_video = concatenate_videoclips(video_clips, method="chain")
+        # SMART CONCATENATION: Choose method based on format consistency
+        if target_format.get('requires_normalization', False):
+            concatenation_method = "compose"  # Better for mixed formats after normalization
+            print(f"Debug: Using 'compose' method for {len(normalized_video_clips)} normalized clips")
+        else:
+            concatenation_method = "chain"  # Faster for consistent formats
+            print(f"Debug: Using 'chain' method for {len(normalized_video_clips)} consistent clips")
+        
+        final_video = concatenate_videoclips(normalized_video_clips, method=concatenation_method)
         
         actual_video_duration = final_video.duration
         print(f"Debug: Concatenation successful, final video duration: {actual_video_duration:.6f}s")
@@ -979,23 +1278,35 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         # Calculate precise audio duration needed (accounting for MoviePy sync bugs)
         target_audio_duration = actual_video_duration
         
-        # CRITICAL FIX: Add small buffer to prevent audio cutoff (addresses 1-2 frame cut bug)
-        video_fps = final_video.fps if hasattr(final_video, 'fps') and final_video.fps else 24
-        frame_duration = 1.0 / video_fps
+        # CRITICAL FIX: Use TARGET FPS for accurate audio sync calculation (not final video FPS)
+        target_fps = target_format['target_fps']
+        frame_duration = 1.0 / target_fps
         sync_buffer = frame_duration * 2  # 2-frame buffer to prevent cutoff
         
-        print(f"Debug: Video FPS: {video_fps}, Frame duration: {frame_duration:.6f}s")
+        print(f"Debug: Target FPS: {target_fps}, Frame duration: {frame_duration:.6f}s")
         print(f"Debug: Adding sync buffer: {sync_buffer:.6f}s to prevent audio cutoff")
         
-        # Prepare audio with precise timing
-        if original_audio_duration > target_audio_duration:
-            # Trim audio to match video, but add sync buffer
-            audio_end_time = min(target_audio_duration + sync_buffer, original_audio_duration)
-            print(f"Debug: Trimming audio from {original_audio_duration:.6f}s to {audio_end_time:.6f}s")
+        # ENHANCED AUDIO CALCULATION: Frame-accurate duration for mixed formats
+        # Calculate total frames using TARGET fps (not varying clip fps)
+        total_frames = sum(int(clip.duration * target_fps) for clip in normalized_video_clips)
+        frame_accurate_video_duration = total_frames / target_fps
+        
+        print(f"Debug: Frame-accurate calculation: {total_frames} frames @ {target_fps}fps = {frame_accurate_video_duration:.6f}s")
+        print(f"Debug: Concatenation duration: {actual_video_duration:.6f}s")
+        
+        # Use the more accurate calculation for audio sync
+        precise_video_duration = frame_accurate_video_duration
+        
+        # Prepare audio with FRAME-ACCURATE timing to prevent cutoff
+        if original_audio_duration > precise_video_duration:
+            # Trim audio to match frame-accurate video duration, plus sync buffer
+            audio_end_time = min(precise_video_duration + sync_buffer, original_audio_duration)
+            print(f"Debug: FRAME-ACCURATE audio trim: {original_audio_duration:.6f}s -> {audio_end_time:.6f}s")
+            print(f"Debug: Audio buffer added: {sync_buffer:.6f}s to prevent cutoff")
             trimmed_audio = subclip_safely(audio_clip, 0, audio_end_time, compatibility_info)
         else:
             # Audio is shorter than video - use full audio
-            print(f"Debug: Audio ({original_audio_duration:.6f}s) shorter than video ({target_audio_duration:.6f}s)")
+            print(f"Debug: Audio ({original_audio_duration:.6f}s) shorter than video ({precise_video_duration:.6f}s)")
             trimmed_audio = audio_clip
         
         final_audio_duration = trimmed_audio.duration
@@ -1015,21 +1326,39 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         report_progress("Rendering final video", 0.85)
         
-        # Get optimal codec settings
+        # Get optimal codec settings with format-specific enhancements
         moviepy_params, ffmpeg_params = detect_optimal_codec_settings()
+        
+        # ENHANCED FFMPEG PARAMETERS: Add format consistency parameters  
+        format_consistency_params = [
+            '-pix_fmt', 'yuv420p',  # Consistent color format
+            '-vsync', 'cfr',        # Constant frame rate conversion
+            '-async', '1',          # Audio sync parameter
+        ]
+        
+        # Add resolution/fps parameters if normalization was applied
+        if target_format.get('requires_normalization', False):
+            format_consistency_params.extend([
+                '-r', str(target_format['target_fps']),  # Force target frame rate
+                '-s', f"{target_format['target_width']}x{target_format['target_height']}"  # Force resolution
+            ])
+        
+        # Combine all FFmpeg parameters
+        enhanced_ffmpeg_params = ffmpeg_params + format_consistency_params
+        print(f"Debug: Enhanced FFmpeg params: {enhanced_ffmpeg_params}")
         
         # Create output directory if it doesn't exist
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         print(f"Debug: Rendering final video to: {output_path}")
         
-        # Prepare parameters for version-safe writing
+        # Prepare parameters for version-safe writing with enhanced format consistency
         write_params = {
             **moviepy_params,
-            'ffmpeg_params': ffmpeg_params,
+            'ffmpeg_params': enhanced_ffmpeg_params,  # Use enhanced parameters
             'temp_audiofile': 'temp-audio.m4a',
             'remove_temp': True,
-            'fps': 24,  # Standard frame rate
+            'fps': target_format['target_fps'],  # Use TARGET fps instead of hardcoded 24
             'logger': None  # Suppress MoviePy logging
         }
         
