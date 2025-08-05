@@ -130,12 +130,8 @@ def load_video_segment(clip_data: Dict[str, Any], video_cache: VideoCache) -> Op
         # Get cached video (thread-safe)
         source_video = video_cache.get_or_load(clip_data['video_file'])
         
-        # Extract the specific segment
-        try:
-            segment = source_video.subclip(clip_data['start'], clip_data['end'])
-        except AttributeError:
-            # MoviePy 2.x uses subclipped
-            segment = source_video.subclipped(clip_data['start'], clip_data['end'])
+        # Extract the specific segment using safe compatibility method
+        segment = subclip_safely(source_video, clip_data['start'], clip_data['end'])
         
         return (clip_data, segment)
         
@@ -237,39 +233,70 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
 
 
 def check_moviepy_api_compatibility():
-    """Check MoviePy API compatibility and return available methods.
+    """Comprehensive MoviePy API compatibility analysis for version 2.1.2+ changes.
     
     Returns:
-        Dict with available methods and their signatures
+        Dict with complete API mapping and compatibility information
     """
     import inspect
-    try:
-        from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips
-    except ImportError:
-        from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips
     
-    # Test clip to check available methods
+    # Handle import structure changes in MoviePy 2.1.2
+    try:
+        # Try new import structure first (MoviePy 2.1.2+)
+        from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips
+        import_pattern = 'new'  # from moviepy import ...
+    except ImportError:
+        try:
+            # Fallback to legacy import structure (MoviePy < 2.1.2)
+            from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips
+            import_pattern = 'legacy'  # from moviepy.editor import ...
+        except ImportError:
+            raise RuntimeError("Could not import MoviePy with either import pattern")
+    
+    # Test method availability on dummy instances
+    video_dummy = VideoFileClip.__new__(VideoFileClip)
+    audio_dummy = AudioFileClip.__new__(AudioFileClip)
+    
     compatibility = {
-        'concatenate_videoclips': hasattr(concatenate_videoclips, '__call__'),
-        'set_audio_method': None,
-        'write_videofile_params': []
+        'import_pattern': import_pattern,
+        'version_detected': 'new' if import_pattern == 'new' else 'legacy',
+        
+        # Method mappings: old_name -> new_name
+        'method_mappings': {
+            # Clip manipulation methods
+            'subclip': 'subclipped' if hasattr(video_dummy, 'subclipped') else 'subclip',
+            
+            # Audio attachment methods  
+            'set_audio': 'with_audio' if hasattr(video_dummy, 'with_audio') else 'set_audio',
+            
+            # Other common method patterns that might have changed
+            'set_duration': 'with_duration' if hasattr(video_dummy, 'with_duration') else 'set_duration',
+            'set_position': 'with_position' if hasattr(video_dummy, 'with_position') else 'set_position',
+            'set_start': 'with_start' if hasattr(video_dummy, 'with_start') else 'set_start',
+        },
+        
+        # Method availability matrix
+        'methods': {
+            'video_clip': {
+                'subclip': hasattr(video_dummy, 'subclip'),
+                'subclipped': hasattr(video_dummy, 'subclipped'),
+                'set_audio': hasattr(video_dummy, 'set_audio'),
+                'with_audio': hasattr(video_dummy, 'with_audio'),
+                'write_videofile': hasattr(video_dummy, 'write_videofile'),
+            },
+            'audio_clip': {
+                'subclip': hasattr(audio_dummy, 'subclip'),
+                'subclipped': hasattr(audio_dummy, 'subclipped'),
+            }
+        }
     }
     
-    # Check audio attachment methods (set_audio vs with_audio)
-    dummy_video = VideoFileClip.__new__(VideoFileClip)  # Create without initialization
-    if hasattr(dummy_video, 'set_audio'):
-        compatibility['set_audio_method'] = 'set_audio'
-    elif hasattr(dummy_video, 'with_audio'):
-        compatibility['set_audio_method'] = 'with_audio'
-    else:
-        compatibility['set_audio_method'] = 'unknown'
-    
-    # Check write_videofile parameters (for different MoviePy versions)
+    # Analyze write_videofile parameters
     try:
-        write_sig = inspect.signature(dummy_video.write_videofile)
+        write_sig = inspect.signature(video_dummy.write_videofile)
         compatibility['write_videofile_params'] = list(write_sig.parameters.keys())
     except:
-        compatibility['write_videofile_params'] = ['filename']  # Minimal fallback
+        compatibility['write_videofile_params'] = ['filename']
     
     return compatibility
 
@@ -288,21 +315,81 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
     if compatibility_info is None:
         compatibility_info = check_moviepy_api_compatibility()
     
-    method = compatibility_info['set_audio_method']
+    # Get the correct method name for audio attachment
+    method_name = compatibility_info['method_mappings']['set_audio']
     
     try:
-        if method == 'set_audio':
-            return video_clip.set_audio(audio_clip)
-        elif method == 'with_audio':
-            return video_clip.with_audio(audio_clip)
+        # Use the dynamically determined method
+        method = getattr(video_clip, method_name)
+        return method(audio_clip)
+    except AttributeError:
+        # Final fallback: try both known methods
+        for method_name in ['with_audio', 'set_audio']:
+            if hasattr(video_clip, method_name):
+                method = getattr(video_clip, method_name)
+                return method(audio_clip)
+        
+        raise RuntimeError(f"Could not find audio attachment method on video clip")
+
+def subclip_safely(clip, start_time, end_time=None, compatibility_info=None):
+    """Safely create subclip using available API (subclip vs subclipped).
+    
+    Args:
+        clip: VideoClip or AudioClip to extract from
+        start_time: Start time in seconds
+        end_time: End time in seconds (None for rest of clip)
+        compatibility_info: Result from check_moviepy_api_compatibility()
+        
+    Returns:
+        New clip with specified time range
+    """
+    if compatibility_info is None:
+        compatibility_info = check_moviepy_api_compatibility()
+    
+    # Get the correct method name for subclip operation
+    method_name = compatibility_info['method_mappings']['subclip']
+    
+    try:
+        # Use the dynamically determined method
+        method = getattr(clip, method_name)
+        if end_time is not None:
+            return method(start_time, end_time)
         else:
-            # Fallback: try both methods
-            try:
-                return video_clip.set_audio(audio_clip)
-            except AttributeError:
-                return video_clip.with_audio(audio_clip)
-    except Exception as e:
-        raise RuntimeError(f"Failed to attach audio using method '{method}': {str(e)}")
+            return method(start_time)
+    except AttributeError:
+        # Final fallback: try both known methods
+        for method_name in ['subclipped', 'subclip']:
+            if hasattr(clip, method_name):
+                method = getattr(clip, method_name)
+                if end_time is not None:
+                    return method(start_time, end_time)
+                else:
+                    return method(start_time)
+        
+        raise RuntimeError(f"Could not find subclip method on clip type {type(clip)}")
+
+
+def import_moviepy_safely():
+    """Safely import MoviePy classes handling import structure changes.
+    
+    Returns:
+        Tuple of (VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip)
+    """
+    try:
+        # Try new import structure first (MoviePy 2.1.2+)
+        from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips
+        try:
+            from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+        except ImportError:
+            from moviepy import CompositeVideoClip
+        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+    except ImportError:
+        try:
+            # Fallback to legacy import structure (MoviePy < 2.1.2) 
+            from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+            return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+        except ImportError:
+            raise RuntimeError("Could not import MoviePy with either import pattern. Please check MoviePy installation.")
 
 
 def write_videofile_safely(video_clip, output_path, compatibility_info=None, **kwargs):
@@ -778,7 +865,7 @@ def apply_variety_pattern(pattern_name: str, beat_count: int) -> List[int]:
 
 def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 progress_callback: Optional[callable] = None) -> str:
-    """Render final video with music synchronization.
+    """Render final video with music synchronization using MoviePy API compatibility layer.
     
     Args:
         timeline: ClipTimeline with all clips and timing
@@ -793,11 +880,9 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         RuntimeError: If rendering fails
     """
     import os
-    try:
-        from moviepy.editor import VideoFileClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips
-    except ImportError:
-        # Fallback for newer MoviePy versions
-        from moviepy import VideoFileClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips
+    
+    # Use safe import handling MoviePy version differences
+    VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
     
     def report_progress(step: str, progress: float):
         """Helper to report progress if callback provided."""
@@ -812,7 +897,8 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
     
     # Check API compatibility at start
     compatibility_info = check_moviepy_api_compatibility()
-    print(f"Debug: MoviePy API compatibility - audio method: {compatibility_info['set_audio_method']}")
+    print(f"Debug: MoviePy API compatibility detected: {compatibility_info['version_detected']}")
+    print(f"Debug: Method mappings - subclip: {compatibility_info['method_mappings']['subclip']}, set_audio: {compatibility_info['method_mappings']['set_audio']}")
     
     report_progress("Loading clips", 0.1)
     
@@ -858,15 +944,16 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         print(f"Debug: Concatenation successful, final video duration: {final_video.duration}")
         
-        # SIMPLIFIED APPROACH: Use MoviePy native audio attachment with compatibility checking
+        # SIMPLIFIED APPROACH: Use MoviePy native audio attachment with full compatibility
         report_progress("Attaching audio", 0.8)
         
-        # Trim audio to match video duration if needed
+        # Trim audio to match video duration if needed using safe subclip method
         if audio_clip.duration > final_video.duration:
-            audio_clip = audio_clip.subclip(0, final_video.duration)
+            print(f"Debug: Trimming audio from {audio_clip.duration}s to {final_video.duration}s")
+            audio_clip = subclip_safely(audio_clip, 0, final_video.duration, compatibility_info)
         
         # Attach audio using version-compatible method
-        print(f"Debug: Attaching audio using method: {compatibility_info['set_audio_method']}")
+        print(f"Debug: Attaching audio using method: {compatibility_info['method_mappings']['set_audio']}")
         final_video = attach_audio_safely(final_video, audio_clip, compatibility_info)
         
         report_progress("Rendering final video", 0.85)
@@ -922,7 +1009,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
 
 
 def add_transitions(clips: List[VideoFileClip], transition_duration: float = 0.5) -> VideoFileClip:
-    """Add crossfade transitions between clips.
+    """Add crossfade transitions between clips using compatibility layer.
     
     Args:
         clips: List of video clips
@@ -931,25 +1018,35 @@ def add_transitions(clips: List[VideoFileClip], transition_duration: float = 0.5
     Returns:
         Composite video with transitions
     """
+    # Use safe import handling MoviePy version differences
+    VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
+    
+    # Try to import fade effects with version compatibility
     try:
-        from moviepy.editor import VideoFileClip, concatenate_videoclips
         from moviepy.video.fx import fadeout, fadein
     except ImportError:
-        # Fallback for newer MoviePy versions
-        from moviepy import VideoFileClip, concatenate_videoclips
-        # In MoviePy 2.x, effects are capitalized and accessed differently
-        from moviepy.video.fx import FadeOut as fadeout, FadeIn as fadein
+        try:
+            # In MoviePy 2.x, effects might be capitalized and accessed differently
+            from moviepy.video.fx import FadeOut as fadeout, FadeIn as fadein
+        except ImportError:
+            # If no fade effects available, skip transitions
+            print("Warning: Fade effects not available, skipping transitions")
+            return concatenate_videoclips(clips, method="chain")
     
     if not clips:
         raise ValueError("No clips provided for transitions")
     
     if len(clips) == 1:
-        # Single clip - just add fade in/out
+        # Single clip - just add fade in/out if effects available
         clip = clips[0]
-        # Add fade in at start (0.5s)
-        clip = clip.fx(fadein, 0.5)
-        # Add fade out at end (0.5s) 
-        clip = clip.fx(fadeout, 0.5)
+        try:
+            # Add fade in at start (0.5s)
+            clip = clip.fx(fadein, 0.5)
+            # Add fade out at end (0.5s) 
+            clip = clip.fx(fadeout, 0.5)
+        except:
+            # If effects fail, return original clip
+            pass
         return clip
     
     # Multiple clips - add crossfades
@@ -958,28 +1055,36 @@ def add_transitions(clips: List[VideoFileClip], transition_duration: float = 0.5
     for i, clip in enumerate(clips):
         current_clip = clip.copy()
         
-        if i == 0:
-            # First clip: fade in at start, fade out at end for transition
-            current_clip = current_clip.fx(fadein, 0.5)  # Fade in
-            if len(clips) > 1:
-                current_clip = current_clip.fx(fadeout, transition_duration)  # Fade out for next clip
-        
-        elif i == len(clips) - 1:
-            # Last clip: fade in from previous, fade out at end
-            current_clip = current_clip.fx(fadein, transition_duration)  # Fade in from previous
-            current_clip = current_clip.fx(fadeout, 0.5)  # Final fade out
-        
-        else:
-            # Middle clips: fade in from previous, fade out to next
-            current_clip = current_clip.fx(fadein, transition_duration)  # Fade in from previous
-            current_clip = current_clip.fx(fadeout, transition_duration)  # Fade out to next
+        try:
+            if i == 0:
+                # First clip: fade in at start, fade out at end for transition
+                current_clip = current_clip.fx(fadein, 0.5)  # Fade in
+                if len(clips) > 1:
+                    current_clip = current_clip.fx(fadeout, transition_duration)  # Fade out for next clip
+            
+            elif i == len(clips) - 1:
+                # Last clip: fade in from previous, fade out at end
+                current_clip = current_clip.fx(fadein, transition_duration)  # Fade in from previous
+                current_clip = current_clip.fx(fadeout, 0.5)  # Final fade out
+            
+            else:
+                # Middle clips: fade in from previous, fade out to next
+                current_clip = current_clip.fx(fadein, transition_duration)  # Fade in from previous
+                current_clip = current_clip.fx(fadeout, transition_duration)  # Fade out to next
+        except:
+            # If effects fail, use original clip
+            pass
         
         processed_clips.append(current_clip)
     
     # Concatenate all clips with overlapping transitions
     # Note: For true crossfades, clips need to overlap in time
     # This creates fade in/out effects that provide smooth transitions
-    final_video = concatenate_videoclips(processed_clips, padding=-transition_duration, method="compose")
+    try:
+        final_video = concatenate_videoclips(processed_clips, padding=-transition_duration, method="compose")
+    except:
+        # If compose method fails, fallback to chain method
+        final_video = concatenate_videoclips(processed_clips, method="chain")
     
     return final_video
 
