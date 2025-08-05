@@ -795,11 +795,11 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         # This completely avoids MoviePy's CompositeVideoClip creation
         print(f"Debug: Merging {temp_video_path} with {audio_file} using FFmpeg")
         ffmpeg_merge_video_audio(
-            video_input=temp_video_path,
-            audio_input=audio_file,
-            output=output_path,
+            temp_video_path,  # video_input
+            audio_file,       # audio_input  
+            output_path,      # output
             remove_intermediates=True,  # Clean up temp files
-            verbose=False  # Reduce output noise
+            verbose=False     # Reduce output noise
         )
         
         print(f"Debug: FFmpeg merge completed successfully")
