@@ -693,11 +693,14 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         RuntimeError: If rendering fails
     """
     import os
+    import tempfile
     try:
         from moviepy.editor import VideoFileClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips
+        from moviepy.video.io.ffmpeg_tools import ffmpeg_merge_video_audio
     except ImportError:
         # Fallback for newer MoviePy versions
         from moviepy import VideoFileClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips
+        from moviepy.video.io.ffmpeg_tools import ffmpeg_merge_video_audio
     
     def report_progress(step: str, progress: float):
         """Helper to report progress if callback provided."""
@@ -713,7 +716,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
     report_progress("Loading clips", 0.1)
     
     try:
-        # Load audio track
+        # Load audio track for duration calculation
         audio_clip = AudioFileClip(audio_file)
         
         # Get clips sorted by beat position
@@ -761,50 +764,54 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         print(f"Debug: Concatenation successful, final video duration: {final_video.duration}")
         
-        # Set the duration to match the audio
-        try:
-            final_video = final_video.set_duration(audio_clip.duration)
-        except AttributeError:
-            # MoviePy 2.x uses with_duration
-            final_video = final_video.with_duration(audio_clip.duration)
+        # BREAKTHROUGH FIX: Use FFmpeg merge to avoid CompositeVideoClip creation entirely
+        # This completely bypasses MoviePy's audio attachment that creates CompositeVideoClip
+        report_progress("Rendering video without audio", 0.75)
         
-        # Add the music track (NO manipulation - keep original quality)
-        try:
-            final_video = final_video.set_audio(audio_clip)
-        except AttributeError:
-            # MoviePy 2.x uses with_audio
-            final_video = final_video.with_audio(audio_clip)
+        # Create temporary file for video-only rendering
+        temp_video_path = output_path.replace('.mp4', '_temp_video_only.mp4')
         
-        report_progress("Rendering to file", 0.8)
-        
-        # Create output directory if it doesn't exist
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        # Render final video with optimized settings
-        def progress_hook(t):
-            # MoviePy progress callback - t is current time in seconds
-            if final_video.duration > 0:
-                render_progress = t / final_video.duration
-                overall_progress = 0.8 + (0.2 * render_progress)
-                report_progress(f"Rendering: {render_progress*100:.1f}%", overall_progress)
-        
-        # PERFORMANCE OPTIMIZATION: Hardware acceleration and optimized codec settings
+        # Render video without audio to avoid CompositeVideoClip IndexError
         moviepy_params, ffmpeg_params = detect_optimal_codec_settings()
         
+        print(f"Debug: Rendering video-only to temporary file: {temp_video_path}")
         final_video.write_videofile(
-            output_path,
+            temp_video_path,
             **moviepy_params,
             ffmpeg_params=ffmpeg_params,
             temp_audiofile='temp-audio.m4a',
             remove_temp=True,
             fps=24,  # Standard frame rate
-            logger=None  # Suppress MoviePy logging - None or 'bar'
+            audio=False,  # CRITICAL: No audio to avoid CompositeVideoClip
+            logger=None  # Suppress MoviePy logging
         )
         
-        # Clean up all resources
+        report_progress("Merging audio with FFmpeg", 0.85)
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # CRITICAL FIX: Use FFmpeg to merge video and audio
+        # This completely avoids MoviePy's CompositeVideoClip creation
+        print(f"Debug: Merging {temp_video_path} with {audio_file} using FFmpeg")
+        ffmpeg_merge_video_audio(
+            video_input=temp_video_path,
+            audio_input=audio_file,
+            output=output_path,
+            remove_intermediates=True,  # Clean up temp files
+            verbose=False  # Reduce output noise
+        )
+        
+        print(f"Debug: FFmpeg merge completed successfully")
+        
+        # Clean up resources
         final_video.close()
         audio_clip.close()
         video_cache.clear()  # Clean up cached videos
+        
+        # Remove temporary video file if it still exists
+        if os.path.exists(temp_video_path):
+            os.unlink(temp_video_path)
         
         report_progress("Rendering complete", 1.0)
         
@@ -814,7 +821,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         return output_path
         
     except Exception as e:
-        # Clean up any resources
+        # Clean up any resources and temporary files
         try:
             if 'final_video' in locals():
                 final_video.close()
@@ -822,6 +829,8 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 audio_clip.close()
             if 'video_cache' in locals():
                 video_cache.clear()
+            if 'temp_video_path' in locals() and os.path.exists(temp_video_path):
+                os.unlink(temp_video_path)
         except:
             pass
         
