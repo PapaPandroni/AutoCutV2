@@ -59,10 +59,15 @@ def main():
             return False
         audio_file = args.audio
     else:
-        # Find any audio file
-        audio_files = glob.glob('test_media/*.mp3')
+        # Find any supported audio file
+        audio_extensions = ['*.mp3', '*.wav', '*.m4a', '*.flac', '*.aac', '*.ogg']
+        audio_files = []
+        for ext in audio_extensions:
+            audio_files.extend(glob.glob(f'test_media/{ext}'))
+        
         if not audio_files:
             print("❌ No audio files found in test_media/")
+            print("   Supported formats: MP3, WAV, M4A, FLAC, AAC, OGG")
             return False
         audio_file = audio_files[0]  # Use first one
     

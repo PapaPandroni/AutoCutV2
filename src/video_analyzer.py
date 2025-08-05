@@ -42,6 +42,9 @@ class VideoChunk:
 def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
     """Load video file and extract basic metadata.
     
+    Automatically preprocesses problematic video codecs (H.265/HEVC) for 
+    MoviePy compatibility by transcoding to H.264 when needed.
+    
     Args:
         file_path: Path to the video file
         
@@ -53,6 +56,7 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
         ValueError: If video format is unsupported
     """
     import os
+    from .utils import preprocess_video_if_needed
     
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Video file not found: {file_path}")
@@ -61,8 +65,11 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
         raise ImportError("MoviePy not available. Please install moviepy>=1.0.3")
     
     try:
-        # Load video with MoviePy
-        video = VideoFileClip(file_path)
+        # Preprocess video if needed (handles H.265/HEVC transcoding)
+        processed_file_path = preprocess_video_if_needed(file_path)
+        
+        # Load video with MoviePy (using processed file)
+        video = VideoFileClip(processed_file_path)
         
         # Extract metadata
         metadata = {
@@ -71,8 +78,10 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
             'size': video.size,  # (width, height)
             'width': video.w,
             'height': video.h,
-            'filename': os.path.basename(file_path),
-            'file_path': file_path
+            'filename': os.path.basename(file_path),  # Original filename
+            'file_path': file_path,  # Original file path
+            'processed_file_path': processed_file_path,  # May be different if transcoded
+            'was_transcoded': processed_file_path != file_path
         }
         
         return video, metadata

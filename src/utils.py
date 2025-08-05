@@ -6,7 +6,9 @@ Common helper functions used across multiple modules.
 
 import os
 import logging
-from typing import List, Optional
+import subprocess
+import json
+from typing import List, Optional, Dict, Any
 from pathlib import Path
 
 
@@ -200,6 +202,184 @@ class ProgressTracker:
     def complete(self, message: str = "Complete"):
         """Mark progress as complete."""
         self.update(self.total_steps, message)
+
+
+def detect_video_codec(file_path: str) -> Dict[str, Any]:
+    """Detect video codec and format information using FFprobe.
+    
+    Args:
+        file_path: Path to the video file
+        
+    Returns:
+        Dictionary containing codec information:
+        - 'codec': Video codec name (e.g., 'h264', 'hevc')
+        - 'is_hevc': Boolean indicating if codec is H.265/HEVC
+        - 'resolution': (width, height) tuple
+        - 'fps': Frame rate
+        - 'duration': Video duration in seconds
+        
+    Raises:
+        subprocess.CalledProcessError: If FFprobe fails
+        FileNotFoundError: If FFprobe is not installed
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Video file not found: {file_path}")
+    
+    try:
+        # Use FFprobe to get video stream information
+        cmd = [
+            'ffprobe', '-v', 'quiet', '-print_format', 'json',
+            '-show_streams', '-select_streams', 'v:0', file_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+        
+        if not data.get('streams'):
+            raise ValueError(f"No video streams found in {file_path}")
+        
+        video_stream = data['streams'][0]
+        codec_name = video_stream.get('codec_name', '').lower()
+        
+        # Parse frame rate
+        fps_str = video_stream.get('r_frame_rate', '30/1')
+        if '/' in fps_str:
+            num, den = map(int, fps_str.split('/'))
+            fps = num / den if den != 0 else 30.0
+        else:
+            fps = float(fps_str)
+        
+        return {
+            'codec': codec_name,
+            'is_hevc': codec_name in ['hevc', 'h265'],
+            'resolution': (
+                int(video_stream.get('width', 0)),
+                int(video_stream.get('height', 0))
+            ),
+            'fps': fps,
+            'duration': float(video_stream.get('duration', 0)),
+            'pixel_format': video_stream.get('pix_fmt', 'unknown')
+        }
+        
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"FFprobe failed for {file_path}: {e.stderr}")
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        raise RuntimeError(f"Failed to parse video information for {file_path}: {str(e)}")
+
+
+def transcode_hevc_to_h264(input_path: str, output_path: str = None, 
+                          progress_callback: Optional[callable] = None) -> str:
+    """Transcode H.265/HEVC video to H.264 for MoviePy compatibility.
+    
+    Args:
+        input_path: Path to input H.265 video file
+        output_path: Output path (auto-generated if None)
+        progress_callback: Optional callback for progress updates
+        
+    Returns:
+        Path to transcoded H.264 video file
+        
+    Raises:
+        subprocess.CalledProcessError: If FFmpeg transcoding fails
+        FileNotFoundError: If FFmpeg is not installed
+    """
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f"Input video file not found: {input_path}")
+    
+    # Generate output path if not provided
+    if output_path is None:
+        input_stem = Path(input_path).stem
+        output_path = f"{input_stem}_h264.mp4"
+    
+    # Ensure output directory exists
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    
+    try:
+        # FFmpeg command for H.265 to H.264 transcoding
+        cmd = [
+            'ffmpeg', '-i', input_path,
+            '-c:v', 'libx264',          # Use H.264 codec
+            '-crf', '18',               # High quality (lower is better, 18 is visually lossless)
+            '-preset', 'fast',          # Balance speed vs compression
+            '-c:a', 'copy',             # Copy audio without re-encoding
+            '-movflags', '+faststart',  # Optimize for web playback
+            '-y',                       # Overwrite output file
+            output_path
+        ]
+        
+        if progress_callback:
+            progress_callback("Transcoding H.265 to H.264", 0.0)
+        
+        # Run FFmpeg with progress monitoring
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        # Monitor progress (simplified - FFmpeg progress parsing is complex)
+        while process.poll() is None:
+            if progress_callback:
+                progress_callback("Transcoding in progress", 0.5)
+        
+        # Check if process completed successfully
+        if process.returncode != 0:
+            stderr = process.stderr.read() if process.stderr else "Unknown error"
+            raise subprocess.CalledProcessError(process.returncode, cmd, stderr)
+        
+        if progress_callback:
+            progress_callback("Transcoding complete", 1.0)
+        
+        return output_path
+        
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"FFmpeg transcoding failed: {e.stderr}")
+    except Exception as e:
+        raise RuntimeError(f"Transcoding error: {str(e)}")
+
+
+def preprocess_video_if_needed(file_path: str, temp_dir: str = "temp") -> str:
+    """Preprocess video file if needed for MoviePy compatibility.
+    
+    Automatically detects problematic codecs (H.265/HEVC) and transcodes
+    them to H.264 for better MoviePy compatibility.
+    
+    Args:
+        file_path: Path to input video file
+        temp_dir: Directory for temporary transcoded files
+        
+    Returns:
+        Path to processed video file (original if no processing needed,
+        transcoded file if H.265 was detected)
+        
+    Raises:
+        RuntimeError: If codec detection or transcoding fails
+    """
+    try:
+        # Detect video codec
+        codec_info = detect_video_codec(file_path)
+        
+        # If not HEVC, return original file
+        if not codec_info['is_hevc']:
+            return file_path
+        
+        # HEVC detected - need to transcode
+        print(f"⚠️  H.265/HEVC detected in {Path(file_path).name}")
+        print("   Transcoding to H.264 for MoviePy compatibility...")
+        
+        # Create temp directory
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Generate output path in temp directory
+        input_stem = Path(file_path).stem
+        output_path = os.path.join(temp_dir, f"{input_stem}_h264.mp4")
+        
+        # Transcode file
+        transcoded_path = transcode_hevc_to_h264(file_path, output_path)
+        
+        print(f"✅ Transcoded to: {transcoded_path}")
+        return transcoded_path
+        
+    except Exception as e:
+        print(f"⚠️  Failed to preprocess {file_path}: {str(e)}")
+        print("   Continuing with original file - may cause processing issues")
+        return file_path
 
 
 # Configuration defaults
