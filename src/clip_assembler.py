@@ -146,7 +146,7 @@ def load_video_segment(clip_data: Dict[str, Any], video_cache: VideoCache) -> Op
 
 def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]], 
                              progress_callback: Optional[callable] = None,
-                             max_workers: int = 6) -> Tuple[List[Any], VideoCache]:
+                             max_workers: int = 6) -> Tuple[List[Any], VideoCache, List[int]]:
     """Load video clips in parallel with intelligent caching.
     
     Args:
@@ -155,7 +155,7 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
         max_workers: Maximum number of parallel workers (default: 6)
         
     Returns:
-        Tuple of (video_clips_list, video_cache) for resource management
+        Tuple of (video_clips_list, video_cache, failed_indices) for resource management
         
     Raises:
         RuntimeError: If no clips could be loaded successfully
@@ -172,6 +172,7 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
     video_cache = VideoCache()
     video_clips = []
     clip_mapping = {}  # Map to maintain order
+    failed_indices = []  # Track which clips failed to load
     
     # Calculate optimal worker count (limit to prevent resource exhaustion)
     optimal_workers = min(max_workers, len(sorted_clips), 8)
@@ -197,9 +198,12 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
                     if result is not None:
                         clip_data, segment = result
                         clip_mapping[index] = segment
+                    else:
+                        failed_indices.append(index)
                     
                 except Exception as e:
                     print(f"Warning: Future failed for clip {index}: {str(e)}")
+                    failed_indices.append(index)
                 
                 # Update progress
                 progress = 0.1 + (0.6 * completed_count / len(sorted_clips))
@@ -210,7 +214,7 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
         video_cache.clear()
         raise RuntimeError(f"Parallel video loading failed: {str(e)}")
     
-    # Reconstruct clips in original order
+    # Reconstruct clips in original order, skipping failed ones
     for i in range(len(sorted_clips)):
         if i in clip_mapping:
             video_clips.append(clip_mapping[i])
@@ -219,13 +223,17 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
         video_cache.clear()
         raise RuntimeError("No video clips could be loaded successfully")
     
+    # Report failed clips
+    if failed_indices:
+        print(f"Warning: {len(failed_indices)} clips failed to load (indices: {failed_indices})")
+    
     report_progress(f"Successfully loaded {len(video_clips)} clips", 0.7)
     
     # Log cache statistics
     cached_files = video_cache.get_cached_paths()
     print(f"Video cache: {len(cached_files)} unique files loaded")
     
-    return video_clips, video_cache
+    return video_clips, video_cache, failed_indices
 
 
 class ClipTimeline:
@@ -712,7 +720,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         sorted_clips = timeline.get_clips_sorted_by_beat()
         
         # Load video clips in parallel with intelligent caching
-        video_clips, video_cache = load_video_clips_parallel(
+        video_clips, video_cache, failed_indices = load_video_clips_parallel(
             sorted_clips, 
             progress_callback=progress_callback,
             max_workers=6  # Optimal for video I/O without overwhelming system
@@ -720,6 +728,21 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         if not video_clips:
             raise RuntimeError("No video clips could be loaded successfully")
+        
+        # CRITICAL FIX: If some clips failed to load, we need to remove them from the timeline
+        # to prevent index mismatch during composition
+        if failed_indices:
+            print(f"Adjusting timeline to remove {len(failed_indices)} failed clips")
+            # Create a new timeline with only successfully loaded clips
+            original_clips = timeline.clips.copy()
+            adjusted_clips = [clip for i, clip in enumerate(original_clips) if i not in failed_indices]
+            
+            # Temporarily replace timeline clips for rendering
+            timeline.clips = adjusted_clips
+            
+            # Ensure we have the right number of clips
+            if len(video_clips) != len(timeline.clips):
+                raise RuntimeError(f"Clip count mismatch after adjustment: {len(video_clips)} loaded vs {len(timeline.clips)} in timeline")
         
         report_progress("Compositing video", 0.7)
         
