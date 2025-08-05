@@ -236,6 +236,106 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
     return video_clips, video_cache, failed_indices
 
 
+def check_moviepy_api_compatibility():
+    """Check MoviePy API compatibility and return available methods.
+    
+    Returns:
+        Dict with available methods and their signatures
+    """
+    import inspect
+    try:
+        from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips
+    except ImportError:
+        from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips
+    
+    # Test clip to check available methods
+    compatibility = {
+        'concatenate_videoclips': hasattr(concatenate_videoclips, '__call__'),
+        'set_audio_method': None,
+        'write_videofile_params': []
+    }
+    
+    # Check audio attachment methods (set_audio vs with_audio)
+    dummy_video = VideoFileClip.__new__(VideoFileClip)  # Create without initialization
+    if hasattr(dummy_video, 'set_audio'):
+        compatibility['set_audio_method'] = 'set_audio'
+    elif hasattr(dummy_video, 'with_audio'):
+        compatibility['set_audio_method'] = 'with_audio'
+    else:
+        compatibility['set_audio_method'] = 'unknown'
+    
+    # Check write_videofile parameters (for different MoviePy versions)
+    try:
+        write_sig = inspect.signature(dummy_video.write_videofile)
+        compatibility['write_videofile_params'] = list(write_sig.parameters.keys())
+    except:
+        compatibility['write_videofile_params'] = ['filename']  # Minimal fallback
+    
+    return compatibility
+
+
+def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
+    """Safely attach audio to video using available API.
+    
+    Args:
+        video_clip: VideoClip to attach audio to
+        audio_clip: AudioClip to attach
+        compatibility_info: Result from check_moviepy_api_compatibility()
+        
+    Returns:
+        VideoClip with audio attached
+    """
+    if compatibility_info is None:
+        compatibility_info = check_moviepy_api_compatibility()
+    
+    method = compatibility_info['set_audio_method']
+    
+    try:
+        if method == 'set_audio':
+            return video_clip.set_audio(audio_clip)
+        elif method == 'with_audio':
+            return video_clip.with_audio(audio_clip)
+        else:
+            # Fallback: try both methods
+            try:
+                return video_clip.set_audio(audio_clip)
+            except AttributeError:
+                return video_clip.with_audio(audio_clip)
+    except Exception as e:
+        raise RuntimeError(f"Failed to attach audio using method '{method}': {str(e)}")
+
+
+def write_videofile_safely(video_clip, output_path, compatibility_info=None, **kwargs):
+    """Safely write video file with parameter compatibility checking.
+    
+    Args:
+        video_clip: VideoClip to write
+        output_path: Output file path
+        compatibility_info: Result from check_moviepy_api_compatibility()
+        **kwargs: Parameters to pass to write_videofile
+        
+    Returns:
+        None
+    """
+    if compatibility_info is None:
+        compatibility_info = check_moviepy_api_compatibility()
+    
+    available_params = compatibility_info['write_videofile_params']
+    
+    # Filter kwargs to only include supported parameters
+    safe_kwargs = {}
+    for key, value in kwargs.items():
+        if key in available_params:
+            safe_kwargs[key] = value
+        else:
+            print(f"Warning: Parameter '{key}' not supported in this MoviePy version, skipping")
+    
+    try:
+        video_clip.write_videofile(output_path, **safe_kwargs)
+    except Exception as e:
+        raise RuntimeError(f"Failed to write video file: {str(e)}")
+
+
 class ClipTimeline:
     """Represents the timeline of clips matched to beats."""
     
@@ -693,14 +793,11 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         RuntimeError: If rendering fails
     """
     import os
-    import tempfile
     try:
         from moviepy.editor import VideoFileClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips
-        from moviepy.video.io.ffmpeg_tools import ffmpeg_merge_video_audio
     except ImportError:
         # Fallback for newer MoviePy versions
         from moviepy import VideoFileClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips
-        from moviepy.video.io.ffmpeg_tools import ffmpeg_merge_video_audio
     
     def report_progress(step: str, progress: float):
         """Helper to report progress if callback provided."""
@@ -712,6 +809,10 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
     
     if not os.path.exists(audio_file):
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
+    
+    # Check API compatibility at start
+    compatibility_info = check_moviepy_api_compatibility()
+    print(f"Debug: MoviePy API compatibility - audio method: {compatibility_info['set_audio_method']}")
     
     report_progress("Loading clips", 0.1)
     
@@ -735,83 +836,68 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         print(f"Debug: Loaded {len(video_clips)} video clips successfully")
         
-        # CRITICAL FIX: If some clips failed to load, we need to remove them from the timeline
-        # to prevent index mismatch during composition
+        # CRITICAL FIX: Adjust timeline BEFORE concatenation to prevent IndexError
         if failed_indices:
             print(f"Adjusting timeline to remove {len(failed_indices)} failed clips")
-            # Create a new timeline with only successfully loaded clips
+            # Remove failed clips from timeline clips list  
             original_clips = timeline.clips.copy()
-            adjusted_clips = [clip for i, clip in enumerate(original_clips) if i not in failed_indices]
-            
-            # Temporarily replace timeline clips for rendering
-            timeline.clips = adjusted_clips
-            
-            print(f"Debug: Timeline adjusted from {len(original_clips)} to {len(adjusted_clips)} clips")
-            
-            # Ensure we have the right number of clips
-            if len(video_clips) != len(timeline.clips):
-                raise RuntimeError(f"Clip count mismatch after adjustment: {len(video_clips)} loaded vs {len(timeline.clips)} in timeline")
+            timeline.clips = [clip for i, clip in enumerate(original_clips) if i not in failed_indices]
+            print(f"Debug: Timeline adjusted from {len(original_clips)} to {len(timeline.clips)} clips")
+        
+        # Verify clip count consistency
+        if len(video_clips) != len(timeline.clips):
+            raise RuntimeError(f"Clip count mismatch: {len(video_clips)} loaded vs {len(timeline.clips)} in timeline")
         
         print(f"Debug: Final clip count - video_clips: {len(video_clips)}, timeline.clips: {len(timeline.clips)}")
         
-        report_progress("Concatenating video", 0.7)
+        report_progress("Concatenating video", 0.6)
         
-        # CRITICAL FIX: Always use "chain" method to avoid CompositeVideoClip
-        # The "compose" method uses CompositeVideoClip internally which causes IndexError
-        # The "chain" method is safer and avoids the composition timing issues
+        # Use "chain" method for reliable concatenation
         print(f"Debug: Using concatenation method 'chain' for {len(video_clips)} clips")
         final_video = concatenate_videoclips(video_clips, method="chain")
         
         print(f"Debug: Concatenation successful, final video duration: {final_video.duration}")
         
-        # BREAKTHROUGH FIX: Use FFmpeg merge to avoid CompositeVideoClip creation entirely
-        # This completely bypasses MoviePy's audio attachment that creates CompositeVideoClip
-        report_progress("Rendering video without audio", 0.75)
+        # SIMPLIFIED APPROACH: Use MoviePy native audio attachment with compatibility checking
+        report_progress("Attaching audio", 0.8)
         
-        # Create temporary file for video-only rendering
-        temp_video_path = output_path.replace('.mp4', '_temp_video_only.mp4')
+        # Trim audio to match video duration if needed
+        if audio_clip.duration > final_video.duration:
+            audio_clip = audio_clip.subclip(0, final_video.duration)
         
-        # Render video without audio to avoid CompositeVideoClip IndexError
+        # Attach audio using version-compatible method
+        print(f"Debug: Attaching audio using method: {compatibility_info['set_audio_method']}")
+        final_video = attach_audio_safely(final_video, audio_clip, compatibility_info)
+        
+        report_progress("Rendering final video", 0.85)
+        
+        # Get optimal codec settings
         moviepy_params, ffmpeg_params = detect_optimal_codec_settings()
-        
-        print(f"Debug: Rendering video-only to temporary file: {temp_video_path}")
-        final_video.write_videofile(
-            temp_video_path,
-            **moviepy_params,
-            ffmpeg_params=ffmpeg_params,
-            temp_audiofile='temp-audio.m4a',
-            remove_temp=True,
-            fps=24,  # Standard frame rate
-            audio=False,  # CRITICAL: No audio to avoid CompositeVideoClip
-            logger=None  # Suppress MoviePy logging
-        )
-        
-        report_progress("Merging audio with FFmpeg", 0.85)
         
         # Create output directory if it doesn't exist
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
-        # CRITICAL FIX: Use FFmpeg to merge video and audio
-        # This completely avoids MoviePy's CompositeVideoClip creation
-        print(f"Debug: Merging {temp_video_path} with {audio_file} using FFmpeg")
-        ffmpeg_merge_video_audio(
-            temp_video_path,  # video_input
-            audio_file,       # audio_input  
-            output_path,      # output
-            remove_intermediates=True,  # Clean up temp files
-            verbose=False     # Reduce output noise
-        )
+        print(f"Debug: Rendering final video to: {output_path}")
         
-        print(f"Debug: FFmpeg merge completed successfully")
+        # Prepare parameters for version-safe writing
+        write_params = {
+            **moviepy_params,
+            'ffmpeg_params': ffmpeg_params,
+            'temp_audiofile': 'temp-audio.m4a',
+            'remove_temp': True,
+            'fps': 24,  # Standard frame rate
+            'logger': None  # Suppress MoviePy logging
+        }
+        
+        # Render with version-compatible parameter checking
+        write_videofile_safely(final_video, output_path, compatibility_info, **write_params)
+        
+        print(f"Debug: Rendering completed successfully")
         
         # Clean up resources
         final_video.close()
         audio_clip.close()
         video_cache.clear()  # Clean up cached videos
-        
-        # Remove temporary video file if it still exists
-        if os.path.exists(temp_video_path):
-            os.unlink(temp_video_path)
         
         report_progress("Rendering complete", 1.0)
         
@@ -821,7 +907,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         return output_path
         
     except Exception as e:
-        # Clean up any resources and temporary files
+        # Clean up any resources
         try:
             if 'final_video' in locals():
                 final_video.close()
@@ -829,8 +915,6 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 audio_clip.close()
             if 'video_cache' in locals():
                 video_cache.clear()
-            if 'temp_video_path' in locals() and os.path.exists(temp_video_path):
-                os.unlink(temp_video_path)
         except:
             pass
         
