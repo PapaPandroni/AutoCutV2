@@ -1896,7 +1896,8 @@ def _validate_encoder_output_fast(video_path: str, expected_profile: str = 'Main
         
         # Essential iPhone compatibility checks
         codec_ok = codec_name == 'h264'
-        profile_ok = expected_profile.lower() in profile.lower()
+        # Accept both Main and Baseline profiles (Constrained Baseline is iPhone-optimal)
+        profile_ok = any(acceptable in profile.lower() for acceptable in ['main', 'baseline'])
         pixfmt_ok = pix_fmt == 'yuv420p'
         
         return codec_ok and profile_ok and pixfmt_ok
