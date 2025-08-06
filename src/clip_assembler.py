@@ -1812,88 +1812,51 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
 
 
 def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
-    """Detect and return optimal codec settings for hardware acceleration.
+    """Legacy codec settings detection for backward compatibility.
     
-    Returns optimized codec parameters based on available hardware:
-    - NVIDIA GPU: h264_nvenc with fastest presets
-    - Intel GPU: h264_qsv with optimized settings
-    - CPU only: libx264 with ultrafast preset (3-4x faster than medium)
+    This function maintains backward compatibility with existing AutoCut code
+    while leveraging the enhanced hardware detection system.
     
     Returns:
         Tuple containing:
         - Dictionary of MoviePy parameters for write_videofile()
         - List of FFmpeg-specific parameters for ffmpeg_params argument
     """
-    import subprocess
-    import os
-    
-    # Default high-performance CPU settings (3-4x faster than 'medium')
-    default_moviepy_params = {
-        'codec': 'libx264',
-        'audio_codec': 'aac',
-        'threads': os.cpu_count() or 4,  # Use all CPU cores
-    }
-    
-    default_ffmpeg_params = [
-        '-preset', 'ultrafast',  # CRITICAL: Much faster than 'medium'
-        '-crf', '23',            # Constant Rate Factor for quality control
-    ]
-    
+    # Import enhanced detection from utils
     try:
-        # Test for NVIDIA GPU acceleration (h264_nvenc)
-        result = subprocess.run(['ffmpeg', '-encoders'], 
-                              capture_output=True, text=True, timeout=5)
-        if 'h264_nvenc' in result.stdout:
-            try:
-                # Test if NVENC actually works
-                test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'testsrc2=duration=1:size=320x240:rate=1', 
-                           '-c:v', 'h264_nvenc', '-f', 'null', '-']
-                subprocess.run(test_cmd, capture_output=True, timeout=10, check=True)
-                
-                moviepy_params = {
-                    'codec': 'h264_nvenc',
-                    'audio_codec': 'aac',
-                    'threads': 1,    # NVENC doesn't need many threads
-                }
-                
-                ffmpeg_params = [
-                    '-preset', 'p1',     # Fastest NVENC preset
-                    '-rc', 'vbr',        # Variable bitrate
-                    '-cq', '23',         # NVENC quality parameter
-                ]
-                
-                return moviepy_params, ffmpeg_params
-                
-            except (subprocess.SubprocessError, subprocess.TimeoutExpired):
-                pass  # NVENC test failed, fall through to next option
-                
-        # Test for Intel Quick Sync (h264_qsv)
-        if 'h264_qsv' in result.stdout:
-            try:
-                test_cmd = ['ffmpeg', '-f', 'lavfi', '-i', 'testsrc2=duration=1:size=320x240:rate=1', 
-                           '-c:v', 'h264_qsv', '-f', 'null', '-']
-                subprocess.run(test_cmd, capture_output=True, timeout=10, check=True)
-                
-                moviepy_params = {
-                    'codec': 'h264_qsv',
-                    'audio_codec': 'aac',
-                    'threads': 2,
-                }
-                
-                ffmpeg_params = [
-                    '-preset', 'veryfast',
-                ]
-                
-                return moviepy_params, ffmpeg_params
-                
-            except (subprocess.SubprocessError, subprocess.TimeoutExpired):
-                pass  # QSV test failed, use CPU
-                
-    except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError):
-        pass  # ffmpeg not available or failed, use CPU encoding
+        from .utils import detect_optimal_codec_settings_enhanced
+    except ImportError:
+        from utils import detect_optimal_codec_settings_enhanced
     
-    # Return optimized CPU settings if hardware acceleration unavailable
-    return default_moviepy_params, default_ffmpeg_params
+    # Use enhanced detection but return only the first two elements for compatibility
+    moviepy_params, ffmpeg_params, diagnostics = detect_optimal_codec_settings_enhanced()
+    
+    # Log enhanced capabilities for debugging
+    encoder_type = diagnostics.get('encoder_type', 'UNKNOWN')
+    print(f"📋 Codec settings (legacy interface): {encoder_type} encoder")
+    
+    return moviepy_params, ffmpeg_params
+
+
+def detect_optimal_codec_settings_with_diagnostics() -> Tuple[Dict[str, Any], List[str], Dict[str, str]]:
+    """Enhanced codec settings detection with full diagnostic information.
+    
+    New interface that provides comprehensive hardware detection results
+    for enhanced video processing workflows.
+    
+    Returns:
+        Tuple containing:
+        - Dictionary of MoviePy parameters for write_videofile()
+        - List of FFmpeg-specific parameters for ffmpeg_params argument
+        - Dictionary of diagnostic information and capability details
+    """
+    # Import enhanced detection from utils
+    try:
+        from .utils import detect_optimal_codec_settings_enhanced
+    except ImportError:
+        from utils import detect_optimal_codec_settings_enhanced
+    
+    return detect_optimal_codec_settings_enhanced()
 
 
 if __name__ == "__main__":

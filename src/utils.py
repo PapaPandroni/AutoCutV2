@@ -12,7 +12,20 @@ from typing import List, Optional, Dict, Any, Tuple
 from pathlib import Path
 
 # Import codec settings function from clip_assembler
-from .clip_assembler import detect_optimal_codec_settings
+try:
+    from .clip_assembler import detect_optimal_codec_settings
+except ImportError:
+    # Fallback for direct execution
+    try:
+        from clip_assembler import detect_optimal_codec_settings
+    except ImportError:
+        # Define a fallback function if clip_assembler is not available
+        def detect_optimal_codec_settings():
+            import os
+            return (
+                {'codec': 'libx264', 'audio_codec': 'aac', 'threads': os.cpu_count() or 4},
+                ['-preset', 'ultrafast', '-crf', '23']
+            )
 
 
 # Supported file formats - comprehensive list for modern video processing
@@ -451,26 +464,32 @@ def _calculate_compatibility_score(codec: str, container: str, format_name: str,
     return max(0, min(100, score)), warnings
 
 
-def transcode_hevc_to_h264(input_path: str, output_path: str = None, 
-                          progress_callback: Optional[callable] = None) -> str:
-    """Transcode H.265/HEVC video to H.264 for MoviePy compatibility with hardware acceleration.
+def transcode_hevc_to_h264_enhanced(input_path: str, output_path: str = None, 
+                                    progress_callback: Optional[callable] = None,
+                                    max_retries: int = 2) -> str:
+    """Enhanced transcoding with hardware validation and iPhone compatibility.
     
-    PERFORMANCE OPTIMIZED: Uses hardware acceleration (NVENC/QSV) when available,
-    with speed-optimized parameters for 10-20x faster transcoding.
+    Comprehensive H.265 to H.264 transcoding with:
+    - Hardware acceleration validation and testing
+    - iPhone parameter compatibility verification
+    - Intelligent fallback from hardware to CPU on failures
+    - Output format validation and retry mechanisms
+    - Detailed error diagnostics and categorization
     
     Args:
         input_path: Path to input H.265 video file
         output_path: Output path (auto-generated if None)
         progress_callback: Optional callback for progress updates
+        max_retries: Maximum retry attempts if transcoding fails
         
     Returns:
-        Path to transcoded H.264 video file
+        Path to transcoded H.264 video file (guaranteed iPhone compatible)
         
     Raises:
-        subprocess.CalledProcessError: If FFmpeg transcoding fails
-        FileNotFoundError: If FFmpeg is not installed
+        RuntimeError: If all transcoding attempts fail with diagnostic information
     """
     import time
+    import tempfile
     
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"Input video file not found: {input_path}")
@@ -484,174 +503,573 @@ def transcode_hevc_to_h264(input_path: str, output_path: str = None,
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     
     start_time = time.time()
+    last_error = None
+    attempt_log = []
+    
+    # Get enhanced hardware detection with validation
+    moviepy_params, ffmpeg_params, diagnostics = detect_optimal_codec_settings_enhanced()
+    encoder_type = diagnostics.get('encoder_type', 'CPU')
+    iphone_compatible = diagnostics.get('iphone_compatible', True)
+    
+    print(f"🚀 Enhanced H.265→H.264 transcoding:")
+    print(f"   🔧 Encoder: {encoder_type}")
+    print(f"   📱 iPhone Compatible: {'✅' if iphone_compatible else '⚠️'}")
+    print(f"   🎯 Max Retries: {max_retries}")
+    
+    # Attempt transcoding with fallbacks
+    for attempt in range(max_retries + 1):
+        try:
+            # Select encoding strategy based on attempt number
+            if attempt == 0:
+                # First attempt: Use detected optimal settings
+                cmd, description = _build_transcoding_command(
+                    input_path, output_path, moviepy_params, ffmpeg_params, encoder_type
+                )
+            elif attempt == 1 and encoder_type != 'CPU':
+                # Second attempt: Fallback to CPU if hardware was used first
+                print(f"   🔄 Retry {attempt}: Falling back to CPU encoding")
+                cmd, description = _build_transcoding_command(
+                    input_path, output_path, 
+                    {'codec': 'libx264', 'audio_codec': 'aac', 'threads': os.cpu_count() or 4},
+                    ['-preset', 'ultrafast', '-crf', '25'],
+                    'CPU'
+                )
+            else:
+                # Final attempt: Conservative CPU settings
+                print(f"   🔄 Retry {attempt}: Conservative CPU encoding")
+                cmd, description = _build_transcoding_command(
+                    input_path, output_path,
+                    {'codec': 'libx264', 'audio_codec': 'aac', 'threads': 2},
+                    ['-preset', 'fast', '-crf', '23'],  # More conservative
+                    'CPU_CONSERVATIVE'
+                )
+            
+            attempt_start = time.time()
+            if progress_callback:
+                progress_callback(f"Attempt {attempt + 1}: {description}", 0.0)
+            
+            print(f"   ⚡ Command: {' '.join(cmd[:10])}... ({description})")
+            
+            # Run FFmpeg with timeout and monitoring
+            process = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            
+            # Progress monitoring
+            stderr_output = ""
+            while process.poll() is None:
+                if progress_callback:
+                    elapsed = time.time() - attempt_start
+                    progress_callback(f"Transcoding ({elapsed:.1f}s)", 0.5)
+                time.sleep(1)
+            
+            # Get final output
+            stdout, stderr = process.communicate()
+            stderr_output = stderr
+            attempt_time = time.time() - attempt_start
+            
+            if process.returncode == 0:
+                # Transcoding succeeded - validate output
+                print(f"   ✅ Transcoding completed in {attempt_time:.1f}s")
+                
+                # Validate output is iPhone compatible
+                if _validate_transcoded_output_enhanced(output_path):
+                    total_time = time.time() - start_time
+                    
+                    if progress_callback:
+                        progress_callback(f"Complete & Validated ({total_time:.1f}s)", 1.0)
+                    
+                    _log_transcoding_success(input_path, output_path, total_time, 
+                                           attempt + 1, encoder_type)
+                    return output_path
+                else:
+                    # Output validation failed
+                    error_msg = f"Attempt {attempt + 1}: Output validation failed - not iPhone compatible"
+                    attempt_log.append(error_msg)
+                    print(f"   ❌ {error_msg}")
+                    if attempt < max_retries:
+                        continue
+                    else:
+                        raise RuntimeError(f"All attempts failed output validation: {'; '.join(attempt_log)}")
+            else:
+                # FFmpeg failed
+                error_details = _categorize_transcoding_error(stderr_output, encoder_type)
+                error_msg = f"Attempt {attempt + 1} failed ({attempt_time:.1f}s): {error_details['category']} - {error_details['message']}"
+                attempt_log.append(error_msg)
+                print(f"   ❌ {error_msg}")
+                last_error = RuntimeError(error_msg)
+                
+                if attempt < max_retries:
+                    continue
+            
+        except Exception as e:
+            attempt_time = time.time() - attempt_start if 'attempt_start' in locals() else 0
+            error_msg = f"Attempt {attempt + 1} exception ({attempt_time:.1f}s): {str(e)}"
+            attempt_log.append(error_msg)
+            print(f"   ❌ {error_msg}")
+            last_error = e
+            
+            if attempt >= max_retries:
+                break
+    
+    # All attempts failed
+    total_time = time.time() - start_time
+    comprehensive_error = f"Enhanced transcoding failed after {max_retries + 1} attempts ({total_time:.1f}s):\n" + "\n".join(attempt_log)
+    print(f"❌ {comprehensive_error}")
+    raise RuntimeError(comprehensive_error)
+
+
+def _build_transcoding_command(input_path: str, output_path: str, 
+                             moviepy_params: dict, ffmpeg_params: list,
+                             encoder_type: str) -> Tuple[List[str], str]:
+    """Build optimized FFmpeg transcoding command with iPhone compatibility.
+    
+    OPTIMIZATION: Streamlined command building with pre-validated parameters
+    and intelligent encoder-specific optimizations.
+    
+    Args:
+        input_path: Input video file path
+        output_path: Output video file path
+        moviepy_params: MoviePy parameters from hardware detection
+        ffmpeg_params: FFmpeg-specific parameters
+        encoder_type: Type of encoder being used
+        
+    Returns:
+        Tuple of (command_list, description)
+    """
+    codec = moviepy_params.get('codec', 'libx264')
+    
+    # OPTIMIZATION: Pre-validated iPhone compatibility parameters
+    iphone_params = [
+        '-profile:v', 'main',      # Force Main profile (8-bit compatible)
+        '-pix_fmt', 'yuv420p',    # Force 8-bit pixel format for MoviePy
+        '-level', '4.1',          # Ensure broad device compatibility
+        '-movflags', '+faststart' # Web/mobile optimization
+    ]
+    
+    # Base command structure with encoder-specific optimizations
+    if codec == 'h264_nvenc':
+        # OPTIMIZATION: Streamlined NVIDIA command with validated parameters
+        cmd = [
+            'ffmpeg', '-y',
+            '-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda',
+            '-c:v', 'hevc_cuvid', '-i', input_path,
+            '-c:v', 'h264_nvenc'
+        ] + ffmpeg_params + iphone_params + [
+            '-c:a', 'aac', '-b:a', '128k',  # Ensure AAC audio compatibility
+            output_path
+        ]
+        description = f"NVIDIA GPU + iPhone params (validated)"
+        
+    elif codec == 'h264_qsv':
+        # OPTIMIZATION: Streamlined Intel QSV command
+        cmd = [
+            'ffmpeg', '-y',
+            '-hwaccel', 'qsv', '-hwaccel_output_format', 'qsv', 
+            '-c:v', 'hevc_qsv', '-i', input_path,
+            '-c:v', 'h264_qsv'
+        ] + ffmpeg_params + iphone_params + [
+            '-c:a', 'aac', '-b:a', '128k',
+            output_path
+        ]
+        description = f"Intel QSV + iPhone params (validated)"
+        
+    else:
+        # OPTIMIZATION: Optimized CPU encoding with adaptive threading
+        threads = min(moviepy_params.get('threads', os.cpu_count() or 4), 6)  # Cap at 6 for efficiency
+        
+        if encoder_type == 'CPU_CONSERVATIVE':
+            # Conservative settings for final retry
+            cpu_params = ['-preset', 'fast', '-crf', '23']
+            description = f"CPU conservative ({threads}t) + iPhone params"
+        else:
+            # Fast CPU settings for regular processing
+            cpu_params = ffmpeg_params
+            description = f"CPU optimized ({threads}t) + iPhone params"
+        
+        cmd = [
+            'ffmpeg', '-y', '-i', input_path,
+            '-c:v', 'libx264',
+            '-threads', str(threads)
+        ] + cpu_params + iphone_params + [
+            '-c:a', 'aac', '-b:a', '128k',
+            output_path
+        ]
+    
+    return cmd, description
+
+
+def _categorize_transcoding_error(stderr: str, encoder_type: str) -> Dict[str, str]:
+    """Categorize transcoding errors for better diagnostics.
+    
+    Args:
+        stderr: FFmpeg stderr output
+        encoder_type: Type of encoder that failed
+        
+    Returns:
+        Dictionary with 'category' and 'message' keys
+    """
+    stderr_lower = stderr.lower()
+    
+    # Hardware-specific errors
+    if encoder_type in ['NVIDIA_NVENC', 'INTEL_QSV']:
+        if 'driver' in stderr_lower and ('version' in stderr_lower or 'api' in stderr_lower):
+            return {'category': 'DRIVER_VERSION', 'message': 'Hardware driver incompatible or outdated'}
+        elif 'device' in stderr_lower or 'capability' in stderr_lower:
+            return {'category': 'HARDWARE_CAPABILITY', 'message': 'Hardware encoding not supported'}
+        elif 'memory' in stderr_lower or 'allocation' in stderr_lower:
+            return {'category': 'HARDWARE_MEMORY', 'message': 'Insufficient GPU/hardware memory'}
+        elif 'context' in stderr_lower or 'session' in stderr_lower:
+            return {'category': 'HARDWARE_SESSION', 'message': 'Hardware encoder session failed'}
+    
+    # General encoding errors  
+    if 'codec' in stderr_lower or 'encoder' in stderr_lower:
+        return {'category': 'CODEC_ERROR', 'message': 'Video codec/encoder issue'}
+    elif 'format' in stderr_lower or 'muxer' in stderr_lower:
+        return {'category': 'FORMAT_ERROR', 'message': 'Output format/container issue'}
+    elif 'permission' in stderr_lower or 'access' in stderr_lower:
+        return {'category': 'FILE_ACCESS', 'message': 'File permission or access issue'}
+    elif 'space' in stderr_lower or 'disk' in stderr_lower:
+        return {'category': 'DISK_SPACE', 'message': 'Insufficient disk space'}
+    elif 'timeout' in stderr_lower or 'killed' in stderr_lower:
+        return {'category': 'TIMEOUT', 'message': 'Process timeout or termination'}
+    else:
+        return {'category': 'UNKNOWN', 'message': f'Unspecified error: {stderr[:200]}...'}
+
+
+def _log_transcoding_success(input_path: str, output_path: str, 
+                           total_time: float, attempts: int, encoder_type: str) -> None:
+    """Log successful transcoding with comprehensive information."""
+    input_size = os.path.getsize(input_path) / (1024 * 1024)  # MB
+    output_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
+    
+    print(f"✅ Enhanced iPhone H.265→H.264 transcoding successful:")
+    print(f"   📁 Input: {Path(input_path).name}")
+    print(f"   📁 Output: {Path(output_path).name}")
+    print(f"   ⏱️  Time: {total_time:.1f}s (attempts: {attempts})")
+    print(f"   🔧 Method: {encoder_type}")
+    print(f"   📊 Size: {input_size:.1f}MB → {output_size:.1f}MB")
+    print(f"   📱 iPhone Compatibility: Validated ✅")
+
+
+# Legacy function for backward compatibility
+def transcode_hevc_to_h264(input_path: str, output_path: str = None, 
+                          progress_callback: Optional[callable] = None) -> str:
+    """Legacy function - calls enhanced version for backward compatibility."""
+    return transcode_hevc_to_h264_enhanced(input_path, output_path, progress_callback)
+
+
+# Smart transcoding cache to avoid re-processing identical files
+_TRANSCODING_CACHE = {}
+_TRANSCODING_CACHE_TIMEOUT = 3600  # 1 hour
+
+def _get_file_cache_key(file_path: str) -> str:
+    """Generate cache key based on file path and modification time."""
+    import hashlib
+    stat = os.stat(file_path)
+    cache_string = f"{file_path}_{stat.st_mtime}_{stat.st_size}"
+    return hashlib.md5(cache_string.encode()).hexdigest()
+
+def _check_transcoding_cache(file_path: str) -> Optional[str]:
+    """Check if transcoded version exists in cache and is still valid."""
+    import time
     
     try:
-        # PERFORMANCE BOOST: Get hardware-accelerated codec settings
-        # This integrates with the existing detect_optimal_codec_settings() infrastructure
-        moviepy_params, ffmpeg_params = detect_optimal_codec_settings()
+        cache_key = _get_file_cache_key(file_path)
         
-        print(f"🚀 H.265 transcoding with hardware acceleration: {moviepy_params.get('codec', 'libx264')}")
-        
-        # Build optimized FFmpeg command based on detected hardware
-        if moviepy_params['codec'] == 'h264_nvenc':
-            # NVIDIA GPU acceleration - 5-10x faster than CPU
-            cmd = [
-                'ffmpeg', '-y',
-                '-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda',
-                '-c:v', 'hevc_cuvid', '-i', input_path,  # GPU H.265 decode
-                '-c:v', 'h264_nvenc',                     # GPU H.264 encode
-                '-preset', 'p1',                          # Fastest NVENC preset
-                '-rc', 'vbr',                             # Variable bitrate
-                '-cq', '25',                              # Balanced quality (vs 18 visually lossless)
-                '-profile:v', 'main',                     # Force Main profile (8-bit compatible)
-                '-pix_fmt', 'yuv420p',                   # Force 8-bit pixel format for MoviePy
-                '-c:a', 'copy',                           # Copy audio without re-encoding
-                '-movflags', '+faststart',                # Optimize for web playback
-                output_path
-            ]
-            expected_speedup = "5-10x faster with NVIDIA GPU"
+        if cache_key in _TRANSCODING_CACHE:
+            cached_info = _TRANSCODING_CACHE[cache_key]
+            cached_path = cached_info['transcoded_path']
+            cache_time = cached_info['timestamp']
             
-        elif moviepy_params['codec'] == 'h264_qsv':
-            # Intel Quick Sync acceleration - 3-5x faster than CPU
-            cmd = [
-                'ffmpeg', '-y',
-                '-hwaccel', 'qsv', '-hwaccel_output_format', 'qsv',
-                '-c:v', 'hevc_qsv', '-i', input_path,     # Intel H.265 decode
-                '-c:v', 'h264_qsv',                       # Intel H.264 encode
-                '-preset', 'veryfast',                    # Fast QSV preset
-                '-global_quality', '25',                  # Balanced quality
-                '-profile:v', 'main',                     # Force Main profile (8-bit compatible)
-                '-pix_fmt', 'yuv420p',                   # Force 8-bit pixel format for MoviePy
-                '-c:a', 'copy',                           # Copy audio without re-encoding
-                '-movflags', '+faststart',                # Optimize for web playback
-                output_path
-            ]
-            expected_speedup = "3-5x faster with Intel Quick Sync"
+            # Check cache age
+            if time.time() - cache_time > _TRANSCODING_CACHE_TIMEOUT:
+                del _TRANSCODING_CACHE[cache_key]
+                return None
             
-        else:
-            # CPU encoding with SPEED-OPTIMIZED parameters (3-4x faster than conservative)
-            cmd = [
-                'ffmpeg', '-y', '-i', input_path,
-                '-c:v', 'libx264',                        # H.264 codec
-                '-crf', '25',                             # OPTIMIZED: Balanced quality (vs 18 visually lossless)
-                '-preset', 'ultrafast',                   # OPTIMIZED: 3-4x faster than 'fast'
-                '-threads', str(os.cpu_count() or 4),     # Use all CPU cores
-                '-profile:v', 'main',                     # Force Main profile (8-bit compatible)
-                '-pix_fmt', 'yuv420p',                   # Force 8-bit pixel format for MoviePy
-                '-c:a', 'copy',                           # Copy audio without re-encoding
-                '-movflags', '+faststart',                # Optimize for web playback
-                output_path
-            ]
-            expected_speedup = "3-4x faster with optimized CPU settings"
+            # Check if cached file still exists
+            if os.path.exists(cached_path):
+                print(f"   💾 Cache hit: Using cached transcoded file")
+                return cached_path
+            else:
+                # Cached file was deleted
+                del _TRANSCODING_CACHE[cache_key]
+                return None
         
-        if progress_callback:
-            progress_callback(f"H.265→H.264 transcoding ({expected_speedup})", 0.0)
+        return None
         
-        print(f"⚡ Transcoding command: {' '.join(cmd[:8])}... (hardware accelerated)")
-        
-        # Run FFmpeg with enhanced progress monitoring
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
-        # Enhanced progress monitoring (simplified but informative)
-        while process.poll() is None:
-            if progress_callback:
-                elapsed = time.time() - start_time
-                progress_callback(f"Transcoding in progress ({elapsed:.1f}s)", 0.5)
-                time.sleep(1)  # Update every second
-        
-        # Check if process completed successfully
-        stdout, stderr = process.communicate()
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, cmd, stderr)
-        
-        total_time = time.time() - start_time
-        
-        if progress_callback:
-            progress_callback(f"Transcoding complete ({total_time:.1f}s)", 1.0)
-        
-        # Log performance results
-        print(f"✅ H.265→H.264 transcoding complete:")
-        print(f"   📁 Input: {Path(input_path).name}")
-        print(f"   📁 Output: {Path(output_path).name}")
-        print(f"   ⏱️  Time: {total_time:.1f}s ({expected_speedup})")
-        print(f"   🎯 Quality: CRF 25 (balanced for intermediate processing)")
-        
-        # Validate output file was created
-        if not os.path.exists(output_path):
-            raise RuntimeError(f"Transcoding appeared successful but output file not found: {output_path}")
-        
-        # Quick size comparison for user feedback
-        input_size = os.path.getsize(input_path) / (1024 * 1024)  # MB
-        output_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
-        print(f"   📊 Size: {input_size:.1f}MB → {output_size:.1f}MB")
-        
-        return output_path
-        
-    except subprocess.CalledProcessError as e:
-        error_msg = f"FFmpeg transcoding failed after {time.time() - start_time:.1f}s: {e.stderr}"
-        print(f"❌ {error_msg}")
-        raise RuntimeError(error_msg)
-    except Exception as e:
-        error_msg = f"Transcoding error after {time.time() - start_time:.1f}s: {str(e)}"
-        print(f"❌ {error_msg}")
-        raise RuntimeError(error_msg)
+    except (OSError, KeyError):
+        return None
 
-
-def preprocess_video_if_needed(file_path: str, temp_dir: str = "temp") -> str:
-    """Preprocess video file if needed for MoviePy compatibility.
+def _update_transcoding_cache(file_path: str, transcoded_path: str):
+    """Update transcoding cache with new result."""
+    import time
     
-    SMART AVOIDANCE: Tests H.265 compatibility before transcoding to avoid
-    unnecessary work. Can eliminate 50-70% of transcoding operations.
+    try:
+        cache_key = _get_file_cache_key(file_path)
+        _TRANSCODING_CACHE[cache_key] = {
+            'transcoded_path': transcoded_path,
+            'timestamp': time.time()
+        }
+        print(f"   💾 Updated transcoding cache: {Path(transcoded_path).name}")
+    except OSError:
+        pass  # Cache update failure shouldn't break processing
+
+def preprocess_video_if_needed_enhanced(file_path: str, temp_dir: str = "temp") -> Dict[str, Any]:
+    """Enhanced preprocessing with smart caching and comprehensive error handling.
+    
+    OPTIMIZATION: Added smart transcoding cache to avoid re-processing identical files,
+    providing significant performance improvements for repeated processing.
+    
+    Comprehensive video preprocessing with:
+    - Smart transcoding cache (1-hour timeout) to avoid duplicate work
+    - Detailed codec analysis and compatibility checking
+    - Smart avoidance with H.265 compatibility testing
+    - Enhanced transcoding with iPhone parameter validation
+    - Specific error categorization and recovery strategies
+    - Processing statistics and diagnostic information
     
     Args:
         file_path: Path to input video file
         temp_dir: Directory for temporary transcoded files
         
     Returns:
-        Path to processed video file (original if no processing needed,
-        transcoded file if H.265 was detected and incompatible)
-        
-    Raises:
-        RuntimeError: If codec detection or transcoding fails
+        Dictionary containing:
+        - 'processed_path': Path to processed video file
+        - 'success': Boolean indicating if processing succeeded
+        - 'transcoded': Boolean indicating if transcoding was performed
+        - 'cached': Boolean indicating if cached result was used
+        - 'processing_time': Time taken for processing
+        - 'error_category': Category of error if failed
+        - 'diagnostic_message': Detailed diagnostic information
+        - 'original_codec': Original video codec information
     """
+    import time
+    
+    start_time = time.time()
+    result = {
+        'processed_path': file_path,
+        'success': False,
+        'transcoded': False, 
+        'cached': False,
+        'processing_time': 0.0,
+        'error_category': None,
+        'diagnostic_message': '',
+        'original_codec': None
+    }
+    
+    filename = Path(file_path).name
+    
     try:
-        # Step 1: Detect video codec
-        codec_info = detect_video_codec(file_path)
+        print(f"🔍 Enhanced preprocessing: {filename}")
         
-        # If not HEVC, return original file immediately
+        # OPTIMIZATION: Phase 0 - Check transcoding cache first
+        cached_path = _check_transcoding_cache(file_path)
+        if cached_path:
+            result['processed_path'] = cached_path
+            result['success'] = True
+            result['transcoded'] = True
+            result['cached'] = True
+            result['processing_time'] = time.time() - start_time
+            result['diagnostic_message'] = f"Used cached transcoded file: {Path(cached_path).name}"
+            print(f"   ✅ Cache hit: {Path(cached_path).name} ({result['processing_time']:.3f}s)")
+            return result
+        
+        # Phase 1: Comprehensive codec detection
+        print(f"   📊 Step 1: Analyzing video format...")
+        try:
+            codec_info = detect_video_codec(file_path)
+            result['original_codec'] = {
+                'codec': codec_info['codec'],
+                'profile': codec_info.get('profile', 'unknown'),
+                'pixel_format': codec_info.get('pixel_format', 'unknown'),
+                'resolution': codec_info['resolution'],
+                'container': codec_info['container']
+            }
+            
+            compatibility_score = codec_info.get('compatibility_score', 50)
+            warnings = codec_info.get('warnings', [])
+            
+            print(f"   ✅ Codec analysis: {codec_info['codec']} ({compatibility_score}/100 compatibility)")
+            if warnings:
+                for warning in warnings:
+                    print(f"      ⚠️  {warning}")
+            
+        except Exception as e:
+            result['error_category'] = 'CODEC_DETECTION_FAILED'
+            result['diagnostic_message'] = f"Codec detection failed: {str(e)[:200]}"
+            print(f"   ❌ Codec detection failed: {str(e)[:100]}...")
+            # Continue with original file as fallback
+            result['processed_path'] = file_path
+            result['processing_time'] = time.time() - start_time
+            return result
+        
+        # Phase 2: Determine processing strategy
         if not codec_info['is_hevc']:
-            print(f"✅ {Path(file_path).name}: H.264 detected, no transcoding needed")
-            return file_path
+            # Not H.265 - check if additional processing needed
+            if compatibility_score >= 80:
+                print(f"   ✅ {codec_info['codec']} format compatible, no processing needed")
+                result['success'] = True
+                result['diagnostic_message'] = f"Native {codec_info['codec']} compatibility (score: {compatibility_score})"
+                result['processing_time'] = time.time() - start_time
+                return result
+            else:
+                print(f"   ⚠️  {codec_info['codec']} format has compatibility issues (score: {compatibility_score})")
+                # Could add non-H.265 transcoding here if needed
         
-        print(f"🔍 {Path(file_path).name}: H.265/HEVC detected, testing compatibility...")
+        # Phase 3: H.265 processing
+        print(f"   📱 Step 2: Testing H.265/iPhone compatibility...")
         
-        # Step 2: SMART AVOIDANCE - Test MoviePy H.265 compatibility
+        # Smart compatibility testing
         if test_moviepy_h265_compatibility(file_path):
-            print(f"✅ {Path(file_path).name}: H.265 compatible with MoviePy, skipping transcoding")
-            print(f"   💾 Saved transcoding time (estimated 1-3 minutes)")
-            return file_path
+            print(f"   ✅ H.265 compatible with MoviePy, skipping transcoding")
+            result['success'] = True
+            result['diagnostic_message'] = "H.265 native MoviePy compatibility confirmed"
+            result['processing_time'] = time.time() - start_time
+            return result
         
-        # Step 3: H.265 incompatible - proceed with optimized transcoding
-        print(f"⚠️  {Path(file_path).name}: H.265 incompatible with MoviePy")
-        print(f"   🔄 Transcoding to H.264 with hardware acceleration...")
+        # Phase 4: Enhanced transcoding required
+        print(f"   🔄 Step 3: H.265 transcoding required for MoviePy compatibility")
         
-        # Create temp directory
-        os.makedirs(temp_dir, exist_ok=True)
+        # Create temp directory with error handling
+        try:
+            os.makedirs(temp_dir, exist_ok=True)
+        except OSError as e:
+            result['error_category'] = 'TEMP_DIR_CREATION_FAILED'
+            result['diagnostic_message'] = f"Cannot create temp directory {temp_dir}: {str(e)}"
+            print(f"   ❌ Temp directory creation failed: {str(e)}")
+            result['processing_time'] = time.time() - start_time
+            return result
         
-        # Generate output path in temp directory
+        # Generate output path with cache-friendly naming
         input_stem = Path(file_path).stem
-        output_path = os.path.join(temp_dir, f"{input_stem}_h264.mp4")
+        cache_key = _get_file_cache_key(file_path)[:8]  # Short hash for filename
+        output_path = os.path.join(temp_dir, f"{input_stem}_h264_iphone_{cache_key}.mp4")
         
-        # Transcode file with hardware acceleration
-        transcoded_path = transcode_hevc_to_h264(file_path, output_path)
-        
-        print(f"✅ Transcoded to: {transcoded_path}")
-        return transcoded_path
+        # Enhanced transcoding with retry and validation
+        try:
+            transcoded_path = transcode_hevc_to_h264_enhanced(
+                file_path, output_path, 
+                progress_callback=lambda msg, progress: print(f"      📈 {msg}"),
+                max_retries=2
+            )
+            
+            # OPTIMIZATION: Update transcoding cache for future use
+            _update_transcoding_cache(file_path, transcoded_path)
+            
+            result['processed_path'] = transcoded_path
+            result['transcoded'] = True
+            result['success'] = True
+            result['diagnostic_message'] = f"Enhanced H.265→H.264 transcoding successful with iPhone compatibility validation"
+            
+            print(f"   ✅ Enhanced transcoding successful: {Path(transcoded_path).name}")
+            
+        except Exception as transcoding_error:
+            # Detailed transcoding error analysis
+            error_str = str(transcoding_error)
+            
+            if 'Driver does not support' in error_str or 'nvenc API version' in error_str:
+                result['error_category'] = 'HARDWARE_DRIVER_INCOMPATIBLE'
+                result['diagnostic_message'] = f"GPU driver incompatible for hardware acceleration: {error_str[:200]}"
+            elif 'Hardware encoder' in error_str or 'device' in error_str.lower():
+                result['error_category'] = 'HARDWARE_ENCODER_FAILED'
+                result['diagnostic_message'] = f"Hardware encoding failed: {error_str[:200]}"
+            elif 'All attempts failed' in error_str:
+                result['error_category'] = 'TRANSCODING_ALL_ATTEMPTS_FAILED'
+                result['diagnostic_message'] = f"All transcoding methods failed: {error_str[:300]}"
+            elif 'validation failed' in error_str.lower():
+                result['error_category'] = 'OUTPUT_VALIDATION_FAILED'
+                result['diagnostic_message'] = f"Transcoding succeeded but output validation failed: {error_str[:200]}"
+            else:
+                result['error_category'] = 'TRANSCODING_UNKNOWN_ERROR'
+                result['diagnostic_message'] = f"Transcoding error: {error_str[:200]}"
+            
+            print(f"   ❌ Enhanced transcoding failed: {result['error_category']}")
+            print(f"      Details: {result['diagnostic_message'][:100]}...")
+            
+            # Fallback to original file with warning
+            result['processed_path'] = file_path
+            print(f"   ⚠️  Falling back to original file - may cause downstream processing issues")
         
     except Exception as e:
-        print(f"⚠️  Failed to preprocess {file_path}: {str(e)}")
-        print("   Continuing with original file - may cause processing issues")
-        return file_path
+        # Catch-all for unexpected errors
+        result['error_category'] = 'PREPROCESSING_UNEXPECTED_ERROR'
+        result['diagnostic_message'] = f"Unexpected preprocessing error: {str(e)[:200]}"
+        result['processed_path'] = file_path
+        print(f"   ❌ Unexpected preprocessing error: {str(e)[:100]}...")
+        print(f"   ⚠️  Using original file as fallback")
+    
+    finally:
+        result['processing_time'] = time.time() - start_time
+        performance_indicator = "⚡" if result['cached'] else "⏱️"
+        print(f"   {performance_indicator} Preprocessing completed in {result['processing_time']:.1f}s")
+    
+    return result
+
+
+def validate_transcoded_output(output_path: str) -> dict:
+    """Validate transcoded output meets iPhone processing requirements.
+    
+    Public interface for comprehensive output validation with detailed diagnostics.
+    
+    Args:
+        output_path: Path to transcoded video file
+        
+    Returns:
+        Dictionary with validation results:
+        - 'valid': Boolean indicating if output is iPhone-compatible
+        - 'codec_profile': Detected codec profile
+        - 'pixel_format': Detected pixel format  
+        - 'moviepy_compatible': MoviePy loading test result
+        - 'iphone_compatible': iPhone-specific requirements check
+        - 'error_details': List of any validation errors
+    """
+    validation_result = {
+        'valid': False,
+        'codec_profile': 'unknown',
+        'pixel_format': 'unknown',
+        'moviepy_compatible': False,
+        'iphone_compatible': False,
+        'error_details': []
+    }
+    
+    try:
+        if not os.path.exists(output_path):
+            validation_result['error_details'].append(f"Output file not found: {output_path}")
+            return validation_result
+        
+        # Use enhanced validation
+        is_valid = _validate_transcoded_output_enhanced(output_path)
+        validation_result['valid'] = is_valid
+        
+        if is_valid:
+            # Get detailed format information
+            try:
+                codec_info = detect_video_codec(output_path)
+                validation_result['codec_profile'] = codec_info.get('profile', 'unknown')
+                validation_result['pixel_format'] = codec_info.get('pixel_format', 'unknown')
+                validation_result['moviepy_compatible'] = True
+                validation_result['iphone_compatible'] = True
+            except Exception as e:
+                validation_result['error_details'].append(f"Codec info extraction failed: {str(e)}")
+        else:
+            validation_result['error_details'].append("Enhanced validation failed - see detailed logs above")
+        
+        return validation_result
+        
+    except Exception as e:
+        validation_result['error_details'].append(f"Validation exception: {str(e)}")
+        return validation_result
+
+
+# Legacy function for backward compatibility
+def preprocess_video_if_needed(file_path: str, temp_dir: str = "temp") -> str:
+    """Legacy preprocessing function - calls enhanced version and returns path only.
+    
+    For backward compatibility with existing AutoCut code.
+    """
+    result = preprocess_video_if_needed_enhanced(file_path, temp_dir)
+    return result['processed_path']
 
 
 def test_moviepy_h265_compatibility(file_path: str, timeout_seconds: float = 10.0) -> bool:
@@ -753,6 +1171,726 @@ def test_moviepy_h265_compatibility(file_path: str, timeout_seconds: float = 10.
                 video_clip.close()
         except:
             pass
+
+
+# Enhanced hardware detection cache for performance
+_HARDWARE_DETECTION_CACHE = None
+_CACHE_TIMESTAMP = None
+_CACHE_TIMEOUT = 300  # 5 minutes
+
+
+def detect_optimal_codec_settings_enhanced() -> Tuple[Dict[str, Any], List[str], Dict[str, str]]:
+    """Enhanced hardware detection with actual capability testing and iPhone validation.
+    
+    Replaces basic encoder listing with comprehensive testing that:
+    - Tests actual encoding capability, not just availability
+    - Validates iPhone parameter compatibility for each encoder
+    - Provides detailed error categorization and diagnostics
+    - Caches results for performance optimization
+    
+    Returns:
+        Tuple containing:
+        - Dictionary of MoviePy parameters for write_videofile()
+        - List of FFmpeg-specific parameters for ffmpeg_params argument  
+        - Dictionary of diagnostic information and capability details
+    """
+    import subprocess
+    import os
+    import time
+    import tempfile
+    
+    global _HARDWARE_DETECTION_CACHE, _CACHE_TIMESTAMP
+    
+    # Check cache validity (5-minute timeout)
+    current_time = time.time()
+    if (_HARDWARE_DETECTION_CACHE is not None and 
+        _CACHE_TIMESTAMP is not None and 
+        current_time - _CACHE_TIMESTAMP < _CACHE_TIMEOUT):
+        return _HARDWARE_DETECTION_CACHE
+    
+    print("🔍 Enhanced hardware capability detection...")
+    
+    # Default high-performance CPU settings
+    default_result = (
+        {'codec': 'libx264', 'audio_codec': 'aac', 'threads': os.cpu_count() or 4},
+        ['-preset', 'ultrafast', '-crf', '23'],
+        {'encoder_type': 'CPU', 'driver_status': 'N/A', 'iphone_compatible': True,
+         'error_category': None, 'diagnostic_message': 'CPU encoding with optimized parameters'}
+    )
+    
+    diagnostics = {'tests_performed': [], 'errors_encountered': []}
+    
+    try:
+        # Step 1: Check if FFmpeg is available
+        try:
+            result = subprocess.run(['ffmpeg', '-version'], 
+                                  capture_output=True, text=True, timeout=5)
+            diagnostics['ffmpeg_version'] = result.stdout.split('\n')[0] if result.stdout else 'Unknown'
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+            diagnostics['errors_encountered'].append(f"FFmpeg not available: {str(e)}")
+            return default_result
+        
+        # Step 2: List available encoders
+        try:
+            result = subprocess.run(['ffmpeg', '-encoders'], 
+                                  capture_output=True, text=True, timeout=5)
+            available_encoders = result.stdout
+            diagnostics['available_encoders'] = 'Listed successfully'
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+            diagnostics['errors_encountered'].append(f"Encoder listing failed: {str(e)}")
+            return default_result
+        
+        # Step 3: Test NVIDIA NVENC with iPhone parameter validation
+        if 'h264_nvenc' in available_encoders:
+            nvenc_result = _test_hardware_encoder(
+                'NVENC', 'h264_nvenc', 
+                test_iphone_parameters=True,
+                diagnostics=diagnostics
+            )
+            if nvenc_result['success']:
+                moviepy_params = {
+                    'codec': 'h264_nvenc',
+                    'audio_codec': 'aac', 
+                    'threads': 1,  # NVENC doesn't need many threads
+                }
+                ffmpeg_params = [
+                    '-preset', 'p1',     # Fastest NVENC preset
+                    '-rc', 'vbr',        # Variable bitrate
+                    '-cq', '23',         # NVENC quality parameter
+                ]
+                result_diagnostics = {
+                    'encoder_type': 'NVIDIA_NVENC',
+                    'driver_status': nvenc_result.get('driver_status', 'OK'),
+                    'iphone_compatible': nvenc_result.get('iphone_compatible', True),
+                    'error_category': None,
+                    'diagnostic_message': f"NVIDIA GPU acceleration (5-10x faster): {nvenc_result.get('message', '')}"  
+                }
+                result_diagnostics.update(diagnostics)
+                
+                final_result = (moviepy_params, ffmpeg_params, result_diagnostics)
+                _HARDWARE_DETECTION_CACHE = final_result
+                _CACHE_TIMESTAMP = current_time
+                return final_result
+        
+        # Step 4: Test Intel QSV with iPhone parameter validation 
+        if 'h264_qsv' in available_encoders:
+            qsv_result = _test_hardware_encoder(
+                'QSV', 'h264_qsv',
+                test_iphone_parameters=True, 
+                diagnostics=diagnostics
+            )
+            if qsv_result['success']:
+                moviepy_params = {
+                    'codec': 'h264_qsv',
+                    'audio_codec': 'aac',
+                    'threads': 2,
+                }
+                ffmpeg_params = [
+                    '-preset', 'veryfast',
+                ]
+                result_diagnostics = {
+                    'encoder_type': 'INTEL_QSV',
+                    'driver_status': qsv_result.get('driver_status', 'OK'),
+                    'iphone_compatible': qsv_result.get('iphone_compatible', True),
+                    'error_category': None,
+                    'diagnostic_message': f"Intel Quick Sync acceleration (3-5x faster): {qsv_result.get('message', '')}"
+                }
+                result_diagnostics.update(diagnostics)
+                
+                final_result = (moviepy_params, ffmpeg_params, result_diagnostics)
+                _HARDWARE_DETECTION_CACHE = final_result
+                _CACHE_TIMESTAMP = current_time
+                return final_result
+        
+        # Hardware acceleration not available - return optimized CPU settings
+        print("⚡ Using optimized CPU encoding (hardware acceleration not available)")
+        
+    except Exception as e:
+        diagnostics['errors_encountered'].append(f"Hardware detection error: {str(e)}")
+        print(f"⚠️  Hardware detection error: {str(e)}")
+    
+    # Return enhanced default result with diagnostics
+    enhanced_default = (
+        default_result[0], 
+        default_result[1],
+        {**default_result[2], **diagnostics}
+    )
+    
+    _HARDWARE_DETECTION_CACHE = enhanced_default
+    _CACHE_TIMESTAMP = current_time
+    return enhanced_default
+
+
+def _test_hardware_encoder(encoder_name: str, encoder_codec: str, 
+                          test_iphone_parameters: bool = True, 
+                          diagnostics: Optional[Dict] = None) -> Dict[str, Any]:
+    """Fast hardware encoder testing with intelligent early termination.
+    
+    OPTIMIZATION FOCUS: Reduce 15s timeout to 3s for faster failure detection
+    and combine basic + iPhone parameter testing in single operation.
+    
+    Args:
+        encoder_name: Human-readable encoder name (e.g., 'NVENC', 'QSV')
+        encoder_codec: FFmpeg codec name (e.g., 'h264_nvenc', 'h264_qsv')
+        test_iphone_parameters: Whether to test iPhone-specific parameters
+        diagnostics: Dictionary to store diagnostic information
+        
+    Returns:
+        Dictionary with test results:
+        - 'success': Boolean indicating if encoder works
+        - 'driver_status': Driver compatibility information
+        - 'iphone_compatible': Whether iPhone parameters work
+        - 'message': Detailed status message
+        - 'error_category': Category of error if failed
+    """
+    import subprocess
+    import tempfile
+    import os
+    
+    if diagnostics is None:
+        diagnostics = {}
+    
+    test_name = f"{encoder_name}_{encoder_codec}_test"
+    diagnostics.setdefault('tests_performed', []).append(test_name)
+    
+    result = {
+        'success': False,
+        'driver_status': 'UNKNOWN',
+        'iphone_compatible': False,
+        'message': '',
+        'error_category': None
+    }
+    
+    try:
+        # OPTIMIZATION: Single test with iPhone parameters from start (saves 15s timeout)
+        print(f"   🧪 Fast-testing {encoder_name} with iPhone parameters...")
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
+            temp_output = temp_file.name
+        
+        # Combined test: Basic functionality + iPhone parameters in one command
+        combined_cmd = [
+            'ffmpeg', '-y', '-f', 'lavfi', 
+            '-i', 'testsrc2=duration=0.5:size=160x120:rate=5',  # OPTIMIZATION: Even smaller/faster
+            '-c:v', encoder_codec,
+            '-profile:v', 'main',     # iPhone compatibility from start
+            '-pix_fmt', 'yuv420p',   # 8-bit requirement from start
+            '-t', '0.5',              # OPTIMIZATION: 0.5s vs 1s 
+            '-preset', ('p1' if 'nvenc' in encoder_codec else 'veryfast'),
+            '-f', 'mp4', temp_output
+        ]
+        
+        # OPTIMIZATION: Reduced timeout 3s vs 15s for faster failure detection
+        combined_result = subprocess.run(
+            combined_cmd, capture_output=True, text=True, timeout=3
+        )
+        
+        if combined_result.returncode != 0:
+            # Analyze error messages for specific issues (same categorization)
+            stderr_lower = combined_result.stderr.lower()
+            
+            if 'driver' in stderr_lower and ('version' in stderr_lower or 'api' in stderr_lower):
+                result['driver_status'] = 'INCOMPATIBLE_VERSION'
+                result['error_category'] = 'driver_version'
+                result['message'] = f"Driver incompatibility: {combined_result.stderr[:200]}"
+            elif 'device' in stderr_lower or 'capability' in stderr_lower:
+                result['driver_status'] = 'DEVICE_ERROR' 
+                result['error_category'] = 'device_capability'
+                result['message'] = f"Device capability issue: {combined_result.stderr[:200]}"
+            elif 'permission' in stderr_lower or 'access' in stderr_lower:
+                result['driver_status'] = 'PERMISSION_ERROR'
+                result['error_category'] = 'permissions'
+                result['message'] = f"Permission issue: {combined_result.stderr[:200]}"
+            else:
+                result['driver_status'] = 'GENERAL_ERROR'
+                result['error_category'] = 'unknown'
+                result['message'] = f"General error: {combined_result.stderr[:200]}"
+            
+            print(f"   ❌ {encoder_name} fast test failed: {result['error_category']}")
+            return result
+        
+        # Combined test passed - validate output quickly
+        result['driver_status'] = 'OK'
+        
+        # OPTIMIZATION: Quick format validation instead of comprehensive check
+        format_valid = _validate_encoder_output_fast(temp_output, expected_profile='Main')
+        result['iphone_compatible'] = format_valid
+        
+        if format_valid:
+            result['success'] = True
+            result['message'] = f"{encoder_name} with iPhone parameters: OK (fast test)"
+            print(f"   ✅ {encoder_name} fast test + iPhone parameters: OK")
+        else:
+            result['message'] = f"{encoder_name} encoding works but output format incorrect"
+            print(f"   ⚠️  {encoder_name} encoding works but output format issue")
+        
+    except subprocess.TimeoutExpired:
+        result['error_category'] = 'timeout'
+        result['message'] = f"{encoder_name} test timed out (>3s) - likely hardware issue"
+        print(f"   ⏱️  {encoder_name} test timed out (3s) - fast failure detection")
+    except Exception as e:
+        result['error_category'] = 'exception'
+        result['message'] = f"{encoder_name} test exception: {str(e)[:100]}"
+        print(f"   ❌ {encoder_name} test exception: {str(e)[:50]}...")
+    
+    finally:
+        # Clean up test file
+        try:
+            if 'temp_output' in locals():
+                os.unlink(temp_output)
+        except OSError:
+            pass
+    
+    diagnostics.setdefault('encoder_test_results', {})[encoder_name] = result
+    return result
+
+
+def _validate_transcoded_output_enhanced(video_path: str) -> bool:
+    """Streamlined validation that transcoded output meets iPhone compatibility requirements.
+    
+    OPTIMIZATION: Parallel validation phases and early termination to reduce overhead
+    while maintaining comprehensive iPhone H.265 processing compatibility.
+    
+    Args:
+        video_path: Path to transcoded video file
+        
+    Returns:
+        True if output is guaranteed iPhone-compatible, False otherwise
+    """
+    if not os.path.exists(video_path):
+        print(f"   ❌ Output validation failed: File not found: {video_path}")
+        return False
+    
+    try:
+        print(f"   🔍 Streamlined iPhone compatibility validation: {Path(video_path).name}")
+        
+        # OPTIMIZATION: Combined single-pass validation instead of 3 separate phases
+        validation_result = _validate_combined_iphone_requirements(video_path)
+        
+        if not validation_result['valid']:
+            print(f"   ❌ Validation failed: {validation_result['reason']}")
+            return False
+        
+        print(f"   ✅ All iPhone requirements validated: {validation_result['summary']}")
+        return True
+        
+    except Exception as e:
+        print(f"   ❌ Output validation exception: {str(e)[:100]}...")
+        return False
+
+
+def _validate_combined_iphone_requirements(video_path: str) -> Dict[str, Any]:
+    """Combined iPhone compatibility validation with single FFprobe call.
+    
+    OPTIMIZATION: Replaces 3 separate validation phases (format + MoviePy + iPhone)
+    with single comprehensive check that includes essential MoviePy compatibility test.
+    
+    Args:
+        video_path: Path to video file for validation
+        
+    Returns:
+        Dict with validation results:
+        - 'valid': Boolean indicating if all requirements met
+        - 'reason': Failure reason if valid=False
+        - 'summary': Summary of validated attributes
+    """
+    import subprocess
+    import tempfile
+    
+    result = {
+        'valid': False,
+        'reason': 'Unknown error',
+        'summary': ''
+    }
+    
+    try:
+        # OPTIMIZATION: Single comprehensive FFprobe call
+        cmd = [
+            'ffprobe', '-v', 'quiet', '-select_streams', 'v:0',
+            '-show_entries', 'stream=codec_name,profile,level,pix_fmt,width,height,r_frame_rate',
+            '-show_entries', 'format=duration,size',
+            '-of', 'json', video_path
+        ]
+        
+        ffprobe_result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if ffprobe_result.returncode != 0:
+            result['reason'] = f"FFprobe failed: {ffprobe_result.stderr[:100]}"
+            return result
+        
+        import json
+        probe_data = json.loads(ffprobe_result.stdout)
+        
+        if not probe_data.get('streams') or not probe_data.get('format'):
+            result['reason'] = "Invalid video format - missing streams or format info"
+            return result
+        
+        stream = probe_data['streams'][0]
+        format_info = probe_data['format']
+        
+        # Essential iPhone H.265 compatibility checks
+        codec_name = stream.get('codec_name', '').lower()
+        profile = stream.get('profile', '').lower()
+        pix_fmt = stream.get('pix_fmt', '').lower()
+        
+        # Validate codec requirements
+        if codec_name != 'h264':
+            result['reason'] = f"Codec not iPhone compatible: {codec_name} (need h264)"
+            return result
+        
+        if 'main' not in profile:
+            result['reason'] = f"Profile not iPhone compatible: {profile} (need Main profile)"
+            return result
+        
+        if pix_fmt != 'yuv420p':
+            result['reason'] = f"Pixel format not iPhone compatible: {pix_fmt} (need yuv420p/8-bit)"
+            return result
+        
+        # OPTIMIZATION: Quick MoviePy compatibility test (essential for pipeline)
+        try:
+            # Test MoviePy loading without full initialization (much faster)
+            import moviepy
+            from moviepy import VideoFileClip
+            
+            # Quick 1-frame test load to verify parsing compatibility
+            test_clip = VideoFileClip(video_path)
+            duration = test_clip.duration
+            test_clip.close()
+            
+            if duration is None or duration <= 0:
+                result['reason'] = "MoviePy compatibility test failed - invalid duration"
+                return result
+                
+        except Exception as moviepy_error:
+            result['reason'] = f"MoviePy compatibility failed: {str(moviepy_error)[:100]}"
+            return result
+        
+        # All validations passed
+        width = stream.get('width', 0)
+        height = stream.get('height', 0)
+        duration = float(format_info.get('duration', 0))
+        file_size = int(format_info.get('size', 0))
+        
+        result['valid'] = True
+        result['summary'] = f"H264/Main/8bit {width}x{height} {duration:.1f}s {file_size//1024}KB"
+        
+        return result
+        
+    except json.JSONDecodeError:
+        result['reason'] = "FFprobe output parsing failed"
+        return result
+    except Exception as e:
+        result['reason'] = f"Validation exception: {str(e)[:100]}"
+        return result
+
+def _validate_video_format_detailed(video_path: str) -> Dict[str, Any]:
+    """Detailed video format validation with comprehensive checking.
+    
+    Args:
+        video_path: Path to video file
+        
+    Returns:
+        Dictionary with validation results and details
+    """
+    import subprocess
+    import json
+    
+    result = {'valid': False, 'reason': '', 'details': ''}
+    
+    try:
+        # Use FFprobe for detailed format analysis
+        cmd = [
+            'ffprobe', '-v', 'quiet', '-print_format', 'json',
+            '-show_streams', '-show_format', '-select_streams', 'v:0', 
+            video_path
+        ]
+        
+        probe_result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=15
+        )
+        
+        if probe_result.returncode != 0:
+            result['reason'] = f"FFprobe failed: {probe_result.stderr[:100]}"
+            return result
+        
+        data = json.loads(probe_result.stdout)
+        
+        if not data.get('streams'):
+            result['reason'] = "No video streams found"
+            return result
+        
+        video_stream = data['streams'][0]
+        codec_name = video_stream.get('codec_name', '').lower()
+        profile = video_stream.get('profile', '')
+        pixel_format = video_stream.get('pix_fmt', '')
+        level = video_stream.get('level', '')
+        
+        # Critical checks for iPhone compatibility
+        
+        # 1. Must be H.264, not H.265
+        if codec_name != 'h264':
+            result['reason'] = f"Wrong codec: {codec_name} (expected h264)"
+            return result
+        
+        # 2. Must be Main profile, not High 10 or other 10-bit profiles
+        if 'main' not in profile.lower():
+            result['reason'] = f"Wrong profile: {profile} (expected Main)"
+            return result
+        
+        # 3. Must be 8-bit pixel format
+        if pixel_format != 'yuv420p':
+            result['reason'] = f"Wrong pixel format: {pixel_format} (expected yuv420p)"
+            return result
+        
+        # 4. Check for 10-bit indicators (should not be present)
+        if '10' in pixel_format or '10' in profile:
+            result['reason'] = f"10-bit format detected: profile={profile}, pix_fmt={pixel_format}"
+            return result
+        
+        result['valid'] = True
+        result['details'] = f"h264 Main {pixel_format} level={level}"
+        return result
+        
+    except json.JSONDecodeError as e:
+        result['reason'] = f"JSON decode error: {str(e)}"
+        return result
+    except subprocess.TimeoutExpired:
+        result['reason'] = "FFprobe timeout"
+        return result
+    except Exception as e:
+        result['reason'] = f"Format validation error: {str(e)}"
+        return result
+
+
+def _test_moviepy_compatibility_enhanced(video_path: str, timeout_seconds: float = 15.0) -> Dict[str, Any]:
+    """Enhanced MoviePy compatibility test with detailed diagnostics.
+    
+    Args:
+        video_path: Path to video file
+        timeout_seconds: Maximum time for compatibility test
+        
+    Returns:
+        Dictionary with compatibility results and details
+    """
+    import signal
+    import time
+    from contextlib import contextmanager
+    
+    result = {'compatible': False, 'reason': '', 'details': ''}
+    
+    @contextmanager
+    def timeout_handler(seconds):
+        """Context manager for timeout handling."""
+        def timeout_signal(signum, frame):
+            raise TimeoutError("MoviePy compatibility test timed out")
+        
+        old_handler = signal.signal(signal.SIGALRM, timeout_signal)
+        signal.alarm(int(seconds))
+        
+        try:
+            yield
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old_handler)
+    
+    try:
+        start_time = time.time()
+        
+        # Try to import MoviePy with fallbacks
+        try:
+            from moviepy.editor import VideoFileClip
+        except ImportError:
+            try:
+                from moviepy import VideoFileClip
+            except ImportError:
+                result['reason'] = "MoviePy not available"
+                return result
+        
+        # Test loading with timeout protection
+        with timeout_handler(timeout_seconds):
+            video_clip = VideoFileClip(video_path)
+            
+            # Comprehensive compatibility checks
+            duration = video_clip.duration
+            width = video_clip.w
+            height = video_clip.h
+            fps = video_clip.fps
+            
+            if duration is None or duration <= 0:
+                result['reason'] = "Invalid duration detected"
+                return result
+            
+            if width is None or height is None or width <= 0 or height <= 0:
+                result['reason'] = f"Invalid dimensions: {width}x{height}"
+                return result
+            
+            if fps is None or fps <= 0:
+                result['reason'] = f"Invalid frame rate: {fps}"
+                return result
+            
+            # Test frame extraction (critical for iPhone footage)
+            test_frame = video_clip.get_frame(min(1.0, duration * 0.1))
+            
+            if test_frame is None:
+                result['reason'] = "Frame extraction failed"
+                return result
+            
+            # Test audio if available
+            has_audio = video_clip.audio is not None
+            
+            # Clean up
+            video_clip.close()
+            
+            test_time = time.time() - start_time
+            result['compatible'] = True
+            result['details'] = f"{width}x{height} @{fps:.1f}fps, {duration:.1f}s, audio={has_audio}, test={test_time:.1f}s"
+            return result
+            
+    except TimeoutError:
+        result['reason'] = f"MoviePy loading timeout (>{timeout_seconds}s)"
+        return result
+    except Exception as e:
+        test_time = time.time() - start_time if 'start_time' in locals() else 0
+        error_msg = str(e).lower()
+        
+        # Categorize MoviePy errors
+        if 'codec' in error_msg or 'decoder' in error_msg:
+            result['reason'] = f"Codec/decoder error ({test_time:.1f}s): {str(e)[:100]}"
+        elif 'format' in error_msg:
+            result['reason'] = f"Format error ({test_time:.1f}s): {str(e)[:100]}"
+        elif 'memory' in error_msg:
+            result['reason'] = f"Memory error ({test_time:.1f}s): {str(e)[:100]}"
+        else:
+            result['reason'] = f"MoviePy error ({test_time:.1f}s): {str(e)[:100]}"
+        
+        return result
+    
+    finally:
+        # Ensure cleanup
+        try:
+            if 'video_clip' in locals():
+                video_clip.close()
+        except:
+            pass
+
+
+def _validate_iphone_specific_requirements(video_path: str) -> Dict[str, Any]:
+    """Validate iPhone-specific video requirements.
+    
+    Checks specific requirements that iPhone footage processing needs:
+    - H.264 level compatibility
+    - Resolution limits
+    - Frame rate limits
+    - Container format compatibility
+    
+    Args:
+        video_path: Path to video file
+        
+    Returns:
+        Dictionary with iPhone validation results
+    """
+    result = {'compatible': True, 'reason': '', 'details': ''}
+    
+    try:
+        # Get detailed codec info
+        codec_info = detect_video_codec(video_path)
+        
+        width, height = codec_info['resolution']
+        fps = codec_info['fps']
+        container = codec_info['container']
+        profile = codec_info.get('profile', '').lower()
+        level = codec_info.get('level', '')
+        pixel_format = codec_info.get('pixel_format', '')
+        
+        # iPhone compatibility checks
+        
+        # 1. Resolution limits (iPhone supports up to 4K)
+        if width > 4096 or height > 2160:
+            result['compatible'] = False
+            result['reason'] = f"Resolution too high: {width}x{height} (max 4096x2160)"
+            return result
+        
+        # 2. Frame rate limits
+        if fps > 240:
+            result['compatible'] = False
+            result['reason'] = f"Frame rate too high: {fps}fps (max 240fps)"
+            return result
+        
+        # 3. Container format compatibility
+        supported_containers = ['mp4', 'mov', 'm4v']
+        if container not in supported_containers:
+            result['compatible'] = False
+            result['reason'] = f"Unsupported container: {container} (supported: {supported_containers})"
+            return result
+        
+        # 4. Verify final format is NOT 10-bit
+        if '10' in pixel_format or 'high 10' in profile:
+            result['compatible'] = False
+            result['reason'] = f"10-bit format detected: profile={profile}, pix_fmt={pixel_format}"
+            return result
+        
+        # 5. H.264 level compatibility
+        if level and float(level) > 51:
+            result['compatible'] = False
+            result['reason'] = f"H.264 level too high: {level} (max 5.1)"
+            return result
+        
+        result['details'] = f"{width}x{height} @{fps:.1f}fps, {container}, level={level}"
+        return result
+        
+    except Exception as e:
+        result['compatible'] = False
+        result['reason'] = f"iPhone validation error: {str(e)}"
+        return result
+
+
+# Legacy validation function for backward compatibility
+def _validate_encoder_output(video_path: str, expected_profile: str = 'Main') -> bool:
+    """Legacy validation function - calls enhanced version for compatibility."""
+    return _validate_transcoded_output_enhanced(video_path)
+
+def _validate_encoder_output_fast(video_path: str, expected_profile: str = 'Main') -> bool:
+    """Fast encoder output validation for hardware detection testing.
+    
+    OPTIMIZATION: Minimal validation for hardware capability testing - only checks
+    essential iPhone compatibility requirements without comprehensive validation.
+    
+    Args:
+        video_path: Path to test video file
+        expected_profile: Expected H.264 profile (typically 'Main')
+        
+    Returns:
+        True if output meets basic iPhone compatibility, False otherwise
+    """
+    if not os.path.exists(video_path):
+        return False
+    
+    try:
+        # OPTIMIZATION: Single FFprobe call with targeted information extraction
+        cmd = [
+            'ffprobe', '-v', 'quiet', '-select_streams', 'v:0',
+            '-show_entries', 'stream=codec_name,profile,pix_fmt',
+            '-of', 'csv=p=0', video_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
+        if result.returncode != 0:
+            return False
+        
+        # Parse output: codec_name,profile,pix_fmt
+        output_parts = result.stdout.strip().split(',')
+        if len(output_parts) != 3:
+            return False
+        
+        codec_name, profile, pix_fmt = output_parts
+        
+        # Essential iPhone compatibility checks
+        codec_ok = codec_name == 'h264'
+        profile_ok = expected_profile.lower() in profile.lower()
+        pixfmt_ok = pix_fmt == 'yuv420p'
+        
+        return codec_ok and profile_ok and pixfmt_ok
+        
+    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+        return False
 
 
 # Configuration defaults

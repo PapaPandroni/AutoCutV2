@@ -92,7 +92,7 @@ python test_step3_complete.py          # Advanced analysis with motion/faces
 python test_step5_rendering.py         # Full rendering test suite
 
 # OR create a demo video with all your media:
-python test_autocut_demo.py            # Uses all videos + music
+python test_autocut_demo.py            # ✅ ENHANCED: Detects 23+ formats (.MOV, .MXF, .AVI, etc.)
 python test_autocut_demo.py --videos 5 # Limit to 5 videos for faster testing
 python test_autocut_demo.py --pattern energetic # Try different cutting styles
 
@@ -101,6 +101,22 @@ python test_enhanced_features.py          # Test error handling, H.265 support, 
 
 # OR quick test the core functionality:
 python -c "import sys, os, glob; sys.path.insert(0, 'src'); from src.clip_assembler import assemble_clips; assemble_clips(glob.glob('test_media/*.mp4')[:3], 'test_media/soft-positive-summer-pop-218419.mp3', 'output/test.mp4', 'balanced', lambda s,p: print(f'[{p*100:5.1f}%] {s}'))"
+```
+
+### 📱 Camera File Support
+
+**AutoCut now works with real camera files:**
+```bash
+# DJI Osmo, Sony A7IV, Canon, Panasonic, etc.
+python test_autocut_demo.py  # Automatically detects .MOV, .MXF, .AVI, .MTS, .M2TS
+
+# Shows detected formats:
+# 🔍 Searching for video files in test_media/
+# 📁 Found 3 video files:
+#    Format breakdown: {'.mov': 2, '.mxf': 1}
+#     1. DJI_0123.MOV (.MOV)
+#     2. Sony_Log.MXF (.MXF) 
+#     3. GoPro.MP4 (.MP4)
 ```
 
 ## 📁 Project Structure
