@@ -503,6 +503,8 @@ def transcode_hevc_to_h264(input_path: str, output_path: str = None,
                 '-preset', 'p1',                          # Fastest NVENC preset
                 '-rc', 'vbr',                             # Variable bitrate
                 '-cq', '25',                              # Balanced quality (vs 18 visually lossless)
+                '-profile:v', 'main',                     # Force Main profile (8-bit compatible)
+                '-pix_fmt', 'yuv420p',                   # Force 8-bit pixel format for MoviePy
                 '-c:a', 'copy',                           # Copy audio without re-encoding
                 '-movflags', '+faststart',                # Optimize for web playback
                 output_path
@@ -518,6 +520,8 @@ def transcode_hevc_to_h264(input_path: str, output_path: str = None,
                 '-c:v', 'h264_qsv',                       # Intel H.264 encode
                 '-preset', 'veryfast',                    # Fast QSV preset
                 '-global_quality', '25',                  # Balanced quality
+                '-profile:v', 'main',                     # Force Main profile (8-bit compatible)
+                '-pix_fmt', 'yuv420p',                   # Force 8-bit pixel format for MoviePy
                 '-c:a', 'copy',                           # Copy audio without re-encoding
                 '-movflags', '+faststart',                # Optimize for web playback
                 output_path
@@ -532,6 +536,8 @@ def transcode_hevc_to_h264(input_path: str, output_path: str = None,
                 '-crf', '25',                             # OPTIMIZED: Balanced quality (vs 18 visually lossless)
                 '-preset', 'ultrafast',                   # OPTIMIZED: 3-4x faster than 'fast'
                 '-threads', str(os.cpu_count() or 4),     # Use all CPU cores
+                '-profile:v', 'main',                     # Force Main profile (8-bit compatible)
+                '-pix_fmt', 'yuv420p',                   # Force 8-bit pixel format for MoviePy
                 '-c:a', 'copy',                           # Copy audio without re-encoding
                 '-movflags', '+faststart',                # Optimize for web playback
                 output_path
