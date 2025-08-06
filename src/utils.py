@@ -651,10 +651,10 @@ def _build_transcoding_command(input_path: str, output_path: str,
     
     # OPTIMIZATION: Pre-validated iPhone compatibility parameters
     iphone_params = [
-        '-profile:v', 'main',      # Force Main profile (8-bit compatible)
-        '-pix_fmt', 'yuv420p',    # Force 8-bit pixel format for MoviePy
-        '-level', '4.1',          # Ensure broad device compatibility
+        '-pix_fmt', 'yuv420p',    # Force 8-bit pixel format for MoviePy compatibility
+        '-level', '4.1',          # Ensure broad device compatibility 
         '-movflags', '+faststart' # Web/mobile optimization
+        # Note: Removed -profile:v main - let x264 choose optimal profile for 10-bit->8-bit conversion
     ]
     
     # Base command structure with encoder-specific optimizations
@@ -1546,16 +1546,34 @@ def _validate_combined_iphone_requirements(video_path: str) -> Dict[str, Any]:
             result['reason'] = f"Codec not iPhone compatible: {codec_name} (need h264)"
             return result
         
-        if 'main' not in profile:
-            result['reason'] = f"Profile not iPhone compatible: {profile} (need Main profile)"
+        # Accept both Main and Constrained Baseline profiles for iPhone compatibility
+        # Constrained Baseline is actually preferred for maximum device compatibility
+        if not any(acceptable in profile.lower() for acceptable in ['main', 'baseline']):
+            result['reason'] = f"Profile not iPhone compatible: {profile} (need Main or Baseline profile)"
             return result
         
         if pix_fmt != 'yuv420p':
             result['reason'] = f"Pixel format not iPhone compatible: {pix_fmt} (need yuv420p/8-bit)"
             return result
         
-        # OPTIMIZATION: Skip MoviePy compatibility test (was causing false negatives on valid transcoded iPhone files)
-        # ffprobe validation above is sufficient for iPhone H.265 processing compatibility
+        # OPTIMIZATION: Quick MoviePy compatibility test (essential for pipeline)
+        try:
+            # Test MoviePy loading without full initialization (much faster)
+            import moviepy
+            from moviepy import VideoFileClip
+            
+            # Quick 1-frame test load to verify parsing compatibility
+            test_clip = VideoFileClip(video_path)
+            duration = test_clip.duration
+            test_clip.close()
+            
+            if duration is None or duration <= 0:
+                result['reason'] = "MoviePy compatibility test failed - invalid duration"
+                return result
+                
+        except Exception as moviepy_error:
+            result['reason'] = f"MoviePy compatibility failed: {str(moviepy_error)[:100]}"
+            return result
         
         # All validations passed
         width = stream.get('width', 0)
