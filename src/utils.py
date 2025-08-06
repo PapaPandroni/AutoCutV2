@@ -1642,9 +1642,9 @@ def _validate_video_format_detailed(video_path: str) -> Dict[str, Any]:
             result['reason'] = f"Wrong codec: {codec_name} (expected h264)"
             return result
         
-        # 2. Must be Main profile, not High 10 or other 10-bit profiles
-        if 'main' not in profile.lower():
-            result['reason'] = f"Wrong profile: {profile} (expected Main)"
+        # 2. Must be Main or Baseline profile (Constrained Baseline is optimal for iPhone compatibility)
+        if not any(acceptable in profile.lower() for acceptable in ['main', 'baseline']):
+            result['reason'] = f"Wrong profile: {profile} (expected Main or Baseline profile)"
             return result
         
         # 3. Must be 8-bit pixel format
