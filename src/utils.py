@@ -11,6 +11,9 @@ import json
 from typing import List, Optional, Dict, Any, Tuple
 from pathlib import Path
 
+# Import codec settings function from clip_assembler
+from .clip_assembler import detect_optimal_codec_settings
+
 
 # Supported file formats - comprehensive list for modern video processing
 SUPPORTED_VIDEO_FORMATS = {
