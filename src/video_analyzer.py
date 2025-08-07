@@ -428,18 +428,20 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
         return 0
 
 
-def analyze_video_file(file_path: str, min_scene_duration: float = 2.0) -> List[VideoChunk]:
+def analyze_video_file(file_path: str, bpm: float = None, min_beats: float = 1.0, min_scene_duration: float = None) -> List[VideoChunk]:
     """Analyze video file and return scored chunks suitable for editing.
     
     Main function that combines all analysis methods:
     - Scene detection
-    - Quality scoring
+    - Quality scoring  
     - Motion analysis
     - Face detection (optional)
     
     Args:
         file_path: Path to video file
-        min_scene_duration: Minimum duration for a scene in seconds
+        bpm: Beats per minute of the music (for beat-based scene filtering)
+        min_beats: Minimum duration for a scene in beats (default: 1.0)
+        min_scene_duration: Minimum duration for a scene in seconds (fallback/override)
         
     Returns:
         List of VideoChunk objects sorted by quality score
@@ -459,6 +461,25 @@ def analyze_video_file(file_path: str, min_scene_duration: float = 2.0) -> List[
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+    
+    # Calculate minimum scene duration using beat-based logic or fallback
+    if min_scene_duration is not None:
+        # Explicit override provided - use it
+        calculated_min_duration = min_scene_duration
+        logger.info(f"Using explicit minimum scene duration: {calculated_min_duration}s")
+    elif bpm is not None:
+        # Calculate beat-based minimum duration
+        beat_duration = 60.0 / bpm  # Duration of one beat in seconds
+        calculated_min_duration = beat_duration * min_beats
+        logger.info(f"Using beat-based minimum scene duration: {calculated_min_duration:.3f}s ({min_beats} beats at {bpm:.1f} BPM)")
+    else:
+        # No BPM provided, use config default
+        try:
+            from .utils import get_config_value
+            calculated_min_duration = get_config_value('min_clip_duration', 0.5)
+        except ImportError:
+            calculated_min_duration = 0.5
+        logger.info(f"Using fallback minimum scene duration: {calculated_min_duration}s (no BPM available)")
     
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Video file not found: {file_path}")
@@ -516,20 +537,20 @@ def analyze_video_file(file_path: str, min_scene_duration: float = 2.0) -> List[
             scenes = [(0.0, metadata['duration'])]
             logger.info(f"Fallback: Using entire video as single scene")
         
-        # Step 3: Filter scenes by minimum duration
+        # Step 3: Filter scenes by minimum duration (using calculated beat-based duration)
         valid_scenes = [
             (start, end) for start, end in scenes 
-            if (end - start) >= min_scene_duration
+            if (end - start) >= calculated_min_duration
         ]
         processing_stats['valid_scenes'] = len(valid_scenes)
         
         if not valid_scenes:
             # If no scenes meet minimum duration, use the original scenes
-            logger.warning(f"No scenes meet minimum duration {min_scene_duration}s, using all {len(scenes)} scenes")
+            logger.warning(f"No scenes meet minimum duration {calculated_min_duration:.3f}s, using all {len(scenes)} scenes")
             valid_scenes = scenes
             processing_stats['valid_scenes'] = len(valid_scenes)
         
-        logger.info(f"Scene filtering complete: {len(valid_scenes)} valid scenes (min duration: {min_scene_duration}s)")
+        logger.info(f"Scene filtering complete: {len(valid_scenes)} valid scenes (min duration: {calculated_min_duration:.3f}s)")
         
         # Step 4: Analyze each scene and create VideoChunk objects
         chunks = []
@@ -623,7 +644,7 @@ def analyze_video_file(file_path: str, min_scene_duration: float = 2.0) -> List[
             if processing_stats['scenes_found'] == 0:
                 logger.error(f"Root cause: No scenes detected - check if video is valid and not corrupted")
             elif processing_stats['valid_scenes'] == 0:
-                logger.error(f"Root cause: No scenes meet minimum duration {min_scene_duration}s")
+                logger.error(f"Root cause: No scenes meet minimum duration {calculated_min_duration:.3f}s")
             else:
                 logger.error(f"Root cause: All scene analysis steps failed - check video codec compatibility")
             

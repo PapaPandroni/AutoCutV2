@@ -10,6 +10,9 @@ numpy>=1.24.0
 scipy>=1.11.0
 Pillow>=10.0.0
 
+# System monitoring for memory optimization
+psutil>=5.9.0
+
 # CLI framework
 click>=8.0.0
 

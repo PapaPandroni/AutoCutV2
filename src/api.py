@@ -75,6 +75,7 @@ class AutoCutAPI:
                       audio_file: str,
                       output_path: str,
                       pattern: str = 'balanced',
+                      memory_safe: bool = False,
                       verbose: bool = False) -> str:
         """
         Main video processing function
@@ -84,6 +85,7 @@ class AutoCutAPI:
             audio_file: Path to audio file for synchronization
             output_path: Path for output video
             pattern: Editing pattern ('energetic', 'balanced', 'dramatic', 'buildup')
+            memory_safe: Enable memory-safe processing (single worker)
             verbose: Enable verbose logging
             
         Returns:
@@ -119,12 +121,20 @@ class AutoCutAPI:
                 print(f"\\r  [{bar}] {progress*100:5.1f}% {step}", end='', flush=True)
         
         try:
-            # Call core assembler function
+            # Call core assembler function with dynamic or memory-optimized workers
+            if memory_safe:
+                # Force single worker for memory-safe mode
+                max_workers = 1
+            else:
+                # Use automatic detection (None = dynamic profiling)
+                max_workers = None
+                
             result_path = assemble_clips(
                 video_files=video_files,
                 audio_file=audio_file,
                 output_path=output_path,
                 pattern=pattern,
+                max_workers=max_workers,
                 progress_callback=progress_callback
             )
             

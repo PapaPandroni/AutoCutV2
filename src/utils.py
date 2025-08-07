@@ -1940,8 +1940,9 @@ def find_all_video_files(directory: str) -> List[str]:
 
 # Configuration defaults
 DEFAULT_CONFIG = {
-    'min_clip_duration': 0.5,      # Minimum clip duration in seconds
-    'max_clip_duration': 8.0,      # Maximum clip duration in seconds
+    'min_clip_duration': 0.5,      # Minimum clip duration in seconds (technical limit)
+    'max_clip_duration': 8.0,      # Maximum clip duration in seconds (UX limit)
+    'min_scene_beats': 1.0,        # Minimum scene duration in beats (musical logic)
     'scene_threshold': 30.0,       # Scene detection sensitivity
     'transition_duration': 0.5,    # Crossfade duration in seconds
     'output_quality': 'high',      # Output quality ('low', 'medium', 'high')

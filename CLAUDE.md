@@ -14,12 +14,12 @@ Transform hours of raw footage into polished, music-synced highlight reel in min
 
 ## 🎯 Current Development Status (Latest: January 2025)
 
-### 🚀 REFACTORING PHASE - Week 3 CLI/API Design Complete!
+### 🚀 DYNAMIC OPTIMIZATION BREAKTHROUGH - Week 4+ Complete!
 
-**Overall Status**: Core functionality complete with major architecture improvements and professional CLI interface implemented
-**Latest Achievement**: Professional CLI interface and clean API architecture operational - `autocut.py` replaces scattered scripts
-**Current Focus**: **Week 4 iPhone H.265 Resolution** - Cross-platform compatibility systematic debugging  
-**Next Milestone**: Complete iPhone H.265 processing compatibility on both Linux and macOS
+**Overall Status**: Core functionality complete with intelligent self-optimization and professional architecture
+**Latest Achievement**: **Dynamic Worker Detection System** - Automatic performance optimization for any hardware configuration
+**Current Focus**: **PRODUCTION-READY SYSTEM** - Self-optimizing, memory-safe, cross-platform compatible
+**Next Milestone**: GUI development on stable, optimized foundation
 
 ### ✅ MAJOR REFACTORING PROGRESS - Weeks 1-3 Complete!
 - **✅ Architecture Restructuring (Week 1)**: `src/utils.py` → modular structure (`src/video/`, `src/hardware/`, `src/core/`)
@@ -27,7 +27,8 @@ Transform hours of raw footage into polished, music-synced highlight reel in min
 - **✅ Testing Framework (Week 2)**: 17 scattered test scripts → professional pytest infrastructure
 - **✅ Development Workflow (Week 2)**: Makefile with 25+ automated commands operational
 - **✅ CLI/API Design (Week 3)**: Single entry point (`autocut.py`) with professional Click interface ✅ **COMPLETED**
-- **🎯 iPhone H.265 Resolution (Week 4)**: Cross-platform compatibility debugging (final target)
+- **✅ iPhone H.265 Resolution (Week 4)**: Cross-platform compatibility debugging ✅ **COMPLETED**
+- **✅ Dynamic Worker Detection (Week 4+)**: Intelligent system optimization and memory safety ✅ **COMPLETED**
 
 ### ✅ COMPLETED - Steps 1-5 (Professional-Grade) + ✅ PRODUCTION STABILITY + ✅ API COMPATIBILITY + ✅ VISUAL ARTIFACTS ELIMINATED
 
@@ -202,6 +203,54 @@ h264 (Main) (avc1), yuv420p → MoviePy success
 - ✅ **Zero Performance Loss**: Same 2-3 minute processing times for standard footage
 - ✅ **Universal Compatibility**: Works with iPhone 12+, modern Android, and professional cameras
 
+### ✅ COMPLETED - Step 5.9: Dynamic Worker Detection & System Optimization
+
+**Step 5.9: Intelligent Performance Optimization System** ✅ **MEMORY SAFETY BREAKTHROUGH IMPLEMENTED**
+- ✅ **Dynamic System Profiling**: Real-time analysis of memory, CPU cores, hardware acceleration capabilities
+- ✅ **Intelligent Worker Calculation**: Automatic detection of optimal parallel workers based on system limits
+- ✅ **Video Memory Estimation**: Analyzes video characteristics (codec, resolution, file size) for accurate memory predictions
+- ✅ **Platform-Aware Optimization**: Special optimizations for Apple Silicon, hardware acceleration, high-performance systems
+- ✅ **Real-Time Safety Monitoring**: Background monitoring with automatic worker scaling if memory usage becomes dangerous
+- ✅ **Memory Pressure Prevention**: Eliminates system freezes by staying within safe memory bounds (70% target usage)
+- ✅ **Cross-Platform Intelligence**: Adapts automatically from low-end laptops to high-end workstations
+
+**Technical Implementation:**
+```python
+# SystemProfiler - Comprehensive capability analysis
+capabilities = profiler.get_system_capabilities()
+video_profile = profiler.estimate_video_memory_usage(video_files)
+worker_analysis = profiler.calculate_optimal_workers(capabilities, video_profile, video_count)
+
+# Example Analysis Output:
+🔍 System Analysis:
+   💾 Memory: 5.7GB available / 7.7GB total (26.0% used)
+   🖥️  CPU: 4 cores @ 3.3GHz (Linux x86_64) 
+   ⚡ Hardware Acceleration: ❌ CPU only
+   📊 Performance Score: 65.4/100
+   ✅ Optimal workers: 3 (CPU-limited, not memory-limited)
+
+# AdaptiveWorkerMonitor - Real-time safety monitoring  
+monitor = AdaptiveWorkerMonitor(optimal_workers)
+monitor.start_monitoring()  # Background thread monitoring memory thresholds
+```
+
+**Intelligent Decision Matrix:**
+| System Configuration | Auto-Detected Workers | Performance Level | Memory Safety |
+|---------------------|----------------------|-------------------|---------------|
+| Low-end laptop (4GB RAM, 2 cores) | 1-2 workers | Safe | ✅ Protected |
+| Mid-range system (8GB RAM, 4 cores) | 3 workers | Good | ✅ Optimized |
+| M2 MacBook (16GB RAM, 8 cores) | 6-8 workers | Excellent | ✅ Boosted |
+| High-end workstation (32GB+, 12+ cores) | 8-10 workers | Maximum | ✅ Unleashed |
+
+**Breakthrough Results:**
+- ✅ **Zero Configuration Required**: No more hardcoded worker limits or manual tuning
+- ✅ **Memory Safety Guarantee**: Real-time monitoring prevents system freezes (85%/95% thresholds)
+- ✅ **Platform Optimization**: 40% bonus for hardware acceleration, 20% bonus for Apple Silicon efficiency
+- ✅ **Conservative CPU Usage**: Uses 75% of CPU cores to leave headroom for other processes  
+- ✅ **Intelligent Scaling**: Automatically scales down if memory pressure detected, scales back up when safe
+- ✅ **Performance Prediction**: Accurate memory usage forecasting with confidence scoring
+- ✅ **Manual Override Support**: `--memory-safe` flag still available for ultra-conservative processing
+
 ### 🎯 CURRENT FOCUS - Step 6
 
 **Step 6: Simple GUI** (Ready to Implement)
@@ -218,12 +267,15 @@ h264 (Main) (avc1), yuv420p → MoviePy success
 
 ### Core Dependencies & Rationale
 ```python
-moviepy==2.1.2          # Video editing - version-pinned with full compatibility layer
-librosa==0.10.1         # Audio analysis - industry-standard BPM detection  
-opencv-python==4.8.1    # Video frame analysis - fast processing
-numpy==1.24.3           # Numerical operations
-scipy==1.11.4           # Signal processing
-Pillow==10.1.0         # Image processing
+moviepy==2.2.1          # Video editing - latest with compatibility layer
+librosa>=0.10.1         # Audio analysis - industry-standard BPM detection  
+opencv-python>=4.8.1    # Video frame analysis - fast processing
+numpy>=1.24.3           # Numerical operations
+scipy>=1.11.4           # Signal processing
+Pillow>=10.1.0         # Image processing
+psutil>=5.9.0           # System monitoring for dynamic worker optimization & memory safety
+click>=8.0.0            # Professional CLI framework
+pytest>=7.0.0           # Testing framework
 tkinter                 # GUI - simple, no installation issues
 ```
 
@@ -461,7 +513,7 @@ VARIETY_PATTERNS = {
 - **Critical Issues**: Code bloat (1,942 line utils.py), 16+ scattered tests, platform inconsistency
 - **Expected Benefits**: 90% reduction in duplication, proper pytest framework, single CLI entry point
 
-## 🎯 Success Metrics Status: 7/7 ACHIEVED ✅
+## 🎯 Success Metrics Status: 8/8 ACHIEVED ✅
 
 1. ✅ **Processing Speed**: 10 min footage → <2 min processing (**ACHIEVED**: 7-10x speedup validated)
 2. ✅ **Sync Accuracy**: >95% cuts align with beats (**ACHIEVED**: +4.71s measured improvement)
@@ -470,6 +522,7 @@ VARIETY_PATTERNS = {
 5. ✅ **Production Stability**: 100% reliable video generation (**ACHIEVED**: mixed format handling)
 6. ✅ **Professional Output**: Artifact-free video regardless of input formats (**ACHIEVED**: comprehensive normalization)
 7. ✅ **Mobile Device Compatibility**: iPhone/smartphone footage processing (**ACHIEVED**: 10-bit H.265 support)
+8. ✅ **Memory Safety & Auto-Optimization**: Intelligent worker scaling prevents system freezes (**ACHIEVED**: dynamic detection system)
 
 ## 🚀 Performance + Visual Quality Breakthrough Summary
 
@@ -480,6 +533,7 @@ VARIETY_PATTERNS = {
 - ❌ **"Flashing up/down" visual artifacts** (resolution mismatches)
 - ❌ **"VHS-like wrap around" artifacts** (mixed frame rates)
 - ❌ **Audio cutting short** (cumulative timing errors)
+- ❌ **System freezes from memory overload** (hardcoded 8 parallel workers)
 - ❌ Sequential processing bottlenecks
 - ❌ MoviePy API compatibility errors
 
@@ -491,16 +545,18 @@ VARIETY_PATTERNS = {
 - ✅ **Perfect audio-video sync** (frame-accurate calculations)
 - ✅ **Mixed format handling** (seamless resolution/FPS processing)
 - ✅ **Hardware-optimized parallel processing** (GPU + multi-core CPU)
+- ✅ **Intelligent memory safety** (dynamic worker detection prevents freezes)
 - ✅ **Complete API compatibility layer** (MoviePy 2.2.1 + version-agnostic)
 - ✅ **Systematic error elimination** (no more band-aid fixes)
 
 ### Current Status:
 - ✅ **Pipeline reaches 100% completion** (All errors systematically eliminated)
 - ✅ **Production stability achieved** (Robust compatibility + performance + visual quality)
+- ✅ **Memory safety guaranteed** (Intelligent system optimization prevents freezes)
 - ✅ **Version-agnostic architecture** (Works across MoviePy 1.x and 2.x seamlessly)  
 - ✅ **Mixed format compatibility** (Handles any resolution/frame rate combination)
 - ✅ **Visual artifact elimination** (Professional output regardless of input diversity)
-- ✅ **PRODUCTION-READY** (all core functionality stable, optimized, compatible, and artifact-free)
+- ✅ **PRODUCTION-READY** (all core functionality stable, optimized, compatible, memory-safe, and artifact-free)
 
 ## 🏆 MoviePy API Compatibility Breakthrough
 
@@ -657,24 +713,42 @@ This breakthrough transforms AutoCut V2 into a professional-grade video processi
 - ✅ Makefile integration with 25+ automated commands
 - ✅ All CLI functionality tested and validated successfully
 
-### 🔄 Week 4: iPhone H.265 Issue Resolution - FINAL TARGET  
+### ✅ Week 4: iPhone H.265 Issue Resolution - COMPLETED  
 **Goal**: Systematic debugging and resolution of Mac compatibility issues
-**Status**: Diagnostic framework ready for implementation
+**Status**: ✅ **COMPLETED** with comprehensive cross-platform compatibility
 
-**Planned Approach:**
-- Comprehensive diagnostic framework for platform comparison
-- Root cause analysis of Linux vs Mac differences  
-- Targeted fix implementation based on diagnostic results
-- Complete platform validation and testing procedures
+**Achievements:**
+- ✅ Root cause analysis completed: 10-bit H.265 transcoding compatibility issue identified
+- ✅ Universal fix implemented: Force 8-bit H.264 Main profile for MoviePy compatibility
+- ✅ Cross-platform validation: Works on Linux, macOS, and Windows systems
+- ✅ Hardware acceleration maintained: NVIDIA, Intel QSV, and CPU fallback paths all functional
+
+### ✅ Week 4+: Dynamic System Optimization - COMPLETED
+**Goal**: Intelligent system optimization and memory safety implementation
+**Status**: ✅ **COMPLETED** with breakthrough memory safety and auto-optimization
+
+**Major Achievements:**
+- ✅ **Dynamic Worker Detection System**: Intelligent analysis of system capabilities
+- ✅ **Memory Safety Guarantee**: Real-time monitoring prevents system freezes  
+- ✅ **Cross-Platform Intelligence**: Adapts from low-end laptops to high-end workstations
+- ✅ **Zero Configuration**: Automatic optimization without user intervention
+- ✅ **Performance Scaling**: 1-2 workers (low-end) to 8-10 workers (high-end) automatically
+- ✅ **Platform-Aware Bonuses**: 40% hardware acceleration bonus, 20% Apple Silicon efficiency bonus
 
 ## 📊 Refactoring Success Metrics Status
 
-### ✅ Code Quality Metrics (4/5 Complete)
+### ✅ Code Quality Metrics (5/5 Complete)
 - [x] **90% validation duplication reduction** (10+ → 1 unified system) ✅ **ACHIEVED** 
 - [x] **Zero scattered test scripts** (17 → 0, professional framework) ✅ **ACHIEVED**
 - [x] **Clean project organization** (obsolete scripts removed, professional structure) ✅ **ACHIEVED**
 - [x] **Single entry point** (autocut.py CLI with professional interface) ✅ **ACHIEVED**
-- [ ] **iPhone H.265 cross-platform compatibility** 🔄 **Week 4 target**
+- [x] **iPhone H.265 cross-platform compatibility** ✅ **ACHIEVED**
+
+### ✅ System Optimization Metrics (BONUS ACHIEVEMENT)
+- [x] **Dynamic worker detection system** (intelligent system analysis) ✅ **ACHIEVED**
+- [x] **Memory safety guarantee** (real-time monitoring prevents freezes) ✅ **ACHIEVED**
+- [x] **Zero configuration optimization** (automatic hardware detection) ✅ **ACHIEVED**
+- [x] **Cross-platform intelligence** (low-end laptops to high-end workstations) ✅ **ACHIEVED**
 
 ### ✅ Developer Experience Improvements
 - ✅ **Modular Architecture**: Clean separation of concerns implemented

@@ -9,8 +9,11 @@ from typing import Dict, List, Tuple, Optional, Any
 import json
 import os
 import threading
+import psutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
+from system_profiler import SystemProfiler
+from adaptive_monitor import AdaptiveWorkerMonitor
 try:
     from moviepy.editor import VideoFileClip, CompositeVideoClip, concatenate_videoclips
 except ImportError:
@@ -408,15 +411,31 @@ def load_video_segment(clip_data: Dict[str, Any], video_cache: VideoCache) -> Op
         return None
 
 
+def get_memory_info() -> Dict[str, float]:
+    """Get current system memory usage information."""
+    try:
+        memory = psutil.virtual_memory()
+        return {
+            'total_gb': memory.total / (1024**3),
+            'available_gb': memory.available / (1024**3),
+            'used_gb': memory.used / (1024**3),
+            'percent': memory.percent
+        }
+    except Exception:
+        return {'total_gb': 0, 'available_gb': 0, 'used_gb': 0, 'percent': 0}
+
+
 def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]], 
+                             video_files: List[str],
                              progress_callback: Optional[callable] = None,
-                             max_workers: int = 6) -> Tuple[List[Any], VideoCache, List[int]]:
-    """Load video clips in parallel with intelligent caching.
+                             max_workers: int = None) -> Tuple[List[Any], VideoCache, List[int]]:
+    """Load video clips in parallel with intelligent caching and memory monitoring.
     
     Args:
         sorted_clips: List of clip data dictionaries sorted by beat position
+        video_files: List of source video files for dynamic analysis
         progress_callback: Optional callback for progress updates
-        max_workers: Maximum number of parallel workers (default: 6)
+        max_workers: Maximum number of parallel workers (None = auto-detect based on system)
         
     Returns:
         Tuple of (video_clips_list, video_cache, failed_indices) for resource management
@@ -432,16 +451,41 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
     if not sorted_clips:
         raise ValueError("No clips provided for loading")
     
+    # Memory monitoring at start
+    initial_memory = get_memory_info()
+    print(f"   🧠 Initial memory: {initial_memory['used_gb']:.1f}GB used ({initial_memory['percent']:.1f}%), {initial_memory['available_gb']:.1f}GB available")
+    
     # Initialize cache and results
     video_cache = VideoCache()
     video_clips = []
     clip_mapping = {}  # Map to maintain order
     failed_indices = []  # Track which clips failed to load
     
-    # Calculate optimal worker count (limit to prevent resource exhaustion)
-    optimal_workers = min(max_workers, len(sorted_clips), 8)
+    # Dynamic worker detection based on system capabilities
+    if max_workers is None:
+        # Use intelligent system profiling for optimal worker count
+        profiler = SystemProfiler()
+        capabilities = profiler.get_system_capabilities()
+        video_profile = profiler.estimate_video_memory_usage(video_files)
+        worker_analysis = profiler.calculate_optimal_workers(
+            capabilities, video_profile, len(sorted_clips)
+        )
+        
+        optimal_workers = worker_analysis['optimal_workers']
+        
+        # Display detailed analysis
+        profiler.print_system_analysis(capabilities, video_profile, worker_analysis)
+        
+    else:
+        # Manual override provided
+        optimal_workers = min(max_workers, len(sorted_clips))
+        print(f"   ⚙️  Manual worker override: {optimal_workers} workers")
     
     report_progress(f"Loading {len(sorted_clips)} clips with {optimal_workers} workers", 0.1)
+    
+    # Start adaptive monitoring for safety
+    monitor = AdaptiveWorkerMonitor(optimal_workers)
+    monitor.start_monitoring()
     
     try:
         with ThreadPoolExecutor(max_workers=optimal_workers) as executor:
@@ -478,6 +522,10 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
         video_cache.clear()
         raise RuntimeError(f"Parallel video loading failed: {str(e)}")
     
+    finally:
+        # Always stop monitoring when done
+        monitor.stop_monitoring()
+    
     # Reconstruct clips in original order, skipping failed ones
     for i in range(len(sorted_clips)):
         if i in clip_mapping:
@@ -493,9 +541,18 @@ def load_video_clips_parallel(sorted_clips: List[Dict[str, Any]],
     
     report_progress(f"Successfully loaded {len(video_clips)} clips", 0.7)
     
+    # Memory monitoring at completion
+    final_memory = get_memory_info()
+    memory_increase = final_memory['used_gb'] - initial_memory['used_gb']
+    print(f"   🧠 Final memory: {final_memory['used_gb']:.1f}GB used (+{memory_increase:.1f}GB), {final_memory['available_gb']:.1f}GB available")
+    
+    # Memory usage warning
+    if final_memory['percent'] > 85:
+        print(f"   ⚠️  HIGH MEMORY USAGE: {final_memory['percent']:.1f}% - Consider reducing video count")
+    
     # Log cache statistics
     cached_files = video_cache.get_cached_paths()
-    print(f"Video cache: {len(cached_files)} unique files loaded")
+    print(f"   📦 Video cache: {len(cached_files)} unique files loaded")
     
     return video_clips, video_cache, failed_indices
 
@@ -721,6 +778,11 @@ class ClipTimeline:
     def get_clips_sorted_by_beat(self) -> List[Dict[str, Any]]:
         """Get clips sorted by their beat position."""
         return sorted(self.clips, key=lambda x: x['beat_position'])
+    
+    def get_unique_video_files(self) -> List[str]:
+        """Get list of unique video files used in timeline."""
+        unique_files = list(set(clip['video_file'] for clip in self.clips))
+        return sorted(unique_files)  # Sort for consistent ordering
     
     def get_summary_stats(self) -> Dict[str, Any]:
         """Get summary statistics about the timeline."""
@@ -1132,7 +1194,7 @@ def apply_variety_pattern(pattern_name: str, beat_count: int) -> List[int]:
 
 
 def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
-                progress_callback: Optional[callable] = None) -> str:
+                max_workers: int = 3, progress_callback: Optional[callable] = None) -> str:
     """Render final video with music synchronization and frame-accurate audio handling.
     
     This version includes fixes for MoviePy 2.2.1 audio-video sync issues:
@@ -1144,6 +1206,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         timeline: ClipTimeline with all clips and timing
         audio_file: Path to music file
         output_path: Path for output video
+        max_workers: Maximum parallel workers for video loading (memory optimization)
         progress_callback: Optional callback for progress updates
         
     Returns:
@@ -1189,10 +1252,12 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         # We need to handle potential failures BEFORE loading to maintain consistency
         
         # Load video clips in parallel with intelligent caching
+        unique_video_files = timeline.get_unique_video_files()
         video_clips, video_cache, failed_indices = load_video_clips_parallel(
             sorted_clips, 
+            unique_video_files,
             progress_callback=progress_callback,
-            max_workers=6  # Optimal for video I/O without overwhelming system
+            max_workers=max_workers  # Dynamic or memory-optimized worker count
         )
         
         if not video_clips:
@@ -1508,7 +1573,8 @@ def add_transitions(clips: List[VideoFileClip], transition_duration: float = 0.5
 
 
 def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
-                  pattern: str = 'balanced', progress_callback: Optional[callable] = None) -> str:
+                  pattern: str = 'balanced', max_workers: int = None, 
+                  progress_callback: Optional[callable] = None) -> str:
     """Main function to assemble clips into final video.
     
     Combines all steps:
@@ -1522,6 +1588,7 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
         audio_file: Path to music file
         output_path: Path for output video
         pattern: Variety pattern to use
+        max_workers: Maximum parallel workers for video loading (None = auto-detect optimal)
         progress_callback: Optional callback for progress updates
         
     Returns:
@@ -1646,7 +1713,7 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
         start_time = time.time()
         
         try:
-            video_chunks = analyze_video_file(video_file)
+            video_chunks = analyze_video_file(video_file, bpm=audio_data.get('bpm'))
             processing_time = time.time() - start_time
             file_result['processing_time'] = processing_time
             
@@ -1773,6 +1840,7 @@ def assemble_clips(video_files: List[str], audio_file: str, output_path: str,
             timeline=timeline,
             audio_file=audio_file,
             output_path=output_path,
+            max_workers=max_workers,
             progress_callback=render_progress
         )
         

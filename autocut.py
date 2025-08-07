@@ -48,9 +48,11 @@ def cli():
               default='balanced', help='Editing pattern style')
 @click.option('--max-videos', type=int, 
               help='Maximum number of videos to use')
+@click.option('--memory-safe', is_flag=True, 
+              help='Enable memory-safe processing (reduces parallel workers)')
 @click.option('--verbose', '-v', is_flag=True, 
               help='Enable verbose output')
-def process(video_files, audio, output, pattern, max_videos, verbose):
+def process(video_files, audio, output, pattern, max_videos, memory_safe, verbose):
     """
     Process videos to create beat-synced compilation
     
@@ -105,12 +107,17 @@ def process(video_files, audio, output, pattern, max_videos, verbose):
             click.echo(f"📄 Output: {output}")
             click.echo("\n🚀 Processing...")
         
+        # Memory optimization info
+        if memory_safe:
+            click.echo("🧠 Memory-safe mode enabled: Using single-threaded processing")
+        
         # Process videos using API
         result_path = api.process_videos(
             video_files=video_list,
             audio_file=audio,
             output_path=output,
             pattern=pattern,
+            memory_safe=memory_safe,
             verbose=verbose
         )
         
