@@ -10,6 +10,11 @@ numpy>=1.24.0
 scipy>=1.11.0
 Pillow>=10.0.0
 
+# Testing framework
+pytest>=7.0.0
+pytest-mock>=3.10.0
+pytest-cov>=4.0.0
+
 # System Requirements (not Python packages):
 # - FFmpeg/FFprobe: Required for H.265/HEVC codec detection and transcoding
 #   Install with: apt install ffmpeg (Ubuntu) or brew install ffmpeg (macOS)

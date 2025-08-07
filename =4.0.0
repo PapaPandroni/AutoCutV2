@@ -1,0 +1,25 @@
+Collecting pytest
+  Using cached pytest-8.4.1-py3-none-any.whl.metadata (7.7 kB)
+Collecting pytest-mock
+  Using cached pytest_mock-3.14.1-py3-none-any.whl.metadata (3.9 kB)
+Collecting pytest-cov
+  Using cached pytest_cov-6.2.1-py3-none-any.whl.metadata (30 kB)
+Collecting iniconfig>=1 (from pytest)
+  Using cached iniconfig-2.1.0-py3-none-any.whl.metadata (2.7 kB)
+Requirement already satisfied: packaging>=20 in ./env/lib/python3.12/site-packages (from pytest) (25.0)
+Collecting pluggy<2,>=1.5 (from pytest)
+  Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+Collecting pygments>=2.7.2 (from pytest)
+  Using cached pygments-2.19.2-py3-none-any.whl.metadata (2.5 kB)
+Collecting coverage>=7.5 (from coverage[toml]>=7.5->pytest-cov)
+  Downloading coverage-7.10.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (8.9 kB)
+Using cached pytest-8.4.1-py3-none-any.whl (365 kB)
+Using cached pytest_mock-3.14.1-py3-none-any.whl (9.9 kB)
+Using cached pytest_cov-6.2.1-py3-none-any.whl (24 kB)
+Downloading coverage-7.10.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (248 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 249.0/249.0 kB 4.0 MB/s eta 0:00:00
+Using cached iniconfig-2.1.0-py3-none-any.whl (6.0 kB)
+Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
+Using cached pygments-2.19.2-py3-none-any.whl (1.2 MB)
+Installing collected packages: pygments, pluggy, iniconfig, coverage, pytest, pytest-mock, pytest-cov
+Successfully installed coverage-7.10.2 iniconfig-2.1.0 pluggy-1.6.0 pygments-2.19.2 pytest-8.4.1 pytest-cov-6.2.1 pytest-mock-3.14.1
