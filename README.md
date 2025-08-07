@@ -4,16 +4,17 @@
 
 AutoCut is a desktop application that automatically creates beat-synced highlight videos from your raw footage and music. It analyzes video quality, detects the music's rhythm, and intelligently assembles clips that match the beat - all without requiring any video editing knowledge.
 
-## 🚀 Current Status: Week 2 Testing Framework Complete!
+## 🚀 Current Status: Week 3 CLI/API Design Complete!
 
-**Major refactoring progress achieved!** Core functionality enhanced with professional architecture and testing framework. See `REFACTORING_TRACKER.md` for detailed progress tracking.
+**Major refactoring milestone achieved!** AutoCut now features a professional CLI interface and clean API architecture. See `REFACTORING_TRACKER.md` for detailed progress tracking.
 
-**✅ Week 1-2 Completed:**
+**✅ Week 1-3 Completed:**
 - ✅ **Architecture Restructuring**: Modular `src/video/`, `src/hardware/`, `src/core/` structure
 - ✅ **Validation Consolidation**: 90% reduction in duplicate functions (10+ → 1 unified system)  
 - ✅ **Testing Framework**: Professional pytest infrastructure with 25+ automated commands
-- ✅ **Project Cleanup**: 17 scattered test scripts → organized test suite
-- 🎯 **Week 3 Next**: CLI/API design and single entry point implementation
+- ✅ **Single Entry Point**: New `autocut.py` CLI replaces scattered demo scripts
+- ✅ **Clean API**: `AutoCutAPI` class provides programmatic access to all functionality
+- 🎯 **Week 4 Next**: iPhone H.265 cross-platform compatibility resolution
 
 ## 🎯 Perfect For
 
@@ -86,57 +87,54 @@ AutoCut is a desktop application that automatically creates beat-synced highligh
    make setup
    ```
 
-### 🚀 Development Workflow (Professional Framework)
+### 🎯 AutoCut CLI Interface
 
-**✅ NEW: Professional development commands available!**
+**✅ NEW: Professional CLI interface now available!**
 
-**Main Application:**
+**Main Commands:**
 ```bash
-make demo               # Run AutoCut with your videos (main entry point)
-make demo-quick         # Quick test with limited files
-make info               # Show project status and capabilities
+# Quick demo - try AutoCut with your test media
+python autocut.py demo
+
+# Quick demo with limited files  
+python autocut.py demo --quick
+
+# Process specific videos with music
+python autocut.py process video1.mov video2.mp4 --audio music.mp3
+
+# Process with different editing patterns
+python autocut.py process *.mov --audio song.wav --pattern dramatic
+
+# Validate video compatibility
+python autocut.py validate my_video.mp4 --detailed
+
+# Check system capabilities
+python autocut.py benchmark --detailed
 ```
 
-**Testing & Development:**
+**Development Commands:**
+```bash
+make demo               # Run AutoCut demo (uses new CLI)
+make demo-quick         # Quick test with limited files
+make demo-dramatic      # Try dramatic editing pattern
+make validate           # Test video validation (specify VIDEO=path)
+make benchmark          # System performance test
+make info               # Show project status
+```
+
+**Testing Framework:**
 ```bash
 make test-unit          # Run unit tests
 make test-integration   # Run integration tests  
 make test-quick         # Fast development tests
-make dev-test          # Quick development cycle
 make ci-test           # Simulate CI/CD pipeline
 ```
 
-**Project Management:**
+**CLI Help:**
 ```bash
-make help              # Show all available commands
-make clean             # Clean up generated files
-make benchmark         # Run system performance benchmark
-```
-
-**Traditional Usage** (still available):
-```bash
-# Add your videos and music to test_media/ folder  
-python test_autocut_demo.py            # Process all videos
-python test_autocut_demo.py --videos 5 # Limit to 5 videos
-```
-
-**Individual Component Tests**:
-```bash
-python test_real_audio.py              # Audio analysis test
-python test_video_analysis.py          # Video analysis test  
-python test_step5_rendering.py         # Full rendering test
-```
-
-### Future Testing Framework (After Refactoring)
-
-The new testing approach will use pytest:
-```bash
-# Future unified testing (not yet implemented)
-make test                 # Run all tests
-make test-unit           # Unit tests only
-make test-integration    # Integration tests
-make test-iphone         # iPhone H.265 specific tests
-python autocut.py demo   # Single demo command
+python autocut.py --help           # Show all commands
+python autocut.py process --help   # Help for specific command
+make cli-help                      # Show CLI help via Makefile
 ```
 
 ### 📱 Camera File Support
@@ -157,25 +155,43 @@ python test_autocut_demo.py  # Automatically detects .MOV, .MXF, .AVI, .MTS, .M2
 
 ## 📁 Project Structure
 
+**✅ NEW: Clean modular architecture after Week 1-3 refactoring:**
+
 ```
 AutoCutV2/
+├── autocut.py              # 🆕 Main CLI interface (single entry point)
 ├── src/
-│   ├── audio_analyzer.py    # Music analysis & BPM detection
-│   ├── video_analyzer.py    # Scene detection & quality scoring  
-│   ├── clip_assembler.py    # Beat matching & video rendering
-│   ├── gui.py              # Simple desktop interface
-│   └── utils.py            # Helper functions
-├── test_media/             # Your test videos and music
-├── output/                 # Generated highlight videos
-├── tests/                  # Unit tests
-├── test_real_audio.py      # Audio analysis testing
-├── test_video_analysis.py  # Basic video analysis testing
-├── test_step3_complete.py  # Advanced video analysis testing
-├── test_step4_assembly.py  # Beat matching and assembly testing
-├── test_step5_rendering.py # Video rendering pipeline testing
-├── test_autocut_demo.py    # Easy demo script for testing
-└── requirements.txt        # Dependencies
+│   ├── api.py             # 🆕 Clean public API for all functionality
+│   ├── audio_analyzer.py  # Music analysis & BPM detection
+│   ├── video_analyzer.py  # Scene detection & quality scoring  
+│   ├── clip_assembler.py  # Beat matching & video rendering
+│   ├── utils.py          # Helper functions
+│   ├── video/            # 🆕 Video processing modules
+│   │   ├── validation.py  # Unified video validation system
+│   │   ├── codec_detection.py # Video format analysis
+│   │   └── transcoding.py # H.265 transcoding service
+│   ├── hardware/         # 🆕 Hardware acceleration
+│   │   └── detection.py  # GPU/CPU encoder detection
+│   └── core/             # 🆕 Core utilities
+│       └── exceptions.py # Structured error handling
+├── tests/                # 🆕 Professional pytest framework
+│   ├── unit/            # Fast isolated tests
+│   ├── integration/     # End-to-end workflow tests
+│   ├── performance/     # Benchmark tests
+│   └── conftest.py     # Test fixtures and configuration
+├── test_media/          # Your test videos and music
+├── output/             # Generated highlight videos
+├── test_autocut_demo.py # Legacy demo (preserved for compatibility)
+├── Makefile            # 🆕 25+ automated development commands
+└── requirements.txt    # Dependencies (includes Click CLI framework)
 ```
+
+**Key Architecture Improvements:**
+- **Single Entry Point**: `autocut.py` replaces scattered scripts
+- **Clean API**: `src/api.py` provides programmatic access  
+- **Modular Design**: Separated video, hardware, and core concerns
+- **Professional Testing**: pytest framework with comprehensive coverage
+- **90% Code Deduplication**: Unified validation system eliminates scattered functions
 
 ## 🛠️ Current Status
 

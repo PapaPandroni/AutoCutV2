@@ -78,22 +78,49 @@ test-media: ## Run tests that require media files
 	@echo "$(YELLOW)Running media-dependent tests...$(NC)"
 	$(VENV_ACTIVATE) && $(PYTEST) $(PYTEST_ARGS) -m "media_required"
 
-# Application commands  
-demo: ## Run AutoCut demo (main entry point)
-	@echo "$(YELLOW)Running AutoCut demo...$(NC)"
+# Application commands - NEW CLI Interface
+demo: ## Run AutoCut demo using new CLI (main entry point)
+	@echo "$(YELLOW)Running AutoCut demo with new CLI...$(NC)"
+	$(VENV_ACTIVATE) && $(PYTHON) autocut.py demo --pattern balanced
+
+demo-quick: ## Run quick AutoCut demo with new CLI
+	@echo "$(YELLOW)Running quick AutoCut demo with new CLI...$(NC)"
+	$(VENV_ACTIVATE) && $(PYTHON) autocut.py demo --quick --pattern balanced
+
+demo-dramatic: ## Run AutoCut demo with dramatic pattern
+	@echo "$(YELLOW)Running AutoCut demo with dramatic pattern...$(NC)"
+	$(VENV_ACTIVATE) && $(PYTHON) autocut.py demo --pattern dramatic
+
+demo-energetic: ## Run AutoCut demo with energetic pattern
+	@echo "$(YELLOW)Running AutoCut demo with energetic pattern...$(NC)"
+	$(VENV_ACTIVATE) && $(PYTHON) autocut.py demo --pattern energetic
+
+validate: ## Validate video compatibility using new CLI
+	@echo "$(YELLOW)Testing video validation with new CLI...$(NC)"
+	@if [ -n "$(VIDEO)" ]; then \
+		$(VENV_ACTIVATE) && $(PYTHON) autocut.py validate "$(VIDEO)" --detailed; \
+	else \
+		echo "$(BLUE)Usage: make validate VIDEO=path/to/video.mp4$(NC)"; \
+		echo "$(BLUE)Or use: python autocut.py validate path/to/video.mp4$(NC)"; \
+	fi
+
+benchmark: ## Run system performance benchmark using new CLI
+	@echo "$(YELLOW)Running system benchmark with new CLI...$(NC)"
+	$(VENV_ACTIVATE) && $(PYTHON) autocut.py benchmark --detailed
+
+# Legacy support (for compatibility)
+demo-legacy: ## Run old demo script (for comparison)
+	@echo "$(YELLOW)Running legacy demo script...$(NC)"
 	$(VENV_ACTIVATE) && $(PYTHON) test_autocut_demo.py
 
-demo-quick: ## Run quick AutoCut demo with limited files
-	@echo "$(YELLOW)Running quick AutoCut demo...$(NC)"
-	$(VENV_ACTIVATE) && $(PYTHON) test_autocut_demo.py --videos 3
+# CLI help and information
+cli-help: ## Show AutoCut CLI help
+	@echo "$(YELLOW)AutoCut CLI Help:$(NC)"
+	$(VENV_ACTIVATE) && $(PYTHON) autocut.py --help
 
-validate: ## Validate iPhone H.265 compatibility for test files
-	@echo "$(YELLOW)Validating iPhone H.265 compatibility...$(NC)"
-	@echo "$(BLUE)iPhone H.265 validation temporarily disabled - use pytest for validation tests$(NC)"
-
-benchmark: ## Run system performance benchmark
-	@echo "$(YELLOW)Running system benchmark...$(NC)"
-	$(VENV_ACTIVATE) && $(PYTHON) -c "from src.hardware.detection import HardwareDetector; detector = HardwareDetector(); settings = detector.detect_optimal_settings('fast'); print('Encoder:', settings.get('encoder_type', 'Unknown')); print('Settings detected successfully')"
+cli-process-help: ## Show help for process command
+	@echo "$(YELLOW)AutoCut Process Command Help:$(NC)"
+	$(VENV_ACTIVATE) && $(PYTHON) autocut.py process --help
 
 # Development commands
 lint: ## Run linting (when available)
@@ -130,12 +157,14 @@ commit-full: test ## Run all tests before commit
 # Information commands
 info: ## Show project information
 	@echo "$(BOLD)AutoCut V2 - Project Information$(NC)"
-	@echo "$(BLUE)Status:$(NC) Week 2 Testing Framework - IMPLEMENTED"
+	@echo "$(BLUE)Status:$(NC) Week 3 CLI/API Design - IN PROGRESS"
 	@echo "$(BLUE)Python:$(NC) $(shell python3 --version 2>/dev/null || echo 'Not found')"
 	@echo "$(BLUE)Virtual Env:$(NC) $(shell [ -d env ] && echo 'Present' || echo 'Missing - run make setup')"
+	@echo "$(BLUE)CLI Interface:$(NC) autocut.py (NEW - replacing scattered scripts)"
 	@echo "$(BLUE)Test Files:$(NC) $(shell find test_media -name '*.mov' -o -name '*.mp4' 2>/dev/null | wc -l) video(s), $(shell find test_media -name '*.mp3' -o -name '*.wav' 2>/dev/null | wc -l) audio"
-	@echo "$(BLUE)Architecture:$(NC) Modular (Week 1 refactoring complete)"
+	@echo "$(BLUE)Architecture:$(NC) Modular (Week 1-2 refactoring complete)"
 	@echo "$(BLUE)Testing:$(NC) pytest with $(shell find tests -name 'test_*.py' 2>/dev/null | wc -l) test files"
+	@echo "$(BLUE)Commands:$(NC) Run 'make cli-help' for CLI usage"
 
 status: info ## Show project status (alias for info)
 

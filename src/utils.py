@@ -1906,6 +1906,38 @@ def _validate_encoder_output_fast(video_path: str, expected_profile: str = 'Main
         return False
 
 
+def find_all_video_files(directory: str) -> List[str]:
+    """
+    Find all supported video files in directory using enhanced format support.
+    
+    Args:
+        directory: Directory to search for video files
+        
+    Returns:
+        List of video file paths, sorted and deduplicated
+    """
+    import glob
+    
+    video_files = []
+    search_patterns = []
+    
+    # Create search patterns for all supported formats (case-insensitive)
+    for ext in SUPPORTED_VIDEO_FORMATS:
+        # Add both lowercase and uppercase variants
+        search_patterns.append(f"{directory}/*{ext}")
+        search_patterns.append(f"{directory}/*{ext.upper()}")
+    
+    # Search for all patterns
+    for pattern in search_patterns:
+        found_files = glob.glob(pattern)
+        video_files.extend(found_files)
+    
+    # Remove duplicates and sort
+    video_files = sorted(list(set(video_files)))
+    
+    return video_files
+
+
 # Configuration defaults
 DEFAULT_CONFIG = {
     'min_clip_duration': 0.5,      # Minimum clip duration in seconds
