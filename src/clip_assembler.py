@@ -538,7 +538,8 @@ def load_video_clips_sequential(sorted_clips: List[Dict[str, Any]],
     initial_memory = get_memory_info()
     print(f"   🧠 Starting sequential loading: {initial_memory['used_gb']:.1f}GB used ({initial_memory['percent']:.1f}%)")
     
-    video_clips = []
+    # Use a results dictionary to maintain perfect index alignment
+    clip_results = {}  # Maps original_index -> video clip (or None for failed)
     failed_indices = []
     
     # Group clips by video file to minimize loading
@@ -570,12 +571,16 @@ def load_video_clips_sequential(sorted_clips: List[Dict[str, Any]],
                         
                         # Extract segment using safe compatibility method
                         segment = subclip_safely(source_video, clip_data['start'], clip_data['end'])
-                        video_clips.append(segment)
+                        original_index = clip_data.get('original_index', total_clips_processed)
+                        clip_results[original_index] = segment
                         file_clips_loaded += 1
                         
                     except Exception as e:
                         print(f"   ⚠️  Failed to extract clip {clip_data['start']:.1f}-{clip_data['end']:.1f}s: {e}")
-                        failed_indices.append(total_clips_processed)
+                        # Use original_index from grouped clips to maintain timeline alignment
+                        original_index = clip_data.get('original_index', total_clips_processed)
+                        clip_results[original_index] = None
+                        failed_indices.append(original_index)
                     
                     total_clips_processed += 1
                 
@@ -588,17 +593,28 @@ def load_video_clips_sequential(sorted_clips: List[Dict[str, Any]],
             
         except Exception as e:
             print(f"   ❌ Failed to load video file {video_file}: {e}")
-            # Mark all clips from this file as failed
-            for _ in file_clips:
-                failed_indices.append(total_clips_processed)
+            # Mark all clips from this file as failed using original indices
+            for clip_data in file_clips:
+                original_index = clip_data.get('original_index', total_clips_processed)
+                clip_results[original_index] = None
+                failed_indices.append(original_index)
                 total_clips_processed += 1
             continue
     
-    if not video_clips:
+    # Reconstruct video_clips list in original order, with None for failed clips
+    video_clips = []
+    for i in range(len(sorted_clips)):
+        clip = clip_results.get(i, None)
+        video_clips.append(clip)
+    
+    # Count successful clips (non-None)
+    successful_clips = [clip for clip in video_clips if clip is not None]
+    
+    if not successful_clips:
         raise RuntimeError("No video clips could be loaded successfully")
     
     # Report final statistics
-    success_count = len(video_clips)
+    success_count = len(successful_clips)
     total_count = len(sorted_clips)
     success_rate = success_count / total_count
     
@@ -616,7 +632,7 @@ def load_video_clips_sequential(sorted_clips: List[Dict[str, Any]],
     
     report_progress(f"Successfully loaded {success_count} clips", 0.7)
     
-    # Return clips and failed indices (no VideoCache anymore)
+    # Return clips with perfect index alignment and failed indices
     return video_clips, failed_indices
 
 
@@ -1244,7 +1260,9 @@ def load_video_clips_with_advanced_memory_management(
                             
                         except Exception as e:
                             print(f"      ⚠️  Failed clip {total_clips_processed + 1}: {e}")
-                            failed_indices.append(total_clips_processed)
+                            # Use original_index from grouped clips to maintain timeline alignment
+                            original_index = clip_data.get('original_index', total_clips_processed)
+                            failed_indices.append(original_index)
                         
                         total_clips_processed += 1
                     
@@ -1258,9 +1276,10 @@ def load_video_clips_with_advanced_memory_management(
         
         except Exception as e:
             print(f"   ❌ Failed to load video file {video_file}: {e}")
-            # Mark all clips from this file as failed
-            for _ in file_clips:
-                failed_indices.append(total_clips_processed)
+            # Mark all clips from this file as failed using original indices
+            for clip_data in file_clips:
+                original_index = clip_data.get('original_index', total_clips_processed)
+                failed_indices.append(original_index)
                 total_clips_processed += 1
             continue
         
@@ -1588,12 +1607,16 @@ def load_video_clips_with_robust_error_handling(
                     file_clips_loaded += 1
                     print(f"      ✅ Success")
                 else:
-                    failed_indices.append(total_clips_processed)
+                    # Use original_index from grouped clips to maintain timeline alignment  
+                    original_index = clip_data.get('original_index', total_clips_processed)
+                    failed_indices.append(original_index)
                     print(f"      ❌ All strategies failed")
                 
             except Exception as e:
                 print(f"      ❌ Unexpected error: {e}")
-                failed_indices.append(total_clips_processed)
+                # Use original_index from grouped clips to maintain timeline alignment
+                original_index = clip_data.get('original_index', total_clips_processed)
+                failed_indices.append(original_index)
             
             total_clips_processed += 1
             
@@ -2548,6 +2571,27 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         print(f"Debug: Loaded {len(video_clips)} video clips successfully")
         
+        # DEFENSIVE VALIDATION: Check for None clips that would cause rendering failures
+        none_clip_indices = []
+        for i, clip in enumerate(video_clips):
+            if clip is None:
+                none_clip_indices.append(i)
+        
+        if none_clip_indices:
+            print(f"✅ EXPECTED: Found {len(none_clip_indices)} None clips at indices {none_clip_indices}")
+            print(f"      These correspond to failed clip loading - this is now properly handled")
+            
+            # Verify that None clips match our failed_indices
+            expected_none_indices = set(failed_indices)
+            actual_none_indices = set(none_clip_indices)
+            
+            if expected_none_indices != actual_none_indices:
+                print(f"⚠️  INDEX MISMATCH: Expected None at {expected_none_indices}, found at {actual_none_indices}")
+                # Update failed_indices to match reality
+                failed_indices = sorted(list(actual_none_indices))
+            
+            print(f"      Index alignment verified: {len(failed_indices)} failed clips properly tracked")
+        
         # SYNCHRONIZATION FIX: Adjust timeline IMMEDIATELY after loading to maintain index consistency
         if failed_indices:
             print(f"SYNC FIX: Removing {len(failed_indices)} failed clips from timeline")
@@ -2562,13 +2606,25 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
             timeline.clips = successful_clips
             print(f"Debug: Timeline synchronized - {len(original_clips)} -> {len(timeline.clips)} clips")
         
-        # Verify clip count consistency
-        if len(video_clips) != len(timeline.clips):
-            raise RuntimeError(f"Clip count mismatch: {len(video_clips)} loaded vs {len(timeline.clips)} in timeline")
+        # Filter out None clips from video_clips to get clean array for rendering
+        clean_video_clips = [clip for clip in video_clips if clip is not None]
         
+        # Verify clip count consistency after cleaning
+        if len(clean_video_clips) != len(timeline.clips):
+            raise RuntimeError(f"Clip count mismatch: {len(clean_video_clips)} valid clips vs {len(timeline.clips)} timeline clips")
+        
+        # Replace video_clips with clean version for rendering
+        video_clips = clean_video_clips
         print(f"Debug: Final clip count - video_clips: {len(video_clips)}, timeline.clips: {len(timeline.clips)}")
         
         # FORMAT ANALYSIS & NORMALIZATION: Critical fix for visual artifacts
+        print(f"Debug: Analyzing format for {len(video_clips)} video clips")
+        for i, clip in enumerate(video_clips):
+            if clip is None:
+                print(f"  ERROR: Clip {i} is None!")
+            else:
+                print(f"  Clip {i}: {type(clip)} - duration {getattr(clip, 'duration', 'unknown')}")
+        
         format_analyzer = VideoFormatAnalyzer()
         target_format = format_analyzer.find_dominant_format(video_clips)
         
@@ -2601,6 +2657,18 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         print(f"Debug: Total expected video duration: {total_expected_duration:.6f}s")
         
         report_progress("Concatenating video", 0.6)
+        
+        # CRITICAL DEBUG: Check for None clips before concatenation
+        print(f"Debug: Checking {len(normalized_video_clips)} clips before concatenation...")
+        none_clips = []
+        for i, clip in enumerate(normalized_video_clips):
+            if clip is None:
+                none_clips.append(i)
+            else:
+                print(f"  Clip {i}: {type(clip)} - duration {getattr(clip, 'duration', 'unknown')}")
+        
+        if none_clips:
+            raise RuntimeError(f"CRITICAL: None clips found at indices {none_clips} before concatenation - this will cause rendering failure!")
         
         # SMART CONCATENATION: Choose method based on format consistency
         if target_format.get('requires_normalization', False):
