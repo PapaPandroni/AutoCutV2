@@ -4,6 +4,16 @@
 
 AutoCut is a desktop application that automatically creates beat-synced highlight videos from your raw footage and music. It analyzes video quality, detects the music's rhythm, and intelligently assembles clips that match the beat - all without requiring any video editing knowledge.
 
+## ⚠️ Current Status: Major Refactoring Phase
+
+**The codebase is undergoing major refactoring to address technical debt.** While core functionality works, the current testing approach and code organization need significant improvement. See `REFACTOR.md` for detailed refactoring plan.
+
+**Issues being addressed:**
+- 10+ duplicate validation functions need consolidation
+- 16+ scattered test scripts being replaced with proper pytest framework
+- Platform inconsistency (iPhone H.265 works on Linux but not Mac)
+- Monolithic modules need separation of concerns
+
 ## 🎯 Perfect For
 
 - **Families**: Turn vacation videos into memorable highlight reels
@@ -70,37 +80,34 @@ AutoCut is a desktop application that automatically creates beat-synced highligh
    pip install -r requirements.txt
    ```
 
-### Testing the Components
+### Quick Testing (Current Scripts - Will be Replaced)
 
-**Test Audio Analysis** (with your music files):
+⚠️ **Note**: These scattered test scripts will be replaced with a proper pytest framework during refactoring.
+
+**Main Demo** (works with any video/audio files):
 ```bash
-# Add music files to test_media/ folder
-python test_real_audio.py
+# Add your videos and music to test_media/ folder
+python test_autocut_demo.py            # Process all videos
+python test_autocut_demo.py --videos 5 # Limit to 5 videos
 ```
 
-**Test Video Analysis** (with your video files):
+**Individual Component Tests**:
 ```bash
-# Add video files to test_media/ folder
-python test_video_analysis.py          # Basic analysis (Steps 1-2)
-python test_video_analysis.py --quick  # Test first 3 videos only
-python test_step3_complete.py          # Advanced analysis with motion/faces
+python test_real_audio.py              # Audio analysis test
+python test_video_analysis.py          # Video analysis test  
+python test_step5_rendering.py         # Full rendering test
 ```
 
-**Test Complete Pipeline** (AUTOCUT CREATES REAL VIDEOS! 🎬):
+### Future Testing Framework (After Refactoring)
+
+The new testing approach will use pytest:
 ```bash
-# Test the complete video creation pipeline (Steps 1-5)
-python test_step5_rendering.py         # Full rendering test suite
-
-# OR create a demo video with all your media:
-python test_autocut_demo.py            # ✅ ENHANCED: Detects 23+ formats (.MOV, .MXF, .AVI, etc.)
-python test_autocut_demo.py --videos 5 # Limit to 5 videos for faster testing
-python test_autocut_demo.py --pattern energetic # Try different cutting styles
-
-# Test enhanced video processing features:
-python test_enhanced_features.py          # Test error handling, H.265 support, codec detection
-
-# OR quick test the core functionality:
-python -c "import sys, os, glob; sys.path.insert(0, 'src'); from src.clip_assembler import assemble_clips; assemble_clips(glob.glob('test_media/*.mp4')[:3], 'test_media/soft-positive-summer-pop-218419.mp3', 'output/test.mp4', 'balanced', lambda s,p: print(f'[{p*100:5.1f}%] {s}'))"
+# Future unified testing (not yet implemented)
+make test                 # Run all tests
+make test-unit           # Unit tests only
+make test-integration    # Integration tests
+make test-iphone         # iPhone H.265 specific tests
+python autocut.py demo   # Single demo command
 ```
 
 ### 📱 Camera File Support
@@ -208,12 +215,35 @@ AutoCutV2/
 
 ## 🔧 Technical Details
 
+### Project Structure (Post-Refactoring)
+```
+src/
+├── video/               # Video processing modules
+│   ├── validation.py    # Unified validation system
+│   ├── transcoding.py   # H.265 processing
+│   └── preprocessing.py # Video preprocessing
+├── hardware/            # Hardware acceleration
+├── core/               # Core utilities
+│   ├── exceptions.py   # Structured error handling
+│   └── config.py      # Configuration management
+└── api.py             # Clean public API
+```
+
+### Testing Structure (After Refactoring)
+```
+tests/
+├── unit/              # Fast unit tests
+├── integration/       # End-to-end tests
+├── performance/       # Benchmarks
+└── fixtures/         # Test data
+```
+
 ### Core Dependencies
-- **MoviePy 1.0.3+**: Frame-accurate video editing
+- **MoviePy 2.2.1+**: Frame-accurate video editing with compatibility layer
 - **Librosa 0.10.1+**: Professional audio analysis
 - **OpenCV 4.8.0+**: Computer vision and frame analysis
 - **NumPy/SciPy**: Numerical processing
-- **Tkinter**: Cross-platform GUI (built into Python)
+- **pytest**: Testing framework (after refactoring)
 
 ### Performance
 - **Processing Speed**: ✅ ~8 videos per minute (ACHIEVED)

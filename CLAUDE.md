@@ -14,11 +14,21 @@ Transform hours of raw footage into polished, music-synced highlight reel in min
 
 ## 🎯 Current Development Status (Latest: January 2025)
 
-### ✅ COMPLETED - Steps 1-5 (Professional-Grade) + ✅ PRODUCTION STABILITY + ✅ API COMPATIBILITY + ✅ VISUAL ARTIFACTS ELIMINATED
+### ⚠️ REFACTORING PHASE - Critical Code Quality Issues Identified
 
-**Overall Status**: Core functionality complete with breakthrough performance, sync accuracy, 100% reliability, comprehensive API compatibility, complete visual artifact elimination, and ENHANCED ERROR HANDLING + COMPATIBILITY
-**Latest Achievement**: Critical iPhone Footage Processing Fix - Resolves 10-bit H.264 High 10 transcoding issue for complete mobile device compatibility
-**Current Focus**: Production-ready core with universal video compatibility including iPhone/mobile footage - ready for GUI development
+**Overall Status**: Core functionality complete but codebase has accumulated significant technical debt requiring major refactoring
+**Latest Achievement**: iPhone H.265 compatibility fixes applied (Linux working, Mac still problematic)
+**Current Focus**: **MAJOR REFACTORING PHASE** - Address code bloat, testing infrastructure, and platform consistency issues
+**Next Milestone**: Clean, maintainable architecture with proper testing framework
+
+### 🚨 Critical Issues Requiring Immediate Attention
+- **Code Bloat**: `src/utils.py` has grown to 1,942 lines with 10+ duplicate validation functions
+- **Testing Chaos**: 16+ scattered test scripts in root directory with no proper testing framework
+- **Platform Inconsistency**: iPhone H.265 fix works on Linux but still fails on Mac
+- **No Separation of Concerns**: Monolithic modules mixing validation, transcoding, and utilities
+- **Difficult Maintenance**: Adding new features risks breaking existing functionality
+
+### ✅ COMPLETED - Steps 1-5 (Professional-Grade) + ✅ PRODUCTION STABILITY + ✅ API COMPATIBILITY + ✅ VISUAL ARTIFACTS ELIMINATED
 
 **Step 1: Audio Analysis Module** ✅ **ENHANCED WITH MUSICAL INTELLIGENCE** 🎵
 - ✅ **MUSICAL START DETECTION**: Identifies first significant beat, handles 1-2s intros
@@ -306,14 +316,20 @@ VARIETY_PATTERNS = {
 - Quick testing mode: `--quick` flag for first 3 videos
 - MoviePy import compatibility: Multiple fallback methods
 
-### 7-Step Implementation Plan
+### 7-Step Implementation Plan (ORIGINAL - NOW IN REFACTORING PHASE)
 1. **✅ Project Setup** - Directory structure, dependencies, git workflow
 2. **✅ Audio Analysis** - BPM detection, beat timestamps, tested with real music  
 3. **✅ Basic Video Analysis** - Scene detection, quality scoring, tested with 16 videos
 4. **✅ Advanced Video Scoring** - Motion detection, face detection, enhanced scoring
 5. **✅ Clip Assembly** - Beat matching, timeline creation, variety patterns
 6. **✅ Video Rendering** - MoviePy composition, transitions, real MP4 output (COMPLETED)
-7. **🔜 GUI & Polish** - Tkinter interface, packaging (NEXT)
+7. **⚠️ PAUSED FOR REFACTORING** - GUI development halted to address technical debt
+
+### 🔄 4-Week Refactoring Plan (CURRENT FOCUS)
+1. **Week 1: Architecture Restructuring** - Break down monolithic modules, unified validation system
+2. **Week 2: Testing Framework** - Replace scattered scripts with proper pytest infrastructure
+3. **Week 3: Single Entry Point** - Unified CLI replacing 16+ demo scripts
+4. **Week 4: iPhone H.265 Resolution** - Systematic Mac compatibility debugging
 
 ### Development Principles
 - **Test each step thoroughly before proceeding**
@@ -434,10 +450,15 @@ VARIETY_PATTERNS = {
 
 ---
 
-**Last Updated**: Critical iPhone H.265 Footage Processing Fix 📱🎬✨🚀
-**Current Phase**: Production-ready core with universal mobile device compatibility - ready for GUI development  
-**Next Milestone**: Step 6 - GUI implementation with complete iPhone/smartphone footage support
-**Major Achievement**: 7-10x performance + >95% sync + 100% reliability + ZERO visual artifacts + mixed format mastery + iPhone H.265 processing achieved!
+**Last Updated**: Major Refactoring Plan Created ⚠️🔄📋
+**Current Phase**: **REFACTORING PHASE** - Addressing critical technical debt before GUI development  
+**Next Milestone**: Week 1 - Architecture restructuring and validation system cleanup
+**Major Achievement**: Core functionality complete but requires major refactoring for maintainability
+
+## 📋 Refactoring Documentation
+- **Comprehensive Plan**: See `REFACTOR.md` for detailed 4-week refactoring strategy
+- **Critical Issues**: Code bloat (1,942 line utils.py), 16+ scattered tests, platform inconsistency
+- **Expected Benefits**: 90% reduction in duplication, proper pytest framework, single CLI entry point
 
 ## 🎯 Success Metrics Status: 7/7 ACHIEVED ✅
 
