@@ -214,9 +214,23 @@ h264 (Main) (avc1), yuv420p → MoviePy success
 - ✅ **Memory Pressure Prevention**: Eliminates system freezes by staying within safe memory bounds (70% target usage)
 - ✅ **Cross-Platform Intelligence**: Adapts automatically from low-end laptops to high-end workstations
 
+**MAJOR IMPLEMENTATION BREAKTHROUGH - Dynamic Worker Detection System:**
+- ✅ **Root Problem Solved**: Eliminated system freezes caused by hardcoded 8 parallel workers overwhelming systems with limited RAM
+- ✅ **SystemProfiler Architecture**: Comprehensive system capability analysis (memory, CPU cores, hardware acceleration detection)
+- ✅ **AdaptiveWorkerMonitor**: Real-time memory monitoring with 85%/95% safety thresholds and automatic scaling
+- ✅ **VideoMemoryProfile**: Video-specific memory estimation based on codec, resolution, and file size analysis  
+- ✅ **Intelligent Decision Matrix**: Automatically detects CPU-limited vs memory-limited systems for optimal worker calculation
+- ✅ **Cross-Platform Optimization**: Apple Silicon unified memory bonuses, hardware acceleration detection and scoring
+- ✅ **Zero Configuration Required**: Adapts automatically to any hardware without user intervention
+- ✅ **Performance Results**: Low-end (1-2 workers safely), Mid-range (3 workers optimally), High-end (6-8 workers maximum), M2 MacBooks (6-8 with unified memory optimizations)
+
 **Technical Implementation:**
 ```python
 # SystemProfiler - Comprehensive capability analysis
+from src.system_profiler import SystemProfiler
+from src.adaptive_monitor import AdaptiveWorkerMonitor
+
+profiler = SystemProfiler()
 capabilities = profiler.get_system_capabilities()
 video_profile = profiler.estimate_video_memory_usage(video_files)
 worker_analysis = profiler.calculate_optimal_workers(capabilities, video_profile, video_count)
@@ -232,6 +246,10 @@ worker_analysis = profiler.calculate_optimal_workers(capabilities, video_profile
 # AdaptiveWorkerMonitor - Real-time safety monitoring  
 monitor = AdaptiveWorkerMonitor(optimal_workers)
 monitor.start_monitoring()  # Background thread monitoring memory thresholds
+
+# New Dependencies Added:
+# psutil>=5.9.0 - System monitoring for memory/CPU analysis
+# Enhanced CLI output with detailed system analysis
 ```
 
 **Intelligent Decision Matrix:**
