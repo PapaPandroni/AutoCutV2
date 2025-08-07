@@ -56,7 +56,12 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
         ValueError: If video format is unsupported
     """
     import os
-    from .utils import preprocess_video_if_needed
+    # Import video preprocessing from new transcoding module
+    try:
+        from .video.transcoding import preprocess_video_if_needed
+    except ImportError:
+        # Fallback for backwards compatibility
+        from .utils import preprocess_video_if_needed
     
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Video file not found: {file_path}")

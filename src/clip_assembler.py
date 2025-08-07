@@ -1822,11 +1822,15 @@ def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
         - Dictionary of MoviePy parameters for write_videofile()
         - List of FFmpeg-specific parameters for ffmpeg_params argument
     """
-    # Import enhanced detection from utils
+    # Import enhanced detection from new hardware module
     try:
-        from .utils import detect_optimal_codec_settings_enhanced
+        from .hardware.detection import detect_optimal_codec_settings_enhanced
     except ImportError:
-        from utils import detect_optimal_codec_settings_enhanced
+        # Fallback for backwards compatibility
+        try:
+            from .utils import detect_optimal_codec_settings_enhanced
+        except ImportError:
+            from utils import detect_optimal_codec_settings_enhanced
     
     # Use enhanced detection but return only the first two elements for compatibility
     moviepy_params, ffmpeg_params, diagnostics = detect_optimal_codec_settings_enhanced()
@@ -1850,11 +1854,15 @@ def detect_optimal_codec_settings_with_diagnostics() -> Tuple[Dict[str, Any], Li
         - List of FFmpeg-specific parameters for ffmpeg_params argument
         - Dictionary of diagnostic information and capability details
     """
-    # Import enhanced detection from utils
+    # Import enhanced detection from new hardware module
     try:
-        from .utils import detect_optimal_codec_settings_enhanced
+        from .hardware.detection import detect_optimal_codec_settings_enhanced
     except ImportError:
-        from utils import detect_optimal_codec_settings_enhanced
+        # Fallback for backwards compatibility
+        try:
+            from .utils import detect_optimal_codec_settings_enhanced
+        except ImportError:
+            from utils import detect_optimal_codec_settings_enhanced
     
     return detect_optimal_codec_settings_enhanced()
 
