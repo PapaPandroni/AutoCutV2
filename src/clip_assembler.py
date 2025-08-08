@@ -3046,26 +3046,8 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         print(f"Debug: Rendering completed successfully")
         
-        # ENHANCED: Post-render validation
-        if os.path.exists(output_path):
-            # Quick validation of output file
-            try:
-                output_clip = VideoFileClip(output_path)
-                output_duration = output_clip.duration
-                output_has_audio = output_clip.audio is not None
-                output_clip.close()
-                
-                print(f"Debug: Output validation - Duration: {output_duration:.6f}s, Has audio: {output_has_audio}")
-                
-                # Check for major duration discrepancies
-                duration_loss = abs(output_duration - actual_video_duration)
-                if duration_loss > 0.2:  # More than 200ms loss
-                    print(f"Warning: Significant duration loss in output: {duration_loss:.6f}s")
-                
-            except Exception as validation_error:
-                print(f"Warning: Could not validate output file: {validation_error}")
-        
-        # Clean up resources
+        # AUDIO CLEANUP MOVED: Now safe to cleanup audio after video cleanup completes
+        # Clean up resources - audio cleanup moved after video cleanup to prevent resource race conditions
         final_video.close()
         audio_clip.close()
         if 'trimmed_audio' in locals() and trimmed_audio != audio_clip:
@@ -3085,15 +3067,16 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         try:
             if 'final_video' in locals():
                 final_video.close()
+            if 'video_cache' in locals() and video_cache:
+                video_cache.clear()
+            # CRITICAL FIX: Cleanup delayed parent videos in error case - MOVED BEFORE audio cleanup
+            if 'resource_manager' in locals():
+                resource_manager.cleanup_delayed_videos()
+            # AUDIO CLEANUP MOVED: Now safe to cleanup audio after video cleanup completes
             if 'audio_clip' in locals():
                 audio_clip.close()
             if 'trimmed_audio' in locals() and 'audio_clip' in locals() and trimmed_audio != audio_clip:
                 trimmed_audio.close()
-            if 'video_cache' in locals() and video_cache:
-                video_cache.clear()
-            # CRITICAL FIX: Cleanup delayed parent videos in error case
-            if 'resource_manager' in locals():
-                resource_manager.cleanup_delayed_videos()
         except:
             pass
         
