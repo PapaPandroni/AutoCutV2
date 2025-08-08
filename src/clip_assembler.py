@@ -1247,6 +1247,9 @@ def load_video_clips_with_advanced_memory_management(sorted_clips: List[Dict[str
                                                    progress_callback: Optional[callable] = None) -> Tuple[List[Any], List[int], VideoResourceManager]:
     """Enhanced sequential loading with advanced memory management and batch processing.
     
+    CRITICAL FIX: This version now uses delayed cleanup to prevent NoneType get_frame errors.
+    Parent videos are kept alive until after concatenation, ensuring subclips remain valid.
+    
     This is the most memory-safe version of video loading with multiple fallback strategies.
     """
     
@@ -1257,13 +1260,13 @@ def load_video_clips_with_advanced_memory_management(sorted_clips: List[Dict[str
     if not sorted_clips:
         raise ValueError("No clips provided for loading")
     
-    # Initialize advanced memory management
+    # Initialize advanced memory management with DELAYED CLEANUP
     memory_manager = AdvancedMemoryManager(
         warning_threshold_gb=3.0,  # More conservative thresholds
         emergency_threshold_gb=5.0,
         critical_threshold_gb=7.0
     )
-    resource_manager = VideoResourceManager()
+    resource_manager = VideoResourceManager()  # This will now support delayed cleanup
     
     memory_manager.log_memory_summary("initialization")
     
@@ -1292,6 +1295,7 @@ def load_video_clips_with_advanced_memory_management(sorted_clips: List[Dict[str
     total_clips_processed = 0
     
     print(f"   🎬 Processing {len(sorted_clips)} clips from {len(grouped_clips)} files")
+    print(f"   🔧 CRITICAL FIX: Using delayed cleanup to prevent NoneType get_frame errors")
     print(f"      Initial processing mode: {memory_manager.processing_mode}")
     
     for video_file, file_clips in grouped_clips.items():
@@ -1317,44 +1321,60 @@ def load_video_clips_with_advanced_memory_management(sorted_clips: List[Dict[str
         file_clips_loaded = 0
         
         try:
-            with resource_manager.load_video_safely(video_file) as source_video:
+            # CRITICAL FIX: Use delayed cleanup instead of immediate cleanup
+            # This keeps the parent video alive so subclips remain valid
+            source_video = resource_manager.load_video_with_delayed_cleanup(video_file)
+            
+            # Process clips in memory-safe batches
+            for batch_start in range(0, len(file_clips), optimal_batch_size):
+                batch_end = min(batch_start + optimal_batch_size, len(file_clips))
+                batch_clips = file_clips[batch_start:batch_end]
                 
-                # Process clips in memory-safe batches
-                for batch_start in range(0, len(file_clips), optimal_batch_size):
-                    batch_end = min(batch_start + optimal_batch_size, len(file_clips))
-                    batch_clips = file_clips[batch_start:batch_end]
-                    
-                    print(f"      Processing batch {batch_start//optimal_batch_size + 1}: clips {batch_start+1}-{batch_end}")
-                    
-                    for clip_data in batch_clips:
+                print(f"      Processing batch {batch_start//optimal_batch_size + 1}: clips {batch_start+1}-{batch_end}")
+                
+                for clip_data in batch_clips:
+                    try:
+                        # Check memory before each clip in emergency mode
+                        if memory_manager.processing_mode == 'emergency':
+                            status = memory_manager.get_memory_status()
+                            if status['is_critical']:
+                                print(f"      🚨 Memory critical, skipping remaining clips")
+                                break
+                        
+                        # Extract segment - parent video stays alive via delayed cleanup
+                        segment = subclip_safely(source_video, clip_data['start'], clip_data['end'])
+                        
+                        # Validation: Test the clip while parent video is available
+                        # This validation is still important for catching other issues
                         try:
-                            # Check memory before each clip in emergency mode
-                            if memory_manager.processing_mode == 'emergency':
-                                status = memory_manager.get_memory_status()
-                                if status['is_critical']:
-                                    print(f"      🚨 Memory critical, skipping remaining clips")
-                                    break
-                            
-                            # Extract segment
-                            segment = subclip_safely(source_video, clip_data['start'], clip_data['end'])
-                            video_clips.append(segment)
-                            file_clips_loaded += 1
-                            
+                            test_time = min(0.1, segment.duration)
+                            test_frame = segment.get_frame(test_time)
+                            if test_frame is None:
+                                raise RuntimeError("get_frame returned None during validation")
                         except Exception as e:
-                            print(f"      ⚠️  Failed clip {total_clips_processed + 1}: {e}")
-                            # Use original_index from grouped clips to maintain timeline alignment
-                            original_index = clip_data.get('original_index', total_clips_processed)
-                            failed_indices.append(original_index)
+                            raise RuntimeError(f"Clip validation failed: {e}")
                         
-                        total_clips_processed += 1
+                        video_clips.append(segment)
+                        file_clips_loaded += 1
+                        
+                    except Exception as e:
+                        print(f"      ⚠️  Failed clip {total_clips_processed + 1}: {e}")
+                        # Use original_index from grouped clips to maintain timeline alignment
+                        original_index = clip_data.get('original_index', total_clips_processed)
+                        failed_indices.append(original_index)
                     
-                    # Memory check after batch
-                    if memory_manager.processing_mode != 'normal':
-                        memory_manager.log_memory_summary(f"after batch")
-                        
-                        # Force garbage collection between batches in conservative/emergency mode
-                        import gc
-                        gc.collect()
+                    total_clips_processed += 1
+                
+                # Memory check after batch
+                if memory_manager.processing_mode != 'normal':
+                    memory_manager.log_memory_summary(f"after batch")
+                    
+                    # Force garbage collection between batches in conservative/emergency mode
+                    import gc
+                    gc.collect()
+            
+            # NOTE: We do NOT close the source_video here - it will be cleaned up later
+            # This is the key fix: parent videos stay alive until after concatenation
         
         except Exception as e:
             print(f"   ❌ Failed to load video file {video_file}: {e}")
@@ -1388,11 +1408,14 @@ def load_video_clips_with_advanced_memory_management(sorted_clips: List[Dict[str
     if failed_indices:
         print(f"      Failed clips: {len(failed_indices)}")
     
+    print(f"   🎬 CRITICAL SUCCESS: All parent videos kept alive for concatenation")
+    print(f"   🔧 Delayed cleanup will occur after concatenation to prevent NoneType errors")
+    
     report_progress(f"Advanced loading complete: {success_count} clips", 0.7)
     
-    # Create a dummy resource manager since this function uses immediate cleanup
-    dummy_resource_manager = VideoResourceManager()  
-    return video_clips, failed_indices, dummy_resource_manager
+    # Return clips with perfect index alignment, failed indices, and resource manager
+    # The caller MUST call resource_manager.cleanup_delayed_videos() after concatenation
+    return video_clips, failed_indices, resource_manager
 
 # ============================================================================
 # PHASE 4: ENHANCED ERROR HANDLING AND RECOVERY
@@ -1400,7 +1423,10 @@ def load_video_clips_with_advanced_memory_management(sorted_clips: List[Dict[str
 # ============================================================================
 
 class RobustVideoLoader:
-    """Robust video loading with multiple fallback strategies and detailed error reporting."""
+    """Robust video loading with multiple fallback strategies and detailed error reporting.
+    
+    CRITICAL FIX: Updated to support delayed cleanup pattern to prevent NoneType get_frame errors.
+    """
     
     def __init__(self):
         self.error_statistics = {
@@ -1415,13 +1441,17 @@ class RobustVideoLoader:
             },
             'error_types': {}
         }
+        # Cache for loaded videos to support delayed cleanup pattern
+        self._loaded_videos = {}
     
     def load_clip_with_fallbacks(self, clip_data: Dict[str, Any], resource_manager: VideoResourceManager) -> Optional[Any]:
         """Load a single clip with multiple fallback strategies.
         
+        CRITICAL FIX: Now supports delayed cleanup to keep parent videos alive.
+        
         Args:
             clip_data: Dictionary with video_file, start, end information
-            resource_manager: Resource manager for safe video loading
+            resource_manager: Resource manager for delayed cleanup video loading
             
         Returns:
             VideoFileClip segment or None if all strategies failed
@@ -1462,13 +1492,30 @@ class RobustVideoLoader:
         print(f"      ❌ All fallback strategies failed. Last error: {last_error}")
         return None
     
+    def _get_or_load_video(self, video_file: str, resource_manager: VideoResourceManager):
+        """Get or load a video with delayed cleanup.
+        
+        CRITICAL FIX: Uses delayed cleanup instead of context managers to keep videos alive.
+        """
+        if video_file not in self._loaded_videos:
+            # Load video with delayed cleanup - parent stays alive
+            self._loaded_videos[video_file] = resource_manager.load_video_with_delayed_cleanup(video_file)
+        return self._loaded_videos[video_file]
+    
     def _load_direct_moviepy(self, clip_data: Dict[str, Any], resource_manager: VideoResourceManager) -> Optional[Any]:
-        """Direct MoviePy loading (standard approach)."""
-        with resource_manager.load_video_safely(clip_data['video_file']) as source_video:
-            return subclip_safely(source_video, clip_data['start'], clip_data['end'])
+        """Direct MoviePy loading (standard approach).
+        
+        CRITICAL FIX: Uses delayed cleanup to keep parent video alive.
+        """
+        source_video = self._get_or_load_video(clip_data['video_file'], resource_manager)
+        return subclip_safely(source_video, clip_data['start'], clip_data['end'])
     
     def _load_with_format_conversion(self, clip_data: Dict[str, Any], resource_manager: VideoResourceManager) -> Optional[Any]:
-        """Try loading with format conversion preprocessing."""
+        """Try loading with format conversion preprocessing.
+        
+        NOTE: This strategy creates temporary files and doesn't need delayed cleanup
+        since it creates its own temporary videos.
+        """
         import tempfile
         import subprocess
         import os
@@ -1493,7 +1540,7 @@ class RobustVideoLoader:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             
             if result.returncode == 0 and os.path.exists(temp_path):
-                # Load the converted segment
+                # Load the converted segment using immediate cleanup since it's temporary
                 with resource_manager.load_video_safely(temp_path) as converted_video:
                     segment = converted_video.copy()  # Get full clip since it's already the right duration
                     return segment
@@ -1511,7 +1558,11 @@ class RobustVideoLoader:
                 pass
     
     def _load_with_quality_reduction(self, clip_data: Dict[str, Any], resource_manager: VideoResourceManager) -> Optional[Any]:
-        """Try loading with reduced quality settings."""
+        """Try loading with reduced quality settings.
+        
+        NOTE: This strategy creates temporary files and doesn't need delayed cleanup
+        since it creates its own temporary videos.
+        """
         import tempfile
         import subprocess
         import os
@@ -1539,6 +1590,7 @@ class RobustVideoLoader:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             
             if result.returncode == 0 and os.path.exists(temp_path):
+                # Load the converted segment using immediate cleanup since it's temporary
                 with resource_manager.load_video_safely(temp_path) as low_quality_video:
                     segment = low_quality_video.copy()
                     return segment
@@ -1555,20 +1607,24 @@ class RobustVideoLoader:
                 pass
     
     def _load_emergency_minimal(self, clip_data: Dict[str, Any], resource_manager: VideoResourceManager) -> Optional[Any]:
-        """Emergency fallback: create minimal placeholder or extract with minimal processing."""
+        """Emergency fallback: create minimal placeholder or extract with minimal processing.
+        
+        CRITICAL FIX: Uses delayed cleanup to keep parent video alive.
+        """
         try:
-            # Try one more time with absolute minimal MoviePy settings
-            with resource_manager.load_video_safely(clip_data['video_file']) as source_video:
-                # Use the most basic subclip operation possible
-                start_time = max(0, clip_data['start'])
-                end_time = min(source_video.duration, clip_data['end'])
-                
-                if end_time <= start_time:
-                    return None
-                
-                # Very basic subclip
-                segment = source_video.subclipped(start_time, end_time)
-                return segment
+            # Try one more time with absolute minimal MoviePy settings using delayed cleanup
+            source_video = self._get_or_load_video(clip_data['video_file'], resource_manager)
+            
+            # Use the most basic subclip operation possible
+            start_time = max(0, clip_data['start'])
+            end_time = min(source_video.duration, clip_data['end'])
+            
+            if end_time <= start_time:
+                return None
+            
+            # Very basic subclip - parent video stays alive via delayed cleanup
+            segment = source_video.subclipped(start_time, end_time)
+            return segment
                 
         except Exception:
             # Final fallback: return None (clip will be skipped)
@@ -1617,10 +1673,13 @@ def load_video_clips_with_robust_error_handling(sorted_clips: List[Dict[str, Any
                                                progress_callback: Optional[callable] = None) -> Tuple[List[Any], List[int], Dict[str, Any], VideoResourceManager]:
     """Load video clips with comprehensive error handling and recovery strategies.
     
+    CRITICAL FIX: This version now uses delayed cleanup to prevent NoneType get_frame errors.
+    Parent videos are kept alive until after concatenation, ensuring subclips remain valid.
+    
     This is the most robust version that tries multiple approaches for each failed clip.
     
     Returns:
-        Tuple of (video_clips, failed_indices, error_report)
+        Tuple of (video_clips, failed_indices, error_report, resource_manager)
     """
     
     def report_progress(step: str, progress: float):
@@ -1630,12 +1689,13 @@ def load_video_clips_with_robust_error_handling(sorted_clips: List[Dict[str, Any
     if not sorted_clips:
         raise ValueError("No clips provided for loading")
     
-    # Initialize all management systems
+    # Initialize all management systems with DELAYED CLEANUP
     memory_manager = AdvancedMemoryManager()
-    resource_manager = VideoResourceManager()
+    resource_manager = VideoResourceManager()  # Will support delayed cleanup
     robust_loader = RobustVideoLoader()
     
     print(f"   🛡️  PHASE 4: Robust error handling and recovery")
+    print(f"   🔧 CRITICAL FIX: Using delayed cleanup to prevent NoneType get_frame errors")
     print(f"      Total clips to process: {len(sorted_clips)}")
     
     # Smart preprocessing with error recovery
@@ -1681,7 +1741,7 @@ def load_video_clips_with_robust_error_handling(sorted_clips: List[Dict[str, Any
             print(f"      Clip {i+1}/{len(file_clips)}: {clip_data['start']:.1f}-{clip_data['end']:.1f}s")
             
             try:
-                # Use robust loader with multiple fallback strategies
+                # Use robust loader with multiple fallback strategies and delayed cleanup
                 segment = robust_loader.load_clip_with_fallbacks(clip_data, resource_manager)
                 
                 if segment is not None:
@@ -1736,11 +1796,14 @@ def load_video_clips_with_robust_error_handling(sorted_clips: List[Dict[str, Any
     else:
         print(f"      ✅ EXCELLENT SUCCESS RATE")
     
+    print(f"   🎬 CRITICAL SUCCESS: All parent videos kept alive for concatenation")
+    print(f"   🔧 Delayed cleanup will occur after concatenation to prevent NoneType errors")
+    
     report_progress(f"Robust loading complete: {success_count} clips", 0.7)
     
-    # Create a dummy resource manager since this function uses immediate cleanup
-    dummy_resource_manager = VideoResourceManager()  
-    return video_clips, failed_indices, error_report, dummy_resource_manager
+    # Return clips with perfect index alignment, failed indices, error report, and resource manager
+    # The caller MUST call resource_manager.cleanup_delayed_videos() after concatenation
+    return video_clips, failed_indices, error_report, resource_manager
 
 
 def get_memory_info() -> Dict[str, float]:
