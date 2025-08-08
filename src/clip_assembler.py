@@ -2857,16 +2857,8 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         
         final_video = concatenate_videoclips(normalized_video_clips, method=concatenation_method)
         
-        # CRITICAL FIX: Now that concatenation is complete, we can safely cleanup parent videos
-        # This prevents the NoneType get_frame error by keeping parent videos alive during concatenation
-        print(f"🧹 CRITICAL FIX: Cleaning up parent videos after concatenation")
-        if 'resource_manager' in locals():
-            resource_manager.cleanup_delayed_videos()
-        else:
-            # Fallback cleanup if resource manager not available
-            import gc
-            gc.collect()
-        print(f"🧹 Parent video cleanup complete - subclips are now independent")
+        # DEFERRED: Parent video cleanup moved to after write operation completes
+        print(f"🧠 DEFERRED: Parent video cleanup postponed until after write operation completes")
         
         actual_video_duration = final_video.duration
         print(f"Debug: Concatenation successful, final video duration: {actual_video_duration:.6f}s")
@@ -2978,6 +2970,17 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         # Render with version-compatible parameter checking
         write_videofile_safely(final_video, output_path, compatibility_info, **write_params)
         
+        # CRITICAL FIX: Now that write operation is complete, we can safely cleanup parent videos
+        # This prevents the NoneType get_frame error by keeping parent videos alive through entire rendering
+        print(f"🧹 CRITICAL FIX: Cleaning up parent videos after write operation completes")
+        if 'resource_manager' in locals():
+            resource_manager.cleanup_delayed_videos()
+        else:
+            # Fallback cleanup if resource manager not available
+            import gc
+            gc.collect()
+        print(f"🧹 Parent video cleanup complete - resources freed safely")
+        
         print(f"Debug: Rendering completed successfully")
         
         # ENHANCED: Post-render validation
@@ -3015,7 +3018,7 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         return output_path
         
     except Exception as e:
-        # Clean up any resources
+        # Clean up any resources including delayed parent videos
         try:
             if 'final_video' in locals():
                 final_video.close()
@@ -3025,6 +3028,9 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
                 trimmed_audio.close()
             if 'video_cache' in locals() and video_cache:
                 video_cache.clear()
+            # CRITICAL FIX: Cleanup delayed parent videos in error case
+            if 'resource_manager' in locals():
+                resource_manager.cleanup_delayed_videos()
         except:
             pass
         
