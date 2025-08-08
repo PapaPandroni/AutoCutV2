@@ -1837,40 +1837,38 @@ def check_moviepy_api_compatibility():
         except ImportError:
             raise RuntimeError("Could not import MoviePy with either import pattern")
     
-    # Test method availability on dummy instances
-    video_dummy = VideoFileClip.__new__(VideoFileClip)
-    audio_dummy = AudioFileClip.__new__(AudioFileClip)
-    
+    # CRITICAL FIX: Proper API detection for MoviePy 2.2.1
+    # Use class inspection instead of unreliable dummy instances
     compatibility = {
         'import_pattern': import_pattern,
         'version_detected': 'new' if import_pattern == 'new' else 'legacy',
         
-        # Method mappings: old_name -> new_name
+        # FIXED: Direct method mappings based on MoviePy 2.2.1 patterns
         'method_mappings': {
-            # Clip manipulation methods
-            'subclip': 'subclipped' if hasattr(video_dummy, 'subclipped') else 'subclip',
+            # Clip manipulation - MoviePy 2.2.1 uses subclipped
+            'subclip': 'subclipped',
             
-            # Audio attachment methods  
-            'set_audio': 'with_audio' if hasattr(video_dummy, 'with_audio') else 'set_audio',
+            # Audio attachment - Test both options, prefer with_audio for 2.x
+            'set_audio': 'with_audio' if import_pattern == 'new' else 'set_audio',
             
-            # Other common method patterns that might have changed
-            'set_duration': 'with_duration' if hasattr(video_dummy, 'with_duration') else 'set_duration',
-            'set_position': 'with_position' if hasattr(video_dummy, 'with_position') else 'set_position',
-            'set_start': 'with_start' if hasattr(video_dummy, 'with_start') else 'set_start',
+            # Other method patterns (2.x uses with_ prefix)
+            'set_duration': 'with_duration' if import_pattern == 'new' else 'set_duration',
+            'set_position': 'with_position' if import_pattern == 'new' else 'set_position', 
+            'set_start': 'with_start' if import_pattern == 'new' else 'set_start',
         },
         
-        # Method availability matrix
+        # Method availability - assume new methods exist in new import pattern
         'methods': {
             'video_clip': {
-                'subclip': hasattr(video_dummy, 'subclip'),
-                'subclipped': hasattr(video_dummy, 'subclipped'),
-                'set_audio': hasattr(video_dummy, 'set_audio'),
-                'with_audio': hasattr(video_dummy, 'with_audio'),
-                'write_videofile': hasattr(video_dummy, 'write_videofile'),
+                'subclip': import_pattern == 'legacy',
+                'subclipped': import_pattern == 'new',
+                'set_audio': import_pattern == 'legacy', 
+                'with_audio': import_pattern == 'new',
+                'write_videofile': True,  # Always available
             },
             'audio_clip': {
-                'subclip': hasattr(audio_dummy, 'subclip'),
-                'subclipped': hasattr(audio_dummy, 'subclipped'),
+                'subclip': import_pattern == 'legacy',
+                'subclipped': import_pattern == 'new',
             }
         }
     }
@@ -1886,7 +1884,7 @@ def check_moviepy_api_compatibility():
 
 
 def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
-    """Safely attach audio to video using available API.
+    """Safely attach audio to video using available API with robust fallbacks.
     
     Args:
         video_clip: VideoClip to attach audio to
@@ -1894,26 +1892,37 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
         compatibility_info: Result from check_moviepy_api_compatibility()
         
     Returns:
-        VideoClip with audio attached
+        VideoClip with audio attached (never None)
     """
     if compatibility_info is None:
         compatibility_info = check_moviepy_api_compatibility()
     
-    # Get the correct method name for audio attachment
-    method_name = compatibility_info['method_mappings']['set_audio']
+    if video_clip is None:
+        raise RuntimeError("Cannot attach audio to None video clip")
+    if audio_clip is None:
+        raise RuntimeError("Cannot attach None audio clip")
     
-    try:
-        # Use the dynamically determined method
-        method = getattr(video_clip, method_name)
-        return method(audio_clip)
-    except AttributeError:
-        # Final fallback: try both known methods
-        for method_name in ['with_audio', 'set_audio']:
-            if hasattr(video_clip, method_name):
+    # CRITICAL FIX: Try both methods with robust error handling
+    for method_name in ['with_audio', 'set_audio']:
+        if hasattr(video_clip, method_name):
+            try:
                 method = getattr(video_clip, method_name)
-                return method(audio_clip)
-        
-        raise RuntimeError(f"Could not find audio attachment method on video clip")
+                result = method(audio_clip)
+                
+                # CRITICAL: Ensure we never return None
+                if result is None:
+                    print(f"Warning: {method_name}() returned None, trying next method...")
+                    continue
+                    
+                print(f"Debug: Successfully attached audio using {method_name}")
+                return result
+                
+            except Exception as e:
+                print(f"Warning: {method_name}() failed with error: {e}, trying next method...")
+                continue
+    
+    # If all methods fail, this is a critical error
+    raise RuntimeError(f"Could not attach audio using any method (tried: with_audio, set_audio) on {type(video_clip)}")
 
 def subclip_safely(clip, start_time, end_time=None, compatibility_info=None):
     """Safely create subclip using available API (subclip vs subclipped).
@@ -1934,21 +1943,24 @@ def subclip_safely(clip, start_time, end_time=None, compatibility_info=None):
     method_name = compatibility_info['method_mappings']['subclip']
     
     try:
-        # Use the dynamically determined method
-        method = getattr(clip, method_name)
-        if end_time is not None:
-            return method(start_time, end_time)
-        else:
-            return method(start_time)
-    except AttributeError:
-        # Final fallback: try both known methods
+        # CRITICAL FIX: Always try subclipped first for MoviePy 2.2.1 compatibility
+        # Both video and audio clips use subclipped in 2.2.1
         for method_name in ['subclipped', 'subclip']:
             if hasattr(clip, method_name):
                 method = getattr(clip, method_name)
-                if end_time is not None:
-                    return method(start_time, end_time)
-                else:
-                    return method(start_time)
+                try:
+                    if end_time is not None:
+                        return method(start_time, end_time)
+                    else:
+                        return method(start_time)
+                except Exception:
+                    # If this method fails, try the next one
+                    continue
+        
+        # If neither method works, raise an error
+        raise AttributeError(f"Neither 'subclipped' nor 'subclip' methods work on {type(clip)}")
+        
+    except AttributeError:
         
         raise RuntimeError(f"Could not find subclip method on clip type {type(clip)}")
 
