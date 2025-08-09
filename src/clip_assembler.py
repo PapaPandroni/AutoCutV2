@@ -29,6 +29,13 @@ except ImportError:
     # Direct import for testing
     from video_analyzer import VideoChunk
 
+# Import robust audio loading system
+try:
+    from .audio_loader import load_audio_robust
+except ImportError:
+    # Direct import for testing
+    from audio_loader import load_audio_robust
+
 
 # Variety patterns to prevent monotonous cutting
 VARIETY_PATTERNS = {
@@ -2719,25 +2726,6 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         if progress_callback:
             progress_callback(step, progress)
     
-    def clear_moviepy_state():
-        """Clear MoviePy internal state to prevent corruption between video and audio processing."""
-        try:
-            # Force garbage collection to clear any lingering MoviePy objects
-            gc.collect()
-            
-            # Try to clear any cached MoviePy FFmpeg processes (if accessible)
-            try:
-                import moviepy.config as moviepy_config
-                if hasattr(moviepy_config, 'FFMPEG_BINARY'):
-                    # Reset any cached FFmpeg state if possible
-                    pass
-            except (ImportError, AttributeError):
-                pass
-                
-            print("   🧹 MoviePy state cleared")
-        except Exception as e:
-            print(f"   ⚠️  State clearing warning (non-critical): {e}")
-    
     if not timeline.clips:
         raise ValueError("Timeline is empty - no clips to render")
     
@@ -2945,16 +2933,12 @@ def render_video(timeline: ClipTimeline, audio_file: str, output_path: str,
         if duration_error > 0.05:  # More than 50ms error
             print(f"Warning: Concatenation timing error: {duration_error:.6f}s discrepancy")
         
-        # CRITICAL FIX: Clear MoviePy state before audio loading to prevent corruption
-        print(f"🧹 Clearing MoviePy state before audio loading...")
-        clear_moviepy_state()
-        
-        # ENHANCED AUDIO HANDLING: Frame-accurate trimming with sync compensation
+        # CRITICAL FIX: Use robust audio loading to prevent FFMPEG_AudioReader corruption
+        # This bypasses MoviePy's problematic FFMPEG_AudioReader entirely
         report_progress("Preparing audio", 0.75)
         
-        # RESTORED: Simple, direct audio loading approach (from working commit 0437393)
         print(f"🎵 Loading audio file: {os.path.basename(audio_file)}")
-        audio_clip = AudioFileClip(audio_file)
+        audio_clip = load_audio_robust(audio_file)
         original_audio_duration = audio_clip.duration
         print(f"Debug: Original audio duration: {original_audio_duration:.6f}s")
         
