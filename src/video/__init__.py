@@ -3,7 +3,7 @@ Video processing module for AutoCut V2.
 
 This module contains video-related functionality including:
 - Video validation and compatibility checking
-- Video codec detection and analysis  
+- Video codec detection and analysis
 - Video transcoding and preprocessing
 - Video format normalization
 

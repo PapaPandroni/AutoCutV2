@@ -9,12 +9,16 @@ from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 import tempfile
 
-from src.video.transcoding import TranscodingService, TranscodingResult, TranscodingError
+from src.video.transcoding import (
+    TranscodingService,
+    TranscodingResult,
+    TranscodingError,
+)
 
 
 class TestTranscodingResult:
     """Test TranscodingResult dataclass functionality."""
-    
+
     def test_transcoding_result_success(self):
         """Test creating a successful TranscodingResult."""
         result = TranscodingResult(
@@ -23,9 +27,9 @@ class TestTranscodingResult:
             original_path="/path/to/input.mov",
             transcoding_time=45.2,
             file_size_mb=128.5,
-            encoder_used="nvenc"
+            encoder_used="nvenc",
         )
-        
+
         assert result.success is True
         assert result.output_path == "/path/to/output.mp4"
         assert result.original_path == "/path/to/input.mov"
@@ -33,16 +37,16 @@ class TestTranscodingResult:
         assert result.file_size_mb == 128.5
         assert result.encoder_used == "nvenc"
         assert result.error_message is None
-    
+
     def test_transcoding_result_failure(self):
         """Test creating a failed TranscodingResult."""
         result = TranscodingResult(
             success=False,
             output_path=None,
             original_path="/path/to/input.mov",
-            error_message="Transcoding failed: unknown codec"
+            error_message="Transcoding failed: unknown codec",
         )
-        
+
         assert result.success is False
         assert result.output_path is None
         assert result.original_path == "/path/to/input.mov"
@@ -50,15 +54,13 @@ class TestTranscodingResult:
         assert result.file_size_mb is None
         assert result.encoder_used is None
         assert result.error_message == "Transcoding failed: unknown codec"
-    
+
     def test_transcoding_result_defaults(self):
         """Test TranscodingResult with minimal parameters."""
         result = TranscodingResult(
-            success=True,
-            output_path="/output.mp4",
-            original_path="/input.mov"
+            success=True, output_path="/output.mp4", original_path="/input.mov"
         )
-        
+
         assert result.success is True
         assert result.transcoding_time is None
         assert result.file_size_mb is None
@@ -68,344 +70,421 @@ class TestTranscodingResult:
 
 class TestTranscodingError:
     """Test TranscodingError exception class."""
-    
+
     def test_transcoding_error_creation(self):
         """Test creating TranscodingError."""
         error = TranscodingError("Transcoding failed")
         assert str(error) == "Transcoding failed"
         assert isinstance(error, Exception)
-    
+
     def test_transcoding_error_with_details(self):
         """Test TranscodingError with additional details."""
         details = {"encoder": "nvenc", "exit_code": 1}
         error = TranscodingError("Encoding failed", details)
-        
+
         assert "Encoding failed" in str(error)
-        assert hasattr(error, 'details')
+        assert hasattr(error, "details")
         assert error.details == details
 
 
 class TestTranscodingService:
     """Test TranscodingService class functionality."""
-    
+
     def test_service_initialization(self, transcoding_service):
         """Test TranscodingService initialization."""
         assert isinstance(transcoding_service, TranscodingService)
-        assert hasattr(transcoding_service, 'transcode_h265_to_h264')
-        assert hasattr(transcoding_service, 'test_moviepy_h265_compatibility')
-        assert hasattr(transcoding_service, 'preprocess_video_if_needed')
-    
-    @patch('src.video.transcoding.HardwareDetector')
-    @patch('src.video.transcoding.CodecDetector')
-    def test_service_initialization_with_detectors(self, mock_codec_detector, mock_hardware_detector):
+        assert hasattr(transcoding_service, "transcode_h265_to_h264")
+        assert hasattr(transcoding_service, "test_moviepy_h265_compatibility")
+        assert hasattr(transcoding_service, "preprocess_video_if_needed")
+
+    @patch("src.video.transcoding.HardwareDetector")
+    @patch("src.video.transcoding.CodecDetector")
+    def test_service_initialization_with_detectors(
+        self, mock_codec_detector, mock_hardware_detector
+    ):
         """Test TranscodingService initialization with detector injection."""
         service = TranscodingService()
-        
+
         # Should create detector instances
         assert service.hardware_detector is not None
         assert service.codec_detector is not None
-    
-    @patch('src.video.transcoding.subprocess.run')
-    @patch('src.video.transcoding.VideoValidator')
-    def test_transcode_h265_to_h264_nvenc(self, mock_validator, mock_subprocess, transcoding_service, test_helpers, temp_dir):
+
+    @patch("src.video.transcoding.subprocess.run")
+    @patch("src.video.transcoding.VideoValidator")
+    def test_transcode_h265_to_h264_nvenc(
+        self,
+        mock_validator,
+        mock_subprocess,
+        transcoding_service,
+        test_helpers,
+        temp_dir,
+    ):
         """Test H.265 to H.264 transcoding with NVENC."""
         input_file = test_helpers.create_mock_video_file(temp_dir, "input.mov", 10.0)
         output_file = temp_dir / "output.mp4"
-        
+
         # Mock hardware detection
-        transcoding_service.hardware_detector.has_nvenc_encoder = MagicMock(return_value=True)
-        transcoding_service.hardware_detector.has_qsv_encoder = MagicMock(return_value=False)
-        
+        transcoding_service.hardware_detector.has_nvenc_encoder = MagicMock(
+            return_value=True
+        )
+        transcoding_service.hardware_detector.has_qsv_encoder = MagicMock(
+            return_value=False
+        )
+
         # Mock successful ffmpeg run
         mock_subprocess.return_value = MagicMock(returncode=0)
-        
+
         # Mock validation success
         mock_validator_instance = MagicMock()
-        mock_validator_instance.validate_transcoding_output.return_value = MagicMock(is_valid=True)
+        mock_validator_instance.validate_transcoding_output.return_value = MagicMock(
+            is_valid=True
+        )
         mock_validator.return_value = mock_validator_instance
-        
-        result = transcoding_service.transcode_h265_to_h264(str(input_file), str(output_file))
-        
+
+        result = transcoding_service.transcode_h265_to_h264(
+            str(input_file), str(output_file)
+        )
+
         assert isinstance(result, TranscodingResult)
         assert result.success is True
         assert result.output_path == str(output_file)
         assert result.encoder_used == "nvenc"
         mock_subprocess.assert_called_once()
-        
+
         # Verify NVENC parameters in ffmpeg command
         ffmpeg_command = mock_subprocess.call_args[0][0]
-        assert any('h264_nvenc' in arg for arg in ffmpeg_command)
-    
-    @patch('src.video.transcoding.subprocess.run')
-    @patch('src.video.transcoding.VideoValidator')
-    def test_transcode_h265_to_h264_qsv(self, mock_validator, mock_subprocess, transcoding_service, test_helpers, temp_dir):
+        assert any("h264_nvenc" in arg for arg in ffmpeg_command)
+
+    @patch("src.video.transcoding.subprocess.run")
+    @patch("src.video.transcoding.VideoValidator")
+    def test_transcode_h265_to_h264_qsv(
+        self,
+        mock_validator,
+        mock_subprocess,
+        transcoding_service,
+        test_helpers,
+        temp_dir,
+    ):
         """Test H.265 to H.264 transcoding with Intel QSV."""
         input_file = test_helpers.create_mock_video_file(temp_dir, "input.mov", 10.0)
         output_file = temp_dir / "output.mp4"
-        
+
         # Mock hardware detection
-        transcoding_service.hardware_detector.has_nvenc_encoder = MagicMock(return_value=False)
-        transcoding_service.hardware_detector.has_qsv_encoder = MagicMock(return_value=True)
-        
+        transcoding_service.hardware_detector.has_nvenc_encoder = MagicMock(
+            return_value=False
+        )
+        transcoding_service.hardware_detector.has_qsv_encoder = MagicMock(
+            return_value=True
+        )
+
         # Mock successful ffmpeg run
         mock_subprocess.return_value = MagicMock(returncode=0)
-        
+
         # Mock validation success
         mock_validator_instance = MagicMock()
-        mock_validator_instance.validate_transcoding_output.return_value = MagicMock(is_valid=True)
+        mock_validator_instance.validate_transcoding_output.return_value = MagicMock(
+            is_valid=True
+        )
         mock_validator.return_value = mock_validator_instance
-        
-        result = transcoding_service.transcode_h265_to_h264(str(input_file), str(output_file))
-        
+
+        result = transcoding_service.transcode_h265_to_h264(
+            str(input_file), str(output_file)
+        )
+
         assert isinstance(result, TranscodingResult)
         assert result.success is True
         assert result.encoder_used == "qsv"
-        
+
         # Verify QSV parameters in ffmpeg command
         ffmpeg_command = mock_subprocess.call_args[0][0]
-        assert any('h264_qsv' in arg for arg in ffmpeg_command)
-    
-    @patch('src.video.transcoding.subprocess.run')
-    @patch('src.video.transcoding.VideoValidator')
-    def test_transcode_h265_to_h264_cpu(self, mock_validator, mock_subprocess, transcoding_service, test_helpers, temp_dir):
+        assert any("h264_qsv" in arg for arg in ffmpeg_command)
+
+    @patch("src.video.transcoding.subprocess.run")
+    @patch("src.video.transcoding.VideoValidator")
+    def test_transcode_h265_to_h264_cpu(
+        self,
+        mock_validator,
+        mock_subprocess,
+        transcoding_service,
+        test_helpers,
+        temp_dir,
+    ):
         """Test H.265 to H.264 transcoding with CPU fallback."""
         input_file = test_helpers.create_mock_video_file(temp_dir, "input.mov", 10.0)
         output_file = temp_dir / "output.mp4"
-        
+
         # Mock hardware detection - no GPU acceleration
-        transcoding_service.hardware_detector.has_nvenc_encoder = MagicMock(return_value=False)
-        transcoding_service.hardware_detector.has_qsv_encoder = MagicMock(return_value=False)
-        
+        transcoding_service.hardware_detector.has_nvenc_encoder = MagicMock(
+            return_value=False
+        )
+        transcoding_service.hardware_detector.has_qsv_encoder = MagicMock(
+            return_value=False
+        )
+
         # Mock successful ffmpeg run
         mock_subprocess.return_value = MagicMock(returncode=0)
-        
+
         # Mock validation success
         mock_validator_instance = MagicMock()
-        mock_validator_instance.validate_transcoding_output.return_value = MagicMock(is_valid=True)
+        mock_validator_instance.validate_transcoding_output.return_value = MagicMock(
+            is_valid=True
+        )
         mock_validator.return_value = mock_validator_instance
-        
-        result = transcoding_service.transcode_h265_to_h264(str(input_file), str(output_file))
-        
+
+        result = transcoding_service.transcode_h265_to_h264(
+            str(input_file), str(output_file)
+        )
+
         assert isinstance(result, TranscodingResult)
         assert result.success is True
         assert result.encoder_used == "cpu"
-        
+
         # Verify CPU encoding parameters
         ffmpeg_command = mock_subprocess.call_args[0][0]
-        assert any('libx264' in arg for arg in ffmpeg_command)
-    
-    @patch('src.video.transcoding.subprocess.run')
-    def test_transcode_h265_to_h264_failure(self, mock_subprocess, transcoding_service, test_helpers, temp_dir):
+        assert any("libx264" in arg for arg in ffmpeg_command)
+
+    @patch("src.video.transcoding.subprocess.run")
+    def test_transcode_h265_to_h264_failure(
+        self, mock_subprocess, transcoding_service, test_helpers, temp_dir
+    ):
         """Test transcoding failure handling."""
         input_file = test_helpers.create_mock_video_file(temp_dir, "input.mov", 10.0)
         output_file = temp_dir / "output.mp4"
-        
+
         # Mock ffmpeg failure
         mock_subprocess.return_value = MagicMock(
-            returncode=1,
-            stderr="ffmpeg: error processing video"
+            returncode=1, stderr="ffmpeg: error processing video"
         )
-        
-        result = transcoding_service.transcode_h265_to_h264(str(input_file), str(output_file))
-        
+
+        result = transcoding_service.transcode_h265_to_h264(
+            str(input_file), str(output_file)
+        )
+
         assert isinstance(result, TranscodingResult)
         assert result.success is False
         assert result.output_path is None
         assert "error processing video" in result.error_message
         mock_subprocess.assert_called_once()
-    
+
     def test_transcode_nonexistent_input(self, transcoding_service, temp_dir):
         """Test transcoding with non-existent input file."""
         nonexistent_file = temp_dir / "nonexistent.mov"
         output_file = temp_dir / "output.mp4"
-        
-        result = transcoding_service.transcode_h265_to_h264(str(nonexistent_file), str(output_file))
-        
+
+        result = transcoding_service.transcode_h265_to_h264(
+            str(nonexistent_file), str(output_file)
+        )
+
         assert isinstance(result, TranscodingResult)
         assert result.success is False
-        assert "not found" in result.error_message.lower() or "does not exist" in result.error_message.lower()
-    
-    @patch('src.video.transcoding.VideoFileClip')
-    def test_test_moviepy_h265_compatibility_success(self, mock_videofileclip, transcoding_service, test_helpers, temp_dir):
+        assert (
+            "not found" in result.error_message.lower()
+            or "does not exist" in result.error_message.lower()
+        )
+
+    @patch("src.video.transcoding.VideoFileClip")
+    def test_test_moviepy_h265_compatibility_success(
+        self, mock_videofileclip, transcoding_service, test_helpers, temp_dir
+    ):
         """Test MoviePy H.265 compatibility testing - success case."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "test.mov")
-        
+
         # Mock successful MoviePy loading
         mock_clip = MagicMock()
         mock_clip.duration = 10.5
         mock_videofileclip.return_value = mock_clip
-        
-        is_compatible = transcoding_service.test_moviepy_h265_compatibility(str(video_file))
-        
+
+        is_compatible = transcoding_service.test_moviepy_h265_compatibility(
+            str(video_file)
+        )
+
         assert is_compatible is True
         mock_videofileclip.assert_called_once_with(str(video_file))
         mock_clip.close.assert_called_once()
-    
-    @patch('src.video.transcoding.VideoFileClip')
-    def test_test_moviepy_h265_compatibility_failure(self, mock_videofileclip, transcoding_service, test_helpers, temp_dir):
+
+    @patch("src.video.transcoding.VideoFileClip")
+    def test_test_moviepy_h265_compatibility_failure(
+        self, mock_videofileclip, transcoding_service, test_helpers, temp_dir
+    ):
         """Test MoviePy H.265 compatibility testing - failure case."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "incompatible.mov")
-        
+
         # Mock MoviePy loading failure
         mock_videofileclip.side_effect = Exception("MoviePy parsing error")
-        
-        is_compatible = transcoding_service.test_moviepy_h265_compatibility(str(video_file))
-        
+
+        is_compatible = transcoding_service.test_moviepy_h265_compatibility(
+            str(video_file)
+        )
+
         assert is_compatible is False
         mock_videofileclip.assert_called_once_with(str(video_file))
-    
-    @patch('src.video.transcoding.CodecDetector')
-    def test_preprocess_video_if_needed_h264(self, mock_codec_detector, transcoding_service, test_helpers, temp_dir):
+
+    @patch("src.video.transcoding.CodecDetector")
+    def test_preprocess_video_if_needed_h264(
+        self, mock_codec_detector, transcoding_service, test_helpers, temp_dir
+    ):
         """Test video preprocessing - H.264 file (no processing needed)."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "h264_video.mp4")
-        
+
         # Mock codec detection - H.264 file
         mock_detector = MagicMock()
         mock_detector.detect_codec.return_value = MagicMock(is_hevc=False)
         transcoding_service.codec_detector = mock_detector
-        
+
         result_path = transcoding_service.preprocess_video_if_needed(str(video_file))
-        
+
         assert result_path == str(video_file)  # No transcoding needed
         mock_detector.detect_codec.assert_called_once_with(str(video_file))
-    
-    @patch('src.video.transcoding.CodecDetector')
-    def test_preprocess_video_if_needed_compatible_h265(self, mock_codec_detector, transcoding_service, test_helpers, temp_dir):
+
+    @patch("src.video.transcoding.CodecDetector")
+    def test_preprocess_video_if_needed_compatible_h265(
+        self, mock_codec_detector, transcoding_service, test_helpers, temp_dir
+    ):
         """Test video preprocessing - H.265 file compatible with MoviePy."""
-        video_file = test_helpers.create_mock_video_file(temp_dir, "compatible_h265.mov")
-        
+        video_file = test_helpers.create_mock_video_file(
+            temp_dir, "compatible_h265.mov"
+        )
+
         # Mock codec detection - H.265 file
         mock_detector = MagicMock()
         mock_detector.detect_codec.return_value = MagicMock(is_hevc=True)
         transcoding_service.codec_detector = mock_detector
-        
+
         # Mock MoviePy compatibility test - compatible
-        transcoding_service.test_moviepy_h265_compatibility = MagicMock(return_value=True)
-        
+        transcoding_service.test_moviepy_h265_compatibility = MagicMock(
+            return_value=True
+        )
+
         result_path = transcoding_service.preprocess_video_if_needed(str(video_file))
-        
+
         assert result_path == str(video_file)  # No transcoding needed
         transcoding_service.test_moviepy_h265_compatibility.assert_called_once()
-    
-    @patch('src.video.transcoding.CodecDetector')
-    def test_preprocess_video_if_needed_incompatible_h265(self, mock_codec_detector, transcoding_service, test_helpers, temp_dir):
+
+    @patch("src.video.transcoding.CodecDetector")
+    def test_preprocess_video_if_needed_incompatible_h265(
+        self, mock_codec_detector, transcoding_service, test_helpers, temp_dir
+    ):
         """Test video preprocessing - H.265 file requiring transcoding."""
-        video_file = test_helpers.create_mock_video_file(temp_dir, "incompatible_h265.mov")
-        
+        video_file = test_helpers.create_mock_video_file(
+            temp_dir, "incompatible_h265.mov"
+        )
+
         # Mock codec detection - H.265 file
         mock_detector = MagicMock()
         mock_detector.detect_codec.return_value = MagicMock(is_hevc=True)
         transcoding_service.codec_detector = mock_detector
-        
+
         # Mock MoviePy compatibility test - incompatible
-        transcoding_service.test_moviepy_h265_compatibility = MagicMock(return_value=False)
-        
+        transcoding_service.test_moviepy_h265_compatibility = MagicMock(
+            return_value=False
+        )
+
         # Mock transcoding
         transcoded_path = str(temp_dir / "transcoded.mp4")
         transcoding_service.transcode_h265_to_h264 = MagicMock(
             return_value=TranscodingResult(
-                success=True,
-                output_path=transcoded_path,
-                original_path=str(video_file)
+                success=True, output_path=transcoded_path, original_path=str(video_file)
             )
         )
-        
+
         result_path = transcoding_service.preprocess_video_if_needed(str(video_file))
-        
+
         assert result_path == transcoded_path
         transcoding_service.transcode_h265_to_h264.assert_called_once()
-    
+
     def test_get_output_filename(self, transcoding_service):
         """Test output filename generation."""
         test_cases = [
             ("/path/to/input.mov", "/path/to/input_transcoded.mp4"),
-            ("/path/to/video.MOV", "/path/to/video_transcoded.mp4"), 
+            ("/path/to/video.MOV", "/path/to/video_transcoded.mp4"),
             ("input.hevc", "input_transcoded.mp4"),
-            ("/complex/path/my video.mov", "/complex/path/my video_transcoded.mp4")
+            ("/complex/path/my video.mov", "/complex/path/my video_transcoded.mp4"),
         ]
-        
+
         for input_path, expected_output in test_cases:
             output_path = transcoding_service._get_output_filename(input_path)
             assert output_path == expected_output
-    
+
     def test_build_ffmpeg_command_nvenc(self, transcoding_service):
         """Test FFmpeg command building for NVENC."""
         command = transcoding_service._build_ffmpeg_command(
-            input_path="input.mov",
-            output_path="output.mp4",
-            encoder_type="nvenc"
+            input_path="input.mov", output_path="output.mp4", encoder_type="nvenc"
         )
-        
+
         assert "ffmpeg" in command
         assert "input.mov" in command
         assert "output.mp4" in command
         assert "h264_nvenc" in command
         assert "-profile:v" in command and "main" in command
         assert "-pix_fmt" in command and "yuv420p" in command
-    
+
     def test_build_ffmpeg_command_qsv(self, transcoding_service):
         """Test FFmpeg command building for Intel QSV."""
         command = transcoding_service._build_ffmpeg_command(
-            input_path="input.mov",
-            output_path="output.mp4", 
-            encoder_type="qsv"
+            input_path="input.mov", output_path="output.mp4", encoder_type="qsv"
         )
-        
+
         assert "ffmpeg" in command
         assert "h264_qsv" in command
         assert "-profile:v" in command and "main" in command
         assert "-pix_fmt" in command and "yuv420p" in command
-    
+
     def test_build_ffmpeg_command_cpu(self, transcoding_service):
         """Test FFmpeg command building for CPU encoding."""
         command = transcoding_service._build_ffmpeg_command(
-            input_path="input.mov",
-            output_path="output.mp4",
-            encoder_type="cpu"
+            input_path="input.mov", output_path="output.mp4", encoder_type="cpu"
         )
-        
+
         assert "ffmpeg" in command
         assert "libx264" in command
         assert "-preset" in command and "ultrafast" in command
         assert "-crf" in command and "25" in command
-    
+
     def test_calculate_file_size(self, transcoding_service, test_helpers, temp_dir):
         """Test file size calculation."""
         # Create a file with known size
-        test_file = test_helpers.create_mock_video_file(temp_dir, "test.mp4", size_mb=5.0)
-        
+        test_file = test_helpers.create_mock_video_file(
+            temp_dir, "test.mp4", size_mb=5.0
+        )
+
         file_size_mb = transcoding_service._calculate_file_size_mb(str(test_file))
-        
+
         assert abs(file_size_mb - 5.0) < 0.1  # Should be close to 5 MB
-    
+
     def test_calculate_file_size_nonexistent(self, transcoding_service):
         """Test file size calculation for non-existent file."""
-        file_size_mb = transcoding_service._calculate_file_size_mb("/nonexistent/file.mp4")
-        
+        file_size_mb = transcoding_service._calculate_file_size_mb(
+            "/nonexistent/file.mp4"
+        )
+
         assert file_size_mb == 0.0
-    
+
     def test_clear_cache(self, transcoding_service):
         """Test cache clearing functionality."""
         # Test that clear_cache method exists and runs without error
         transcoding_service.clear_cache()
         # This test mainly ensures the method exists and doesn't crash
         assert True
-    
-    @patch('src.video.transcoding.subprocess.run')
-    def test_transcoding_with_retry_logic(self, mock_subprocess, transcoding_service, test_helpers, temp_dir):
+
+    @patch("src.video.transcoding.subprocess.run")
+    def test_transcoding_with_retry_logic(
+        self, mock_subprocess, transcoding_service, test_helpers, temp_dir
+    ):
         """Test transcoding with retry logic on failure."""
         input_file = test_helpers.create_mock_video_file(temp_dir, "input.mov")
         output_file = temp_dir / "output.mp4"
-        
+
         # Mock first call failure, second call success
         mock_subprocess.side_effect = [
             MagicMock(returncode=1, stderr="Temporary failure"),
-            MagicMock(returncode=0, stderr="")
+            MagicMock(returncode=0, stderr=""),
         ]
-        
+
         # This test assumes retry logic is implemented
         # If not implemented yet, this test can guide implementation
-        result = transcoding_service.transcode_h265_to_h264(str(input_file), str(output_file))
-        
+        result = transcoding_service.transcode_h265_to_h264(
+            str(input_file), str(output_file)
+        )
+
         # Should succeed after retry or fail gracefully
         assert isinstance(result, TranscodingResult)

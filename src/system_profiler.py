@@ -30,6 +30,7 @@ except ImportError:
         # Final fallback - try importing from current directory context
         try:
             import sys
+
             sys.path.append(os.path.dirname(__file__))
             from video.codec_detection import CodecDetector
             from hardware.detection import HardwareDetector
@@ -41,6 +42,7 @@ except ImportError:
 @dataclass
 class SystemCapabilities:
     """Comprehensive system capabilities profile"""
+
     memory_total_gb: float
     memory_available_gb: float
     memory_percent_used: float
@@ -56,9 +58,10 @@ class SystemCapabilities:
     performance_score: float
 
 
-@dataclass 
+@dataclass
 class VideoMemoryProfile:
     """Memory usage profile for video processing"""
+
     estimated_memory_per_video_mb: float
     codec_complexity_factor: float
     resolution_factor: float
@@ -68,15 +71,15 @@ class VideoMemoryProfile:
 
 class SystemProfiler:
     """Comprehensive system profiler for dynamic worker optimization"""
-    
+
     def __init__(self):
         self.codec_detector = CodecDetector() if CodecDetector else None
         self.hardware_detector = HardwareDetector() if HardwareDetector else None
         self._cpu_benchmark_cache = None
-        
+
     def get_system_capabilities(self) -> SystemCapabilities:
         """Get comprehensive system capability analysis"""
-        
+
         # Memory analysis
         if psutil:
             memory = psutil.virtual_memory()
@@ -88,48 +91,51 @@ class SystemProfiler:
             memory_total_gb = 8.0  # Conservative estimate
             memory_available_gb = 4.0
             memory_percent_used = 50.0
-        
+
         # CPU analysis
         if psutil:
             cpu_cores = psutil.cpu_count(logical=False) or 1
             cpu_threads = psutil.cpu_count(logical=True) or 1
             try:
                 cpu_freq = psutil.cpu_freq()
-                cpu_frequency_ghz = cpu_freq.max / 1000.0 if cpu_freq and cpu_freq.max else 2.0
+                cpu_frequency_ghz = (
+                    cpu_freq.max / 1000.0 if cpu_freq and cpu_freq.max else 2.0
+                )
             except:
                 cpu_frequency_ghz = 2.0  # Fallback
         else:
             import multiprocessing
+
             cpu_cores = multiprocessing.cpu_count()
             cpu_threads = cpu_cores
             cpu_frequency_ghz = 2.0  # Fallback estimate
-        
+
         # Platform detection
         platform_name = platform.system()
         architecture = platform.machine().lower()
-        
+
         # Hardware acceleration detection
         has_hw_accel = False
         hw_encoder_type = "CPU"
         if self.hardware_detector:
             try:
-                hw_info = self.hardware_detector.detect_optimal_settings('fast')
-                has_hw_accel = hw_info.get('encoder_type', 'CPU') != 'CPU'
-                hw_encoder_type = hw_info.get('encoder_type', 'CPU')
+                hw_info = self.hardware_detector.detect_optimal_settings("fast")
+                has_hw_accel = hw_info.get("encoder_type", "CPU") != "CPU"
+                hw_encoder_type = hw_info.get("encoder_type", "CPU")
             except:
                 pass
-        
+
         # Apple Silicon detection
-        apple_silicon = (platform_name == 'Darwin' and 
-                        ('arm64' in architecture or 'arm' in architecture))
+        apple_silicon = platform_name == "Darwin" and (
+            "arm64" in architecture or "arm" in architecture
+        )
         unified_memory = apple_silicon  # Apple Silicon has unified memory
-        
+
         # Performance scoring
         performance_score = self._calculate_performance_score(
-            cpu_cores, cpu_frequency_ghz, memory_total_gb, 
-            has_hw_accel, apple_silicon
+            cpu_cores, cpu_frequency_ghz, memory_total_gb, has_hw_accel, apple_silicon
         )
-        
+
         return SystemCapabilities(
             memory_total_gb=memory_total_gb,
             memory_available_gb=memory_available_gb,
@@ -143,33 +149,39 @@ class SystemProfiler:
             hardware_encoder_type=hw_encoder_type,
             apple_silicon=apple_silicon,
             unified_memory=unified_memory,
-            performance_score=performance_score
+            performance_score=performance_score,
         )
-    
-    def _calculate_performance_score(self, cpu_cores: int, cpu_freq: float, 
-                                   memory_gb: float, has_hw_accel: bool, 
-                                   apple_silicon: bool) -> float:
+
+    def _calculate_performance_score(
+        self,
+        cpu_cores: int,
+        cpu_freq: float,
+        memory_gb: float,
+        has_hw_accel: bool,
+        apple_silicon: bool,
+    ) -> float:
         """Calculate overall system performance score (0-100)"""
-        
+
         # Base score from CPU
         cpu_score = min(50, (cpu_cores * cpu_freq * 5))  # Max 50 points
-        
+
         # Memory contribution
         memory_score = min(25, memory_gb * 2)  # Max 25 points
-        
+
         # Hardware acceleration bonus
         hw_accel_bonus = 15 if has_hw_accel else 0
-        
+
         # Apple Silicon bonus (unified memory + efficiency)
         apple_bonus = 10 if apple_silicon else 0
-        
+
         total_score = cpu_score + memory_score + hw_accel_bonus + apple_bonus
         return min(100.0, total_score)
-    
-    def estimate_video_memory_usage(self, video_files: List[str], 
-                                  sample_count: int = 3) -> VideoMemoryProfile:
+
+    def estimate_video_memory_usage(
+        self, video_files: List[str], sample_count: int = 3
+    ) -> VideoMemoryProfile:
         """Estimate memory usage per video based on file analysis"""
-        
+
         if not video_files:
             # Fallback conservative estimate
             return VideoMemoryProfile(
@@ -177,23 +189,23 @@ class SystemProfiler:
                 codec_complexity_factor=1.5,
                 resolution_factor=1.0,
                 file_size_expansion_ratio=4.0,
-                confidence_score=0.1
+                confidence_score=0.1,
             )
-        
+
         # Analyze sample of videos (up to sample_count)
-        sample_files = video_files[:min(sample_count, len(video_files))]
+        sample_files = video_files[: min(sample_count, len(video_files))]
         memory_estimates = []
         codec_factors = []
         resolution_factors = []
         expansion_ratios = []
-        
+
         for video_file in sample_files:
             try:
                 estimate = self._analyze_single_video_memory(video_file)
-                memory_estimates.append(estimate['memory_mb'])
-                codec_factors.append(estimate['codec_factor'])
-                resolution_factors.append(estimate['resolution_factor'])
-                expansion_ratios.append(estimate['expansion_ratio'])
+                memory_estimates.append(estimate["memory_mb"])
+                codec_factors.append(estimate["codec_factor"])
+                resolution_factors.append(estimate["resolution_factor"])
+                expansion_ratios.append(estimate["expansion_ratio"])
             except Exception as e:
                 print(f"   ⚠️  Could not analyze {video_file}: {str(e)}")
                 # Use conservative fallback for failed analysis
@@ -201,98 +213,103 @@ class SystemProfiler:
                 codec_factors.append(1.5)
                 resolution_factors.append(1.2)
                 expansion_ratios.append(4.0)
-        
+
         # Calculate averages
         avg_memory = sum(memory_estimates) / len(memory_estimates)
         avg_codec_factor = sum(codec_factors) / len(codec_factors)
         avg_resolution_factor = sum(resolution_factors) / len(resolution_factors)
         avg_expansion_ratio = sum(expansion_ratios) / len(expansion_ratios)
-        
+
         # Confidence score based on sample size and analysis success
         confidence = min(1.0, len(sample_files) / max(1, sample_count))
-        
+
         return VideoMemoryProfile(
             estimated_memory_per_video_mb=avg_memory,
             codec_complexity_factor=avg_codec_factor,
             resolution_factor=avg_resolution_factor,
             file_size_expansion_ratio=avg_expansion_ratio,
-            confidence_score=confidence
+            confidence_score=confidence,
         )
-    
+
     def _analyze_single_video_memory(self, video_file: str) -> Dict[str, float]:
         """Analyze a single video file for memory estimation"""
-        
+
         # Get file size
         file_size_mb = os.path.getsize(video_file) / (1024 * 1024)
-        
+
         # Codec analysis
         codec_factor = 1.0
         resolution_factor = 1.0
-        
+
         if self.codec_detector:
             try:
                 codec_info = self.codec_detector.detect_video_codec(video_file)
-                
+
                 # Codec complexity adjustment
-                codec = codec_info.get('codec', 'unknown').lower()
-                if 'hevc' in codec or 'h265' in codec:
+                codec = codec_info.get("codec", "unknown").lower()
+                if "hevc" in codec or "h265" in codec:
                     codec_factor = 1.3  # H.265 more CPU/memory intensive
-                elif 'av1' in codec:
+                elif "av1" in codec:
                     codec_factor = 1.5  # AV1 very intensive
                 else:
                     codec_factor = 1.0  # H.264 baseline
-                
+
                 # Resolution adjustment
-                width = codec_info.get('width', 1920)
-                height = codec_info.get('height', 1080)
+                width = codec_info.get("width", 1920)
+                height = codec_info.get("height", 1080)
                 pixels = width * height
-                
+
                 # Resolution factor relative to 1080p
                 baseline_pixels = 1920 * 1080
                 resolution_factor = max(0.5, pixels / baseline_pixels)
-                
+
             except Exception:
                 # Fallback if codec detection fails
                 codec_factor = 1.2  # Conservative estimate
                 resolution_factor = 1.1
-        
+
         # Memory estimation
         base_expansion_factor = 3.5  # Base file size to memory expansion
         total_expansion = base_expansion_factor * codec_factor * resolution_factor
         estimated_memory_mb = file_size_mb * total_expansion
-        
+
         return {
-            'memory_mb': estimated_memory_mb,
-            'codec_factor': codec_factor,
-            'resolution_factor': resolution_factor,
-            'expansion_ratio': total_expansion
+            "memory_mb": estimated_memory_mb,
+            "codec_factor": codec_factor,
+            "resolution_factor": resolution_factor,
+            "expansion_ratio": total_expansion,
         }
-    
-    def calculate_optimal_workers(self, capabilities: SystemCapabilities,
-                                video_profile: VideoMemoryProfile,
-                                video_count: int,
-                                target_memory_usage: float = 0.7) -> Dict[str, Any]:
+
+    def calculate_optimal_workers(
+        self,
+        capabilities: SystemCapabilities,
+        video_profile: VideoMemoryProfile,
+        video_count: int,
+        target_memory_usage: float = 0.7,
+    ) -> Dict[str, Any]:
         """Calculate optimal worker count with detailed reasoning"""
-        
+
         # Memory-based calculation
         usable_memory_gb = capabilities.memory_available_gb * target_memory_usage
         usable_memory_mb = usable_memory_gb * 1024
-        
+
         memory_per_worker_mb = video_profile.estimated_memory_per_video_mb
-        max_workers_memory = int(usable_memory_mb / max(50, memory_per_worker_mb))  # Min 50MB per worker
-        
+        max_workers_memory = int(
+            usable_memory_mb / max(50, memory_per_worker_mb)
+        )  # Min 50MB per worker
+
         # CPU-based calculation
         # Use 75% of CPU cores to leave room for other system processes
         max_workers_cpu = max(1, int(capabilities.cpu_cores * 0.75))
-        
+
         # Hardware acceleration bonus
         hw_multiplier = 1.0
         if capabilities.has_hardware_acceleration:
             hw_multiplier = 1.4  # 40% bonus for hardware acceleration
-        
+
         if capabilities.apple_silicon:
             hw_multiplier *= 1.2  # Additional 20% bonus for Apple Silicon efficiency
-        
+
         # Performance-based adjustment
         if capabilities.performance_score > 80:
             performance_multiplier = 1.3  # High-performance systems can handle more
@@ -300,70 +317,91 @@ class SystemProfiler:
             performance_multiplier = 1.1  # Good systems get slight bonus
         else:
             performance_multiplier = 0.9  # Lower-end systems get reduction
-        
+
         # Calculate final worker count
         base_workers = min(max_workers_memory, max_workers_cpu, video_count)
         adjusted_workers = int(base_workers * hw_multiplier * performance_multiplier)
-        
+
         # Apply safety bounds
         min_workers = 1
-        max_workers_absolute = min(12, capabilities.cpu_cores * 2)  # Never exceed 2x CPU cores or 12
+        max_workers_absolute = min(
+            12, capabilities.cpu_cores * 2
+        )  # Never exceed 2x CPU cores or 12
         optimal_workers = max(min_workers, min(adjusted_workers, max_workers_absolute))
-        
+
         return {
-            'optimal_workers': optimal_workers,
-            'reasoning': {
-                'memory_limited_workers': max_workers_memory,
-                'cpu_limited_workers': max_workers_cpu,
-                'hw_acceleration_bonus': hw_multiplier,
-                'performance_multiplier': performance_multiplier,
-                'memory_per_worker_mb': memory_per_worker_mb,
-                'target_memory_usage_percent': target_memory_usage * 100,
-                'confidence_score': video_profile.confidence_score
-            }
+            "optimal_workers": optimal_workers,
+            "reasoning": {
+                "memory_limited_workers": max_workers_memory,
+                "cpu_limited_workers": max_workers_cpu,
+                "hw_acceleration_bonus": hw_multiplier,
+                "performance_multiplier": performance_multiplier,
+                "memory_per_worker_mb": memory_per_worker_mb,
+                "target_memory_usage_percent": target_memory_usage * 100,
+                "confidence_score": video_profile.confidence_score,
+            },
         }
-    
-    def print_system_analysis(self, capabilities: SystemCapabilities, 
-                            video_profile: VideoMemoryProfile,
-                            worker_analysis: Dict[str, Any]):
+
+    def print_system_analysis(
+        self,
+        capabilities: SystemCapabilities,
+        video_profile: VideoMemoryProfile,
+        worker_analysis: Dict[str, Any],
+    ):
         """Print detailed system analysis for user visibility"""
-        
+
         print("🔍 System Analysis:")
-        print(f"   💾 Memory: {capabilities.memory_available_gb:.1f}GB available / {capabilities.memory_total_gb:.1f}GB total ({capabilities.memory_percent_used:.1f}% used)")
-        print(f"   🖥️  CPU: {capabilities.cpu_cores} cores @ {capabilities.cpu_frequency_ghz:.1f}GHz ({capabilities.platform} {capabilities.architecture})")
-        
+        print(
+            f"   💾 Memory: {capabilities.memory_available_gb:.1f}GB available / {capabilities.memory_total_gb:.1f}GB total ({capabilities.memory_percent_used:.1f}% used)"
+        )
+        print(
+            f"   🖥️  CPU: {capabilities.cpu_cores} cores @ {capabilities.cpu_frequency_ghz:.1f}GHz ({capabilities.platform} {capabilities.architecture})"
+        )
+
         if capabilities.has_hardware_acceleration:
-            print(f"   ⚡ Hardware Acceleration: ✅ {capabilities.hardware_encoder_type}")
+            print(
+                f"   ⚡ Hardware Acceleration: ✅ {capabilities.hardware_encoder_type}"
+            )
         else:
             print(f"   ⚡ Hardware Acceleration: ❌ CPU only")
-        
+
         if capabilities.apple_silicon:
             print("   🍎 Apple Silicon: ✅ Unified memory architecture")
-        
+
         print(f"   📊 Performance Score: {capabilities.performance_score:.1f}/100")
-        
+
         print("\n🎬 Video Analysis:")
-        print(f"   📹 Estimated memory per video: {video_profile.estimated_memory_per_video_mb:.0f}MB")
-        print(f"   🧮 Codec complexity factor: {video_profile.codec_complexity_factor:.1f}x")
+        print(
+            f"   📹 Estimated memory per video: {video_profile.estimated_memory_per_video_mb:.0f}MB"
+        )
+        print(
+            f"   🧮 Codec complexity factor: {video_profile.codec_complexity_factor:.1f}x"
+        )
         print(f"   📐 Resolution factor: {video_profile.resolution_factor:.1f}x")
         print(f"   📈 Analysis confidence: {video_profile.confidence_score:.1f}/1.0")
-        
-        reasoning = worker_analysis['reasoning']
+
+        reasoning = worker_analysis["reasoning"]
         print(f"\n⚙️  Worker Calculation:")
         print(f"   📊 Memory allows: {reasoning['memory_limited_workers']} workers")
         print(f"   🖥️  CPU allows: {reasoning['cpu_limited_workers']} workers")
         print(f"   ⚡ HW acceleration bonus: {reasoning['hw_acceleration_bonus']:.1f}x")
         print(f"   🚀 Performance bonus: {reasoning['performance_multiplier']:.1f}x")
         print(f"   ✅ Optimal workers: {worker_analysis['optimal_workers']}")
-        
+
         # Memory usage prediction
-        predicted_memory_mb = worker_analysis['optimal_workers'] * reasoning['memory_per_worker_mb']
+        predicted_memory_mb = (
+            worker_analysis["optimal_workers"] * reasoning["memory_per_worker_mb"]
+        )
         predicted_memory_gb = predicted_memory_mb / 1024
-        memory_usage_percent = (predicted_memory_gb / capabilities.memory_available_gb) * 100
-        
+        memory_usage_percent = (
+            predicted_memory_gb / capabilities.memory_available_gb
+        ) * 100
+
         print(f"\n🧠 Predicted Memory Usage:")
-        print(f"   📈 Expected usage: {predicted_memory_gb:.1f}GB ({memory_usage_percent:.1f}% of available)")
-        
+        print(
+            f"   📈 Expected usage: {predicted_memory_gb:.1f}GB ({memory_usage_percent:.1f}% of available)"
+        )
+
         if memory_usage_percent > 80:
             print("   ⚠️  HIGH: May cause system slowdown")
         elif memory_usage_percent > 60:

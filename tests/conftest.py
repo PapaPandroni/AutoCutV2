@@ -14,7 +14,7 @@ from typing import Dict, Any, List
 import pytest
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Import core modules
 from src.video.validation import VideoValidator, ValidationResult
@@ -29,31 +29,31 @@ def test_media_dir() -> Path:
     return Path(__file__).parent.parent / "test_media"
 
 
-@pytest.fixture(scope="session") 
+@pytest.fixture(scope="session")
 def sample_video_files(test_media_dir: Path) -> List[Path]:
     """List of available sample video files."""
-    video_extensions = ['.mov', '.mp4', '.avi', '.mkv']
+    video_extensions = [".mov", ".mp4", ".avi", ".mkv"]
     video_files = []
-    
+
     if test_media_dir.exists():
         for ext in video_extensions:
             video_files.extend(list(test_media_dir.glob(f"*{ext}")))
             video_files.extend(list(test_media_dir.glob(f"*{ext.upper()}")))
-    
+
     return sorted(video_files)
 
 
 @pytest.fixture(scope="session")
 def sample_audio_files(test_media_dir: Path) -> List[Path]:
     """List of available sample audio files."""
-    audio_extensions = ['.mp3', '.wav', '.m4a', '.flac']
+    audio_extensions = [".mp3", ".wav", ".m4a", ".flac"]
     audio_files = []
-    
+
     if test_media_dir.exists():
         for ext in audio_extensions:
             audio_files.extend(list(test_media_dir.glob(f"*{ext}")))
             audio_files.extend(list(test_media_dir.glob(f"*{ext.upper()}")))
-    
+
     return sorted(audio_files)
 
 
@@ -93,22 +93,22 @@ def transcoding_service() -> TranscodingService:
 def mock_ffprobe_output() -> Dict[str, Any]:
     """Mock FFprobe output for testing."""
     return {
-        'streams': [
+        "streams": [
             {
-                'codec_name': 'hevc',
-                'codec_long_name': 'H.265 / HEVC (High Efficiency Video Coding)',
-                'width': 1920,
-                'height': 1080,
-                'r_frame_rate': '24/1',
-                'duration': '10.5'
+                "codec_name": "hevc",
+                "codec_long_name": "H.265 / HEVC (High Efficiency Video Coding)",
+                "width": 1920,
+                "height": 1080,
+                "r_frame_rate": "24/1",
+                "duration": "10.5",
             }
         ],
-        'format': {
-            'filename': 'test_video.mov',
-            'format_name': 'mov,mp4,m4a,3gp,3g2,mj2',
-            'duration': '10.5',
-            'size': '5242880'
-        }
+        "format": {
+            "filename": "test_video.mov",
+            "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+            "duration": "10.5",
+            "size": "5242880",
+        },
     }
 
 
@@ -118,14 +118,10 @@ def mock_validation_result() -> ValidationResult:
     return ValidationResult(
         is_valid=True,
         validation_type="basic",
-        details={
-            'file_exists': True,
-            'readable': True,
-            'codec_supported': True
-        },
+        details={"file_exists": True, "readable": True, "codec_supported": True},
         warnings=[],
         errors=[],
-        suggestions=[]
+        suggestions=[],
     )
 
 
@@ -133,18 +129,18 @@ def mock_validation_result() -> ValidationResult:
 def iphone_h265_file_path(test_media_dir: Path) -> Path:
     """Path to iPhone H.265 test file (if available)."""
     # Look for typical iPhone naming patterns
-    iphone_patterns = ['IMG_*.mov', 'IMG_*.MOV', '*iphone*.mov', '*iPhone*.mov']
-    
+    iphone_patterns = ["IMG_*.mov", "IMG_*.MOV", "*iphone*.mov", "*iPhone*.mov"]
+
     for pattern in iphone_patterns:
         files = list(test_media_dir.glob(pattern))
         if files:
             return files[0]
-    
+
     # Return first .mov file as fallback
-    mov_files = list(test_media_dir.glob('*.mov')) + list(test_media_dir.glob('*.MOV'))
+    mov_files = list(test_media_dir.glob("*.mov")) + list(test_media_dir.glob("*.MOV"))
     if mov_files:
         return mov_files[0]
-    
+
     # Create a dummy path if no test files available
     return test_media_dir / "test_iphone.mov"
 
@@ -153,34 +149,38 @@ def iphone_h265_file_path(test_media_dir: Path) -> Path:
 def reset_caches():
     """Reset all caches before each test to ensure clean state."""
     # Clear any module-level caches
-    if hasattr(CodecDetector, '_cache'):
+    if hasattr(CodecDetector, "_cache"):
         CodecDetector._cache.clear()
-    if hasattr(HardwareDetector, '_cache'):
+    if hasattr(HardwareDetector, "_cache"):
         HardwareDetector._cache.clear()
-    if hasattr(TranscodingService, '_cache'):
+    if hasattr(TranscodingService, "_cache"):
         TranscodingService._cache.clear()
 
 
 # Test utilities
 class TestHelpers:
     """Helper functions for testing."""
-    
+
     @staticmethod
-    def create_mock_video_file(temp_dir: Path, filename: str = "test.mp4", size_mb: float = 1.0) -> Path:
+    def create_mock_video_file(
+        temp_dir: Path, filename: str = "test.mp4", size_mb: float = 1.0
+    ) -> Path:
         """Create a mock video file for testing."""
         file_path = temp_dir / filename
         # Create a dummy file with specified size
-        with open(file_path, 'wb') as f:
-            f.write(b'0' * int(size_mb * 1024 * 1024))
+        with open(file_path, "wb") as f:
+            f.write(b"0" * int(size_mb * 1024 * 1024))
         return file_path
-    
+
     @staticmethod
-    def create_mock_audio_file(temp_dir: Path, filename: str = "test.mp3", size_mb: float = 0.5) -> Path:
+    def create_mock_audio_file(
+        temp_dir: Path, filename: str = "test.mp3", size_mb: float = 0.5
+    ) -> Path:
         """Create a mock audio file for testing."""
-        file_path = temp_dir / filename  
+        file_path = temp_dir / filename
         # Create a dummy file with specified size
-        with open(file_path, 'wb') as f:
-            f.write(b'0' * int(size_mb * 1024 * 1024))
+        with open(file_path, "wb") as f:
+            f.write(b"0" * int(size_mb * 1024 * 1024))
         return file_path
 
 
@@ -195,8 +195,8 @@ def skip_if_no_gpu():
     """Skip test if no GPU hardware available."""
     detector = HardwareDetector()
     # Use actual method from the implemented HardwareDetector
-    optimal_settings = detector.detect_optimal_settings('fast')
-    if optimal_settings.get('encoder_type', '').startswith('CPU'):
+    optimal_settings = detector.detect_optimal_settings("fast")
+    if optimal_settings.get("encoder_type", "").startswith("CPU"):
         pytest.skip("GPU hardware not available")
 
 
@@ -212,17 +212,17 @@ def _has_gpu():
     """Check if GPU hardware is available."""
     try:
         detector = HardwareDetector()
-        optimal_settings = detector.detect_optimal_settings('fast')
-        return not optimal_settings.get('encoder_type', '').startswith('CPU')
+        optimal_settings = detector.detect_optimal_settings("fast")
+        return not optimal_settings.get("encoder_type", "").startswith("CPU")
     except:
         return False
 
+
 pytest.mark.gpu = pytest.mark.skipif(
-    not _has_gpu(), 
-    reason="GPU hardware not available"
+    not _has_gpu(), reason="GPU hardware not available"
 )
 
 pytest.mark.media_required = pytest.mark.skipif(
     not (Path(__file__).parent.parent / "test_media").exists(),
-    reason="Test media directory not available"
+    reason="Test media directory not available",
 )

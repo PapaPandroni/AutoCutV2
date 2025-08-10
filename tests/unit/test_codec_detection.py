@@ -14,34 +14,34 @@ from src.video.codec_detection import CodecDetector, CodecInfo
 
 class TestCodecInfo:
     """Test CodecInfo dataclass functionality."""
-    
+
     def test_codec_info_creation(self):
         """Test creating a CodecInfo instance."""
         info = CodecInfo(
-            codec='hevc',
+            codec="hevc",
             is_hevc=True,
-            profile='Main 10',
-            level='4.0',
-            bit_depth='10',
-            resolution='1920x1080',
-            fps='24.0',
-            duration='10.5'
+            profile="Main 10",
+            level="4.0",
+            bit_depth="10",
+            resolution="1920x1080",
+            fps="24.0",
+            duration="10.5",
         )
-        
-        assert info.codec == 'hevc'
+
+        assert info.codec == "hevc"
         assert info.is_hevc is True
-        assert info.profile == 'Main 10'
-        assert info.level == '4.0'
-        assert info.bit_depth == '10'
-        assert info.resolution == '1920x1080'
-        assert info.fps == '24.0'
-        assert info.duration == '10.5'
-    
+        assert info.profile == "Main 10"
+        assert info.level == "4.0"
+        assert info.bit_depth == "10"
+        assert info.resolution == "1920x1080"
+        assert info.fps == "24.0"
+        assert info.duration == "10.5"
+
     def test_codec_info_defaults(self):
         """Test CodecInfo with minimal parameters."""
-        info = CodecInfo(codec='h264', is_hevc=False)
-        
-        assert info.codec == 'h264'
+        info = CodecInfo(codec="h264", is_hevc=False)
+
+        assert info.codec == "h264"
         assert info.is_hevc is False
         assert info.profile is None
         assert info.level is None
@@ -49,21 +49,21 @@ class TestCodecInfo:
         assert info.resolution is None
         assert info.fps is None
         assert info.duration is None
-    
+
     def test_is_h264_property(self):
         """Test is_h264 property."""
-        h264_info = CodecInfo(codec='h264', is_hevc=False)
-        hevc_info = CodecInfo(codec='hevc', is_hevc=True)
-        
+        h264_info = CodecInfo(codec="h264", is_hevc=False)
+        hevc_info = CodecInfo(codec="hevc", is_hevc=True)
+
         assert h264_info.is_h264 is True
         assert hevc_info.is_h264 is False
-    
+
     def test_is_10_bit_property(self):
         """Test is_10_bit property."""
-        info_10bit = CodecInfo(codec='hevc', is_hevc=True, bit_depth='10')
-        info_8bit = CodecInfo(codec='h264', is_hevc=False, bit_depth='8')
-        info_unknown = CodecInfo(codec='h264', is_hevc=False)
-        
+        info_10bit = CodecInfo(codec="hevc", is_hevc=True, bit_depth="10")
+        info_8bit = CodecInfo(codec="h264", is_hevc=False, bit_depth="8")
+        info_unknown = CodecInfo(codec="h264", is_hevc=False)
+
         assert info_10bit.is_10_bit is True
         assert info_8bit.is_10_bit is False
         assert info_unknown.is_10_bit is False
@@ -71,19 +71,21 @@ class TestCodecInfo:
 
 class TestCodecDetector:
     """Test CodecDetector class functionality."""
-    
+
     def test_detector_initialization(self, codec_detector):
         """Test CodecDetector initialization."""
         assert isinstance(codec_detector, CodecDetector)
-        assert hasattr(codec_detector, 'detect_codec')
-        assert hasattr(codec_detector, 'is_h265_compatible')
-        assert hasattr(codec_detector, 'get_codec_info')
-    
-    @patch('src.video.codec_detection.subprocess.run')
-    def test_detect_h264_codec(self, mock_subprocess, codec_detector, test_helpers, temp_dir):
+        assert hasattr(codec_detector, "detect_codec")
+        assert hasattr(codec_detector, "is_h265_compatible")
+        assert hasattr(codec_detector, "get_codec_info")
+
+    @patch("src.video.codec_detection.subprocess.run")
+    def test_detect_h264_codec(
+        self, mock_subprocess, codec_detector, test_helpers, temp_dir
+    ):
         """Test detection of H.264 codec."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "h264_video.mp4")
-        
+
         # Mock ffprobe output for H.264
         mock_output = {
             "streams": [
@@ -95,35 +97,34 @@ class TestCodecDetector:
                     "width": 1920,
                     "height": 1080,
                     "r_frame_rate": "30/1",
-                    "bit_depth": 8
+                    "bit_depth": 8,
                 }
             ],
-            "format": {
-                "duration": "120.5"
-            }
+            "format": {"duration": "120.5"},
         }
-        
+
         mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(mock_output)
+            returncode=0, stdout=json.dumps(mock_output)
         )
-        
+
         result = codec_detector.detect_codec(str(video_file))
-        
+
         assert isinstance(result, CodecInfo)
-        assert result.codec == 'h264'
+        assert result.codec == "h264"
         assert result.is_hevc is False
         assert result.is_h264 is True
-        assert result.profile == 'High'
-        assert result.resolution == '1920x1080'
-        assert result.fps == '30.0'
+        assert result.profile == "High"
+        assert result.resolution == "1920x1080"
+        assert result.fps == "30.0"
         mock_subprocess.assert_called_once()
-    
-    @patch('src.video.codec_detection.subprocess.run')
-    def test_detect_hevc_codec(self, mock_subprocess, codec_detector, test_helpers, temp_dir):
+
+    @patch("src.video.codec_detection.subprocess.run")
+    def test_detect_hevc_codec(
+        self, mock_subprocess, codec_detector, test_helpers, temp_dir
+    ):
         """Test detection of H.265/HEVC codec."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "hevc_video.mov")
-        
+
         # Mock ffprobe output for H.265
         mock_output = {
             "streams": [
@@ -136,147 +137,151 @@ class TestCodecDetector:
                     "height": 2160,
                     "r_frame_rate": "24/1",
                     "bit_depth": 10,
-                    "pix_fmt": "yuv420p10le"
+                    "pix_fmt": "yuv420p10le",
                 }
             ],
-            "format": {
-                "duration": "60.0"
-            }
+            "format": {"duration": "60.0"},
         }
-        
+
         mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(mock_output)
+            returncode=0, stdout=json.dumps(mock_output)
         )
-        
+
         result = codec_detector.detect_codec(str(video_file))
-        
+
         assert isinstance(result, CodecInfo)
-        assert result.codec == 'hevc'
+        assert result.codec == "hevc"
         assert result.is_hevc is True
         assert result.is_h264 is False
-        assert result.profile == 'Main 10'
-        assert result.bit_depth == '10'
+        assert result.profile == "Main 10"
+        assert result.bit_depth == "10"
         assert result.is_10_bit is True
-        assert result.resolution == '3840x2160'
-        assert result.fps == '24.0'
+        assert result.resolution == "3840x2160"
+        assert result.fps == "24.0"
         mock_subprocess.assert_called_once()
-    
-    @patch('src.video.codec_detection.subprocess.run')
-    def test_detect_codec_ffprobe_error(self, mock_subprocess, codec_detector, test_helpers, temp_dir):
+
+    @patch("src.video.codec_detection.subprocess.run")
+    def test_detect_codec_ffprobe_error(
+        self, mock_subprocess, codec_detector, test_helpers, temp_dir
+    ):
         """Test codec detection when ffprobe fails."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "corrupted.mp4")
-        
+
         # Mock ffprobe failure
         mock_subprocess.return_value = MagicMock(
-            returncode=1,
-            stdout="",
-            stderr="ffprobe: error reading file"
+            returncode=1, stdout="", stderr="ffprobe: error reading file"
         )
-        
+
         result = codec_detector.detect_codec(str(video_file))
-        
+
         assert isinstance(result, CodecInfo)
-        assert result.codec == 'unknown'
+        assert result.codec == "unknown"
         assert result.is_hevc is False
         mock_subprocess.assert_called_once()
-    
-    @patch('src.video.codec_detection.subprocess.run')
-    def test_detect_codec_invalid_json(self, mock_subprocess, codec_detector, test_helpers, temp_dir):
+
+    @patch("src.video.codec_detection.subprocess.run")
+    def test_detect_codec_invalid_json(
+        self, mock_subprocess, codec_detector, test_helpers, temp_dir
+    ):
         """Test codec detection with invalid JSON output."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "test.mp4")
-        
+
         # Mock invalid JSON output
         mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout="invalid json output"
+            returncode=0, stdout="invalid json output"
         )
-        
+
         result = codec_detector.detect_codec(str(video_file))
-        
+
         assert isinstance(result, CodecInfo)
-        assert result.codec == 'unknown'
+        assert result.codec == "unknown"
         assert result.is_hevc is False
-    
+
     def test_nonexistent_file(self, codec_detector):
         """Test codec detection for non-existent file."""
         result = codec_detector.detect_codec("/nonexistent/file.mp4")
-        
+
         assert isinstance(result, CodecInfo)
-        assert result.codec == 'unknown'
+        assert result.codec == "unknown"
         assert result.is_hevc is False
-    
-    @patch('src.video.codec_detection.subprocess.run')
-    def test_is_h265_compatible(self, mock_subprocess, codec_detector, test_helpers, temp_dir):
+
+    @patch("src.video.codec_detection.subprocess.run")
+    def test_is_h265_compatible(
+        self, mock_subprocess, codec_detector, test_helpers, temp_dir
+    ):
         """Test H.265 compatibility checking."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "test.mov")
-        
+
         # Mock H.265 file
         mock_output = {
             "streams": [{"codec_name": "hevc", "profile": "Main"}],
-            "format": {"duration": "10.0"}
+            "format": {"duration": "10.0"},
         }
         mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(mock_output)
+            returncode=0, stdout=json.dumps(mock_output)
         )
-        
+
         is_compatible = codec_detector.is_h265_compatible(str(video_file))
-        
+
         assert is_compatible is True
         mock_subprocess.assert_called_once()
-    
-    @patch('src.video.codec_detection.subprocess.run')
-    def test_is_not_h265_compatible(self, mock_subprocess, codec_detector, test_helpers, temp_dir):
+
+    @patch("src.video.codec_detection.subprocess.run")
+    def test_is_not_h265_compatible(
+        self, mock_subprocess, codec_detector, test_helpers, temp_dir
+    ):
         """Test H.265 incompatibility checking."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "test.mp4")
-        
+
         # Mock H.264 file
         mock_output = {
             "streams": [{"codec_name": "h264", "profile": "High"}],
-            "format": {"duration": "10.0"}
+            "format": {"duration": "10.0"},
         }
         mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(mock_output)
+            returncode=0, stdout=json.dumps(mock_output)
         )
-        
+
         is_compatible = codec_detector.is_h265_compatible(str(video_file))
-        
+
         assert is_compatible is False
         mock_subprocess.assert_called_once()
-    
-    @patch('src.video.codec_detection.CodecDetector.detect_codec')
-    def test_get_codec_info_with_caching(self, mock_detect, codec_detector, test_helpers, temp_dir):
+
+    @patch("src.video.codec_detection.CodecDetector.detect_codec")
+    def test_get_codec_info_with_caching(
+        self, mock_detect, codec_detector, test_helpers, temp_dir
+    ):
         """Test codec info retrieval with caching."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "test.mp4")
-        
+
         # Mock codec info
-        mock_codec_info = CodecInfo(codec='h264', is_hevc=False)
+        mock_codec_info = CodecInfo(codec="h264", is_hevc=False)
         mock_detect.return_value = mock_codec_info
-        
+
         # First call
         result1 = codec_detector.get_codec_info(str(video_file))
         # Second call (should use cache)
         result2 = codec_detector.get_codec_info(str(video_file))
-        
+
         assert result1 == mock_codec_info
         assert result2 == mock_codec_info
         # Should only call detect_codec once due to caching
         assert mock_detect.call_count == 1
-    
+
     def test_clear_cache(self, codec_detector):
         """Test cache clearing functionality."""
         # Test that clear_cache method exists and runs without error
         codec_detector.clear_cache()
         # This test mainly ensures the method exists and doesn't crash
         assert True
-    
-    @patch('src.video.codec_detection.subprocess.run')
-    def test_codec_detection_edge_cases(self, mock_subprocess, codec_detector, test_helpers, temp_dir):
+
+    @patch("src.video.codec_detection.subprocess.run")
+    def test_codec_detection_edge_cases(
+        self, mock_subprocess, codec_detector, test_helpers, temp_dir
+    ):
         """Test codec detection edge cases."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "edge_case.mkv")
-        
+
         # Mock output with missing fields
         mock_output = {
             "streams": [
@@ -285,23 +290,22 @@ class TestCodecDetector:
                     # Missing other fields
                 }
             ],
-            "format": {}
+            "format": {},
         }
-        
+
         mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(mock_output)
+            returncode=0, stdout=json.dumps(mock_output)
         )
-        
+
         result = codec_detector.detect_codec(str(video_file))
-        
+
         assert isinstance(result, CodecInfo)
-        assert result.codec == 'hevc'
+        assert result.codec == "hevc"
         assert result.is_hevc is True
         # Should handle missing fields gracefully
-        assert result.profile is None or result.profile == 'unknown'
-        assert result.resolution is None or result.resolution == 'unknown'
-    
+        assert result.profile is None or result.profile == "unknown"
+        assert result.resolution is None or result.resolution == "unknown"
+
     def test_fps_parsing(self, codec_detector):
         """Test FPS parsing from various r_frame_rate formats."""
         # Test common FPS formats
@@ -310,22 +314,22 @@ class TestCodecDetector:
             ("24000/1001", "23.976"),
             ("25/1", "25.0"),
             ("60/1", "60.0"),
-            ("invalid", None)
+            ("invalid", None),
         ]
-        
+
         for input_fps, expected_fps in test_cases:
             parsed_fps = codec_detector._parse_fps(input_fps)
             if expected_fps is None:
-                assert parsed_fps is None or parsed_fps == 'unknown'
+                assert parsed_fps is None or parsed_fps == "unknown"
             else:
                 assert abs(float(parsed_fps) - float(expected_fps)) < 0.1
-    
+
     def test_resolution_parsing(self, codec_detector):
         """Test resolution parsing."""
         # Test resolution creation
         resolution = codec_detector._create_resolution(1920, 1080)
         assert resolution == "1920x1080"
-        
+
         # Test with None values
         resolution_none = codec_detector._create_resolution(None, None)
-        assert resolution_none is None or resolution_none == 'unknown'
+        assert resolution_none is None or resolution_none == "unknown"

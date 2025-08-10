@@ -22,14 +22,14 @@ from .video.transcoding import (
     transcode_hevc_to_h264,
     preprocess_video_if_needed,
     test_moviepy_h265_compatibility,
-    TranscodingService
+    TranscodingService,
 )
 
 # Hardware detection
 from .hardware.detection import (
     detect_optimal_codec_settings,
     detect_optimal_codec_settings_enhanced,
-    HardwareDetector
+    HardwareDetector,
 )
 
 # Core utilities
@@ -38,7 +38,7 @@ from .core.exceptions import (
     VideoProcessingError,
     iPhoneCompatibilityError,
     ValidationError,
-    TranscodingError
+    TranscodingError,
 )
 
 # Legacy utils functions that are still needed
@@ -52,49 +52,45 @@ from .utils import (
     format_duration,
     get_file_size_mb,
     safe_filename,
-    ensure_output_directory
+    ensure_output_directory,
 )
 
 # Expose key classes and functions at package level for easy access
 __all__ = [
     # Core functions
-    'analyze_audio',
-    'analyze_video_file', 
-    'assemble_clips',
-    'render_video',
-    'gui_main',
-    
+    "analyze_audio",
+    "analyze_video_file",
+    "assemble_clips",
+    "render_video",
+    "gui_main",
     # Video processing
-    'VideoValidator',
-    'ValidationResult',
-    'CodecDetector',
-    'detect_video_codec',
-    'TranscodingService',
-    'transcode_hevc_to_h264',
-    'preprocess_video_if_needed',
-    'test_moviepy_h265_compatibility',
-    
+    "VideoValidator",
+    "ValidationResult",
+    "CodecDetector",
+    "detect_video_codec",
+    "TranscodingService",
+    "transcode_hevc_to_h264",
+    "preprocess_video_if_needed",
+    "test_moviepy_h265_compatibility",
     # Hardware detection
-    'HardwareDetector',
-    'detect_optimal_codec_settings',
-    'detect_optimal_codec_settings_enhanced',
-    
+    "HardwareDetector",
+    "detect_optimal_codec_settings",
+    "detect_optimal_codec_settings_enhanced",
     # Exceptions
-    'AutoCutError',
-    'VideoProcessingError',
-    'iPhoneCompatibilityError', 
-    'ValidationError',
-    'TranscodingError',
-    
+    "AutoCutError",
+    "VideoProcessingError",
+    "iPhoneCompatibilityError",
+    "ValidationError",
+    "TranscodingError",
     # Legacy utilities
-    'SUPPORTED_VIDEO_FORMATS',
-    'SUPPORTED_AUDIO_FORMATS',
-    'validate_video_file',
-    'validate_audio_file',
-    'validate_input_files',
-    'setup_logging',
-    'format_duration',
-    'get_file_size_mb',
-    'safe_filename',
-    'ensure_output_directory'
+    "SUPPORTED_VIDEO_FORMATS",
+    "SUPPORTED_AUDIO_FORMATS",
+    "validate_video_file",
+    "validate_audio_file",
+    "validate_input_files",
+    "setup_logging",
+    "format_duration",
+    "get_file_size_mb",
+    "safe_filename",
+    "ensure_output_directory",
 ]

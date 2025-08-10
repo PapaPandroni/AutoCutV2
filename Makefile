@@ -18,7 +18,7 @@ BLUE = \033[0;34m
 BOLD = \033[1m
 NC = \033[0m # No Color
 
-.PHONY: help setup test test-unit test-integration test-performance clean lint format install deps demo
+.PHONY: help setup test test-unit test-integration test-performance clean lint format install deps demo quality type-check security validate pre-commit setup-hooks
 
 # Default target
 help: ## Show this help message
@@ -26,20 +26,37 @@ help: ## Show this help message
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "$(BLUE)%-20s$(NC) %s\n", $$1, $$2}'
 
-setup: ## Set up development environment
+setup: ## Set up complete development environment
 	@echo "$(YELLOW)Setting up development environment...$(NC)"
 	python3 -m venv env
 	$(VENV_ACTIVATE) && pip install --upgrade pip
-	$(VENV_ACTIVATE) && pip install -r requirements.txt
-	@echo "$(GREEN)Development environment ready!$(NC)"
+	$(VENV_ACTIVATE) && pip install -e ".[dev]"
+	@$(MAKE) setup-hooks
+	@echo "$(GREEN)$(BOLD)Development environment ready!$(NC)"
 	@echo "$(YELLOW)Activate with: source env/bin/activate$(NC)"
+	@echo "$(BLUE)Run 'make validate' to check everything is working$(NC)"
 
 install: deps ## Install dependencies (alias for deps)
 
-deps: ## Install/update dependencies
-	@echo "$(YELLOW)Installing dependencies...$(NC)"
-	$(VENV_ACTIVATE) && pip install -r requirements.txt
-	@echo "$(GREEN)Dependencies installed!$(NC)"
+deps: ## Install production dependencies only
+	@echo "$(YELLOW)Installing production dependencies...$(NC)"
+	$(VENV_ACTIVATE) && pip install -e .
+	@echo "$(GREEN)Production dependencies installed!$(NC)"
+
+deps-dev: ## Install development dependencies
+	@echo "$(YELLOW)Installing development dependencies...$(NC)"
+	$(VENV_ACTIVATE) && pip install -e ".[dev]"
+	@echo "$(GREEN)Development dependencies installed!$(NC)"
+
+deps-test: ## Install test dependencies only
+	@echo "$(YELLOW)Installing test dependencies...$(NC)"
+	$(VENV_ACTIVATE) && pip install -e ".[test]"
+	@echo "$(GREEN)Test dependencies installed!$(NC)"
+
+upgrade-deps: ## Upgrade all development dependencies
+	@echo "$(YELLOW)Upgrading development dependencies...$(NC)"
+	$(VENV_ACTIVATE) && pip install --upgrade ruff mypy bandit pytest pytest-cov pre-commit
+	@echo "$(GREEN)Dependencies upgraded!$(NC)"
 
 # Testing commands
 test: ## Run all tests
@@ -122,23 +139,74 @@ cli-process-help: ## Show help for process command
 	@echo "$(YELLOW)AutoCut Process Command Help:$(NC)"
 	$(VENV_ACTIVATE) && $(PYTHON) autocut.py process --help
 
-# Development commands
-lint: ## Run linting (when available)
-	@echo "$(YELLOW)Running code linting...$(NC)"
-	@echo "$(BLUE)Linting setup not yet implemented$(NC)"
+# Code Quality Commands
+lint: ## Run Ruff linter with auto-fixes
+	@echo "$(YELLOW)Running Ruff linter...$(NC)"
+	$(VENV_ACTIVATE) && ruff check --fix .
+	@echo "$(GREEN)Linting completed!$(NC)"
 
-format: ## Format code (when available) 
-	@echo "$(YELLOW)Formatting code...$(NC)"
-	@echo "$(BLUE)Code formatting setup not yet implemented$(NC)"
+lint-check: ## Run Ruff linter without fixes (CI mode)
+	@echo "$(YELLOW)Running Ruff linter (check only)...$(NC)"
+	$(VENV_ACTIVATE) && ruff check .
+
+format: ## Run Ruff formatter
+	@echo "$(YELLOW)Running Ruff formatter...$(NC)"
+	$(VENV_ACTIVATE) && ruff format .
+	@echo "$(GREEN)Code formatting completed!$(NC)"
+
+type-check: ## Run MyPy static type checking
+	@echo "$(YELLOW)Running MyPy type checking...$(NC)"
+	$(VENV_ACTIVATE) && mypy src/ autocut.py
+	@echo "$(GREEN)Type checking completed!$(NC)"
+
+security: ## Run Bandit security scanner
+	@echo "$(YELLOW)Running Bandit security scanner...$(NC)"
+	$(VENV_ACTIVATE) && bandit -c pyproject.toml -r .
+	@echo "$(GREEN)Security scan completed!$(NC)"
+
+quality: lint format type-check security ## Run all code quality checks
+	@echo "$(GREEN)$(BOLD)✓ All code quality checks passed!$(NC)"
+
+# Pre-commit and Git Integration
+setup-hooks: ## Set up pre-commit hooks
+	@echo "$(YELLOW)Setting up pre-commit hooks...$(NC)"
+	$(VENV_ACTIVATE) && pre-commit install
+	$(VENV_ACTIVATE) && pre-commit install --hook-type commit-msg
+	$(VENV_ACTIVATE) && pre-commit install --hook-type pre-push
+	@echo "$(GREEN)Pre-commit hooks installed!$(NC)"
+
+pre-commit: ## Run pre-commit hooks manually
+	@echo "$(YELLOW)Running pre-commit hooks...$(NC)"
+	$(VENV_ACTIVATE) && pre-commit run --all-files
+
+validate: ## Validate all code (lint, type-check, security, test)
+	@echo "$(BOLD)$(YELLOW)Running comprehensive validation...$(NC)"
+	@echo "$(BLUE)1/4 Linting...$(NC)"
+	@$(MAKE) lint-check
+	@echo "$(BLUE)2/4 Type checking...$(NC)"
+	@$(MAKE) type-check  
+	@echo "$(BLUE)3/4 Security scanning...$(NC)"
+	@$(MAKE) security
+	@echo "$(BLUE)4/4 Testing...$(NC)"
+	@$(MAKE) test-quick
+	@echo "$(GREEN)$(BOLD)✅ All validation checks passed!$(NC)"
 
 # Cleanup commands
-clean: ## Clean up generated files
-	@echo "$(YELLOW)Cleaning up...$(NC)"
+clean: ## Clean up generated files and caches
+	@echo "$(YELLOW)Cleaning up generated files and caches...$(NC)"
 	find . -type f -name "*.pyc" -delete
 	find . -type d -name "__pycache__" -delete
 	rm -rf .pytest_cache/
+	rm -rf .mypy_cache/
+	rm -rf .ruff_cache/
 	rm -rf htmlcov/
 	rm -rf .coverage
+	rm -rf coverage.xml
+	rm -rf coverage.lcov
+	rm -rf coverage.json
+	rm -rf *.egg-info/
+	rm -rf build/
+	rm -rf dist/
 	rm -f output/*.mp4 2>/dev/null || true
 	@echo "$(GREEN)Cleanup completed!$(NC)"
 
