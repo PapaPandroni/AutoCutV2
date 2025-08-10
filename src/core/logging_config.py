@@ -241,14 +241,15 @@ def log_performance(
             # Start timing and memory monitoring
             start_time = time.time()
             start_memory = None
-            if include_memory:
+            memory_available = include_memory
+            if memory_available:
                 try:
                     import psutil
 
                     process = psutil.Process()
                     start_memory = process.memory_info().rss / 1024 / 1024  # MB
                 except ImportError:
-                    include_memory = False
+                    memory_available = False
 
             # Prepare log context
             log_context = {
@@ -272,7 +273,7 @@ def log_performance(
 
                 # Calculate memory usage
                 memory_info = {}
-                if include_memory and start_memory is not None:
+                if memory_available and start_memory is not None:
                     try:
                         end_memory = process.memory_info().rss / 1024 / 1024  # MB
                         memory_info = {

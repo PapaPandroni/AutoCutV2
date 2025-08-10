@@ -43,6 +43,7 @@ from .engine import (
     AssemblyEngine,
     AssemblyResult,
     AssemblySettings,
+    VideoChunk,
 )
 
 # Main interface
@@ -54,6 +55,7 @@ __all__ = [
     "ClipAssembler",
     "AssemblyResult", 
     "AssemblySettings",
+    "VideoChunk",
     
     # Timeline management
     "ClipTimeline",
