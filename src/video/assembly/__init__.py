@@ -31,11 +31,13 @@ from .beat_matcher import (
     BeatMatcher,
     BeatMatchResult,
     BeatSyncSettings,
+    VarietyPattern,
 )
 from .clip_selector import (
     ClipSelector,
     SelectionCriteria,
-    VarietyPattern,
+    SelectionStrategy,
+    VideoChunk as ClipSelectorVideoChunk,
 )
 from .engine import (
     AssemblyEngine,
@@ -62,9 +64,10 @@ __all__ = [
     "BeatMatcher",
     "BeatMatchResult",
     "BeatSyncSettings",
+    "VarietyPattern",
     
     # Clip selection
     "ClipSelector",
     "SelectionCriteria", 
-    "VarietyPattern",
+    "SelectionStrategy",
 ]
