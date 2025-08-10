@@ -27,13 +27,34 @@ from typing import List, Dict, Any, Optional, Tuple, Union, Callable
 
 from moviepy import VideoFileClip
 
-from ...core.exceptions import (
-    VideoProcessingError,
-    iPhoneCompatibilityError,
-    TranscodingError,
-    raise_validation_error,
-)
-from ...core.logging_config import get_logger, log_performance, LoggingContext
+try:
+    from core.exceptions import (
+        VideoProcessingError,
+        iPhoneCompatibilityError,
+        TranscodingError,
+        raise_validation_error,
+    )
+    from core.logging_config import get_logger, log_performance, LoggingContext
+except ImportError:
+    # Fallback for testing without proper package structure
+    import logging
+    def get_logger(name):
+        return logging.getLogger(name)
+    def log_performance(func):
+        return func
+    class LoggingContext:
+        def __init__(self, msg): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    
+    class VideoProcessingError(Exception):
+        pass
+    class iPhoneCompatibilityError(Exception):
+        pass
+    class TranscodingError(Exception):
+        pass
+    def raise_validation_error(msg):
+        raise Exception(msg)
 from .resource_manager import VideoResourceManager, MemoryMonitor
 from .cache import VideoCache
 
@@ -167,6 +188,20 @@ class VideoLoadingStrategy(ABC):
             with self.resource_manager.allocate_resources(estimated_memory_mb=100):
                 clip = self._load_clip_from_disk(spec)
 
+                # Validate clip after loading
+                if clip is None:
+                    raise VideoProcessingError(f"Loaded clip is None for {spec}")
+                
+                # Test clip properties
+                try:
+                    duration = getattr(clip, 'duration', None)
+                    size = getattr(clip, 'size', None)
+                    if duration is None or size is None:
+                        raise VideoProcessingError(f"Loaded clip has invalid properties: duration={duration}, size={size}")
+                    self.logger.debug(f"Loaded clip validated: {duration:.2f}s, {size}")
+                except Exception as e:
+                    raise VideoProcessingError(f"Clip validation failed for {spec}: {e}")
+
                 # Cache the loaded clip
                 self.cache.put(cache_key, clip, estimated_size_mb=50)
 
@@ -202,13 +237,42 @@ class VideoLoadingStrategy(ABC):
 
             # Create subclip if needed
             if spec.start_time > 0 or spec.end_time < video.duration:
-                clip = video.subclip(spec.start_time, spec.end_time)
-                video.close()  # Clean up original
+                # Use the correct method based on MoviePy version
+                try:
+                    # Try modern MoviePy 2.x method first
+                    clip = video.subclipped(spec.start_time, spec.end_time)
+                    self.logger.debug(f"Subclip created using subclipped() for {spec}")
+                except AttributeError:
+                    # Fallback to older MoviePy 1.x method
+                    try:
+                        clip = video.subclip(spec.start_time, spec.end_time)
+                        self.logger.debug(f"Subclip created using subclip() for {spec}")
+                    except AttributeError:
+                        self.logger.error(f"Neither subclipped nor subclip available for {spec}")
+                        raise
+                
+                # CRITICAL: Don't close the original video as it may invalidate the subclip
+                # In MoviePy 2.x, subclips may depend on the parent video remaining open
+                # video.close()  # Disabled - may cause NoneType get_frame errors
+                
+                # Validate the subclip can access frames
+                try:
+                    test_frame = clip.get_frame(0)
+                    if test_frame is None:
+                        raise RuntimeError(f"Subclip get_frame returned None for {spec}")
+                    self.logger.debug(f"Subclip validation successful for {spec}")
+                except Exception as e:
+                    self.logger.error(f"Subclip validation failed for {spec}: {e}")
+                    raise
+                
                 return clip
             else:
+                # Return full video without creating subclip
+                self.logger.debug(f"Using full video (no subclip needed) for {spec}")
                 return video
 
         except Exception as e:
+            self.logger.error(f"Failed to load clip from disk for {spec}: {e}")
             # Handle iPhone H.265 compatibility issues
             if "codec" in str(e).lower() or "h265" in str(e).lower():
                 raise iPhoneCompatibilityError(

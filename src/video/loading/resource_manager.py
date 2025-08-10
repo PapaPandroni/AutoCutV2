@@ -19,8 +19,17 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, Generator, NamedTuple
 
-from ...core.exceptions import VideoProcessingError
-from ...core.logging_config import get_logger, log_performance
+try:
+    from core.exceptions import VideoProcessingError
+    from core.logging_config import get_logger, log_performance
+except ImportError:
+    import logging
+    def get_logger(name):
+        return logging.getLogger(name)
+    def log_performance(func):
+        return func
+    class VideoProcessingError(Exception):
+        pass
 
 
 class ResourceAllocation(NamedTuple):

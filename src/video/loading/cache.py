@@ -18,7 +18,14 @@ from typing import Optional, Dict, Any, Set
 
 from moviepy import VideoFileClip
 
-from ...core.logging_config import get_logger, log_performance
+try:
+    from core.logging_config import get_logger, log_performance
+except ImportError:
+    import logging
+    def get_logger(name):
+        return logging.getLogger(name)
+    def log_performance(func):
+        return func
 
 
 @dataclass
