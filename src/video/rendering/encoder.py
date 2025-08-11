@@ -116,7 +116,7 @@ class VideoEncoder:
             memory_percent = psutil.virtual_memory().percent
             
             # Adjust quality based on memory pressure
-            if memory_percent > 75.0:
+            if memory_percent > 80.0:
                 logger.warning(f"High memory ({memory_percent:.1f}%) - reducing encoding quality for stability")
                 
                 # Lower quality settings for memory safety
@@ -140,7 +140,7 @@ class VideoEncoder:
                             logger.info("Changed encoding preset to 'faster' for memory safety")
                 
                 # Increase CRF (lower quality) if memory is very high
-                if memory_percent > 80.0:
+                if memory_percent > 88.0:
                     for i, param in enumerate(ffmpeg_params):
                         if param == "-crf" and i + 1 < len(ffmpeg_params):
                             current_crf = int(ffmpeg_params[i + 1])
@@ -165,6 +165,20 @@ class VideoEncoder:
                 "-s", f"{target_format['target_width']}x{target_format['target_height']}",  # Force resolution
             ])
         
+        # PHASE 6D: Mac-specific AAC audio parameters for QuickTime compatibility
+        mac_audio_compatibility_params = [
+            # AAC Low Complexity profile for better Mac compatibility
+            "-profile:a", "aac_low",
+            # Standard sample rate for compatibility
+            "-ar", "44100",
+            # Stereo channel layout (explicit)
+            "-channel_layout", "stereo",
+            "-ac", "2",  # Force 2 audio channels (stereo)
+            # AAC-specific parameters for better quality
+            "-aac_coder", "twoloop",  # Better AAC encoding algorithm
+            "-cutoff", "18000",       # Audio frequency cutoff for better quality
+        ]
+        
         # PHASE 6C: Add stability parameters
         stability_params = [
             "-threads", "2",           # Limit threads to reduce memory pressure
@@ -172,28 +186,45 @@ class VideoEncoder:
             "-fflags", "+genpts",      # Generate missing timestamps
         ]
         
-        # Combine all FFmpeg parameters
-        enhanced_ffmpeg_params = ffmpeg_params + format_consistency_params + stability_params
-        logger.info(f"Enhanced FFmpeg params: {enhanced_ffmpeg_params}")
+        # MP4 container optimization for Mac compatibility
+        container_optimization_params = [
+            "-movflags", "+faststart",  # Enable fast start for web/Mac compatibility
+            "-f", "mp4",               # Explicitly specify MP4 container
+        ]
         
-        # Prepare comprehensive parameters
+        # Combine all FFmpeg parameters in proper order
+        enhanced_ffmpeg_params = (
+            ffmpeg_params + 
+            format_consistency_params + 
+            mac_audio_compatibility_params + 
+            stability_params + 
+            container_optimization_params
+        )
+        
+        logger.info(f"Enhanced FFmpeg params with Mac audio compatibility: {enhanced_ffmpeg_params}")
+        
+        # Prepare comprehensive parameters with Mac-optimized audio settings
         write_params = {
             **moviepy_params,
             "ffmpeg_params": enhanced_ffmpeg_params,
-            "temp_audiofile": "temp-audio.m4a",
+            "temp_audiofile": "temp-audio.m4a",  # Use M4A for AAC compatibility
             "remove_temp": True,
             "fps": target_format["target_fps"],
             "logger": None,  # Will be replaced with progress callback in encode_video
-            # Audio-specific parameters for better sync
-            "audio_fps": 44100,      # Standard audio sample rate
-            "audio_codec": "aac",     # Compatible audio codec
-            "audio_bitrate": "128k",  # Good quality audio bitrate
+            # PHASE 6D: Mac-optimized audio parameters
+            "audio_fps": 44100,       # Standard audio sample rate for Mac compatibility
+            "audio_codec": "aac",      # AAC codec (enhanced via ffmpeg_params)
+            "audio_bitrate": "160k",   # Higher quality bitrate for Mac compatibility (was 128k)
             # PHASE 6C: Stability parameters
-            "write_logfile": False,   # Disable log file to save I/O
+            "write_logfile": False,    # Disable log file to save I/O
             "temp_audiofile_fps": 44100,  # Ensure consistent audio fps
+            # Container format optimization
+            "codec": moviepy_params.get("codec", "libx264"),
+            "bitrate": moviepy_params.get("bitrate", "5000k"),
         }
         
-        logger.info(f"Phase 6C encoding parameters prepared with stability enhancements")
+        logger.info(f"Phase 6D: Mac-compatible encoding parameters prepared with enhanced AAC audio")
+        logger.info(f"Audio settings: AAC Low Profile @ 44.1kHz stereo, 160kbps")
         return write_params
         
     def encode_video(

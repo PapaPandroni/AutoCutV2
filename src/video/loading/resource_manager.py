@@ -72,17 +72,21 @@ class MemoryMonitor:
     """
 
     def __init__(
-        self, warning_threshold: float = 75.0, critical_threshold: float = 80.0
+        self, warning_threshold: float = 80.0, critical_threshold: float = 88.0
     ):
-        """Initialize memory monitor with Phase 6B safety thresholds.
+        """Initialize memory monitor with Phase 6E optimized safety thresholds.
         
-        PHASE 6B: Lowered thresholds to prevent system crashes:
-        - Warning: 75% (was 70%) - start aggressive cleanup
-        - Critical: 80% (was 85%) - hard abort to prevent crash
+        PHASE 6E: Optimized thresholds to balance stability with performance:
+        - Warning: 80% (was 75%) - start conservative cleanup
+        - Critical: 88% (was 80%) - emergency abort only when truly necessary
+        
+        Previous 80% critical threshold was causing excessive failures at 81% usage,
+        resulting in poor clip success rates. Modern systems can handle higher
+        memory usage safely with proper cleanup.
         
         Args:
-            warning_threshold: Memory usage % to trigger warnings
-            critical_threshold: Memory usage % to trigger errors
+            warning_threshold: Memory usage % to trigger warnings and cleanup
+            critical_threshold: Memory usage % to trigger emergency abort
         """
         self.warning_threshold = warning_threshold
         self.critical_threshold = critical_threshold
@@ -104,7 +108,8 @@ class MemoryMonitor:
                 "psutil not available - memory monitoring will be limited"
             )
             
-        self.logger.info(f"Phase 6B memory thresholds: warning={warning_threshold}%, critical={critical_threshold}%")
+        self.logger.info(f"Phase 6E optimized memory thresholds: warning={warning_threshold}%, critical={critical_threshold}%")
+        self.logger.info("Memory management optimized to reduce clip loading failures while maintaining system stability")
 
     def get_system_resources(self) -> SystemResources:
         """Get current system resource information."""

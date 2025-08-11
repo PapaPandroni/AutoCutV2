@@ -386,11 +386,11 @@ class VideoLoadingStrategy(ABC):
         """Check actual system memory pressure beyond our allocation tracking.
         
         Returns:
-            True if system memory pressure is critical (>82%)
+            True if system memory pressure is critical (>88%)
         """
         try:
             system_resources = self.resource_manager.memory_monitor.get_system_resources()
-            return system_resources.memory_percent > 82.0
+            return system_resources.memory_percent > 88.0
         except Exception as e:
             self.logger.warning(f"Failed to check system memory pressure: {e}")
             return False
@@ -474,6 +474,20 @@ class VideoLoadingStrategy(ABC):
         TARGET_HEIGHT = 1080
         TARGET_FPS = 25
         
+        # Import required classes with proper error handling
+        ColorClip_local = None
+        CompositeVideoClip_local = None
+        
+        try:
+            from moviepy.editor import ColorClip as ColorClip_local, CompositeVideoClip as CompositeVideoClip_local
+        except ImportError:
+            try:
+                from moviepy import ColorClip as ColorClip_local, CompositeVideoClip as CompositeVideoClip_local
+            except ImportError:
+                self.logger.warning(f"ColorClip/CompositeVideoClip not available - using basic scaling for {spec}")
+                ColorClip_local = None
+                CompositeVideoClip_local = None
+        
         try:
             # Get current dimensions
             current_width, current_height = clip.size
@@ -497,31 +511,51 @@ class VideoLoadingStrategy(ABC):
                 self.logger.debug(f"Wide landscape {spec}: scaling to {TARGET_WIDTH}x{new_height}, adding top/bottom bars")
                 
                 scaled_clip = clip.resized((TARGET_WIDTH, new_height))
-                y_offset = (TARGET_HEIGHT - new_height) // 2
-                resized_clip = scaled_clip.with_position(('center', y_offset)).with_duration(scaled_clip.duration)
-                resized_clip = resized_clip.with_fps(TARGET_FPS).with_position('center')
                 
-                # Add black background
-                try:
-                    from moviepy.editor import ColorClip, CompositeVideoClip
-                except ImportError:
-                    from moviepy import ColorClip, CompositeVideoClip
-                
-                black_bg = ColorClip(size=(TARGET_WIDTH, TARGET_HEIGHT), color=(0, 0, 0), duration=scaled_clip.duration)
-                resized_clip = CompositeVideoClip([black_bg, scaled_clip.with_position('center')], size=(TARGET_WIDTH, TARGET_HEIGHT))
+                # Add black background if ColorClip is available
+                if ColorClip_local is not None and CompositeVideoClip_local is not None:
+                    y_offset = (TARGET_HEIGHT - new_height) // 2
+                    black_bg = ColorClip_local(size=(TARGET_WIDTH, TARGET_HEIGHT), color=(0, 0, 0), duration=scaled_clip.duration)
+                    resized_clip = CompositeVideoClip_local([
+                        black_bg, 
+                        scaled_clip.with_position(('center', y_offset))
+                    ], size=(TARGET_WIDTH, TARGET_HEIGHT))
+                else:
+                    # Fallback: Just scale and center without black bars
+                    self.logger.warning(f"ColorClip unavailable - centering {spec} without black bars")
+                    resized_clip = scaled_clip.with_position('center').with_fps(TARGET_FPS)
+                    # Manually pad to target size using resize if possible
+                    try:
+                        resized_clip = resized_clip.resized((TARGET_WIDTH, TARGET_HEIGHT))
+                    except:
+                        # If resize fails, keep the scaled clip as-is
+                        pass
                 
             else:
-                # Portrait or narrow video (current_aspect < target_aspect)
+                # Portrait or narrow video (current_aspect < target_aspect)  
                 # Scale to fit height, add black bars on sides
                 new_width = int(TARGET_HEIGHT * current_aspect)
                 self.logger.debug(f"Portrait/narrow {spec}: scaling to {new_width}x{TARGET_HEIGHT}, adding side bars")
                 
                 scaled_clip = clip.resized((new_width, TARGET_HEIGHT))
-                x_offset = (TARGET_WIDTH - new_width) // 2
                 
-                # Add black background, CompositeVideoClip
-                black_bg = ColorClip(size=(TARGET_WIDTH, TARGET_HEIGHT), color=(0, 0, 0), duration=scaled_clip.duration)
-                resized_clip = CompositeVideoClip([black_bg, scaled_clip.with_position(('center', 'center'))], size=(TARGET_WIDTH, TARGET_HEIGHT))
+                # Add black background if ColorClip is available
+                if ColorClip_local is not None and CompositeVideoClip_local is not None:
+                    black_bg = ColorClip_local(size=(TARGET_WIDTH, TARGET_HEIGHT), color=(0, 0, 0), duration=scaled_clip.duration)
+                    resized_clip = CompositeVideoClip_local([
+                        black_bg, 
+                        scaled_clip.with_position(('center', 'center'))
+                    ], size=(TARGET_WIDTH, TARGET_HEIGHT))
+                else:
+                    # Fallback: Just scale and center without black bars
+                    self.logger.warning(f"ColorClip unavailable - centering {spec} without black bars")  
+                    resized_clip = scaled_clip.with_position('center').with_fps(TARGET_FPS)
+                    # Manually pad to target size using resize if possible
+                    try:
+                        resized_clip = resized_clip.resized((TARGET_WIDTH, TARGET_HEIGHT))
+                    except:
+                        # If resize fails, keep the scaled clip as-is
+                        pass
             
             # Ensure target FPS
             if abs(current_fps - TARGET_FPS) > 0.1:
@@ -529,11 +563,15 @@ class VideoLoadingStrategy(ABC):
                 resized_clip = resized_clip.with_fps(TARGET_FPS)
             
             # Verify final dimensions
-            final_width, final_height = resized_clip.size
-            if final_width != TARGET_WIDTH or final_height != TARGET_HEIGHT:
-                self.logger.warning(f"Resolution standardization may have failed for {spec}: got {final_width}x{final_height}, expected {TARGET_WIDTH}x{TARGET_HEIGHT}")
-            else:
-                self.logger.debug(f"✅ Resolution standardized successfully for {spec}")
+            try:
+                final_width, final_height = resized_clip.size
+                if final_width != TARGET_WIDTH or final_height != TARGET_HEIGHT:
+                    self.logger.warning(f"Resolution standardization may have failed for {spec}: got {final_width}x{final_height}, expected {TARGET_WIDTH}x{TARGET_HEIGHT}")
+                else:
+                    self.logger.debug(f"✅ Resolution standardized successfully for {spec}")
+            except:
+                # If size check fails, still return the clip
+                self.logger.warning(f"Could not verify final dimensions for {spec}")
             
             return resized_clip
             

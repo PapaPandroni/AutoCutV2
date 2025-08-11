@@ -429,25 +429,46 @@ class VideoNormalizationPipeline:
 
         # Add padding to reach exact target dimensions (letterbox/pillarbox)
         if new_width != target_width or new_height != target_height:
-            # Create a black background at target size
-            from moviepy.video.VideoClip import ColorClip
+            # Import required classes with proper error handling
+            ColorClip_local = None
+            CompositeVideoClip_local = None
+            
+            try:
+                from moviepy.video.VideoClip import ColorClip as ColorClip_local
+                from moviepy.editor import CompositeVideoClip as CompositeVideoClip_local
+            except ImportError:
+                try:
+                    from moviepy.editor import ColorClip as ColorClip_local, CompositeVideoClip as CompositeVideoClip_local
+                except ImportError:
+                    try:
+                        from moviepy import ColorClip as ColorClip_local, CompositeVideoClip as CompositeVideoClip_local
+                    except ImportError:
+                        # Fallback: Return resized clip without black bars
+                        print(f"Warning: ColorClip/CompositeVideoClip not available - returning resized clip without letterboxing")
+                        return resized_clip
 
-            background = ColorClip(
-                size=(target_width, target_height),
-                color=(0, 0, 0),
-                duration=resized_clip.duration,
-            )
+            if ColorClip_local is not None and CompositeVideoClip_local is not None:
+                # Create a black background at target size
+                background = ColorClip_local(
+                    size=(target_width, target_height),
+                    color=(0, 0, 0),
+                    duration=resized_clip.duration,
+                )
 
-            # Calculate centering position
-            x_pos = (target_width - new_width) // 2
-            y_pos = (target_height - new_height) // 2
+                # Calculate centering position
+                x_pos = (target_width - new_width) // 2
+                y_pos = (target_height - new_height) // 2
 
-            # Composite the resized clip onto the background
-            normalized_clip = CompositeVideoClip(
-                [background, resized_clip.with_position((x_pos, y_pos))]
-            )
+                # Composite the resized clip onto the background
+                normalized_clip = CompositeVideoClip_local(
+                    [background, resized_clip.with_position((x_pos, y_pos))]
+                )
 
-            return normalized_clip
+                return normalized_clip
+            else:
+                # Fallback if imports failed
+                print(f"Warning: ColorClip/CompositeVideoClip import failed - returning resized clip")
+                return resized_clip
 
         return resized_clip
 
