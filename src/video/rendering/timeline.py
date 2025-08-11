@@ -5,7 +5,7 @@ import gc
 from typing import List, Optional, Callable, Dict, Any, Tuple
 
 try:
-    from ..loading.strategies import UnifiedVideoLoader, LoadingStrategyType, ClipSpec
+    from ..loading.strategies import UnifiedVideoLoader, LoadingStrategyType, ClipSpec, LoadedClip
     from ..loading.cache import VideoCache
     from ..loading.resource_manager import VideoResourceManager
 except ImportError:
@@ -18,6 +18,12 @@ except ImportError:
         AUTO = "auto"
     class ClipSpec:
         pass
+    class LoadedClip:
+        def __init__(self, clip, spec, load_time, strategy_used):
+            self.clip = clip
+            self.spec = spec
+            self.load_time = load_time
+            self.strategy_used = strategy_used
     class VideoCache:
         def clear(self): pass
     class VideoResourceManager:
@@ -69,8 +75,11 @@ class TimelineRenderer:
         logger.info(f"Timeline has {len(sorted_clips)} clips to load")
         
         # Convert timeline clips to ClipSpec format for new unified loader
+        # CRITICAL FIX: Track failed spec creation to maintain index mapping
         clip_specs = []
-        for clip_data in sorted_clips:
+        spec_creation_failures = []  # Track which indices failed during spec creation
+        
+        for i, clip_data in enumerate(sorted_clips):
             try:
                 clip_spec = ClipSpec(
                     file_path=clip_data.get('video_file', ''),
@@ -80,8 +89,24 @@ class TimelineRenderer:
                 )
                 clip_specs.append(clip_spec)
             except Exception as e:
-                logger.warning(f"Failed to create ClipSpec from {clip_data}: {e}")
-                continue
+                logger.warning(f"Failed to create ClipSpec from clip {i}: {clip_data}: {e}")
+                spec_creation_failures.append(i)
+                # Add None placeholder to maintain index mapping
+                clip_specs.append(None)
+        
+        if spec_creation_failures:
+            logger.info(f"Spec creation failed for {len(spec_creation_failures)} clips at indices: {spec_creation_failures}")
+        
+        # Filter out None specs for actual loading, but maintain mapping
+        valid_clip_specs = []
+        spec_index_mapping = {}  # Maps valid_spec_index -> original_timeline_index
+        
+        for i, spec in enumerate(clip_specs):
+            if spec is not None:
+                spec_index_mapping[len(valid_clip_specs)] = i
+                valid_clip_specs.append(spec)
+        
+        logger.info(f"Created {len(valid_clip_specs)} valid specs from {len(sorted_clips)} timeline clips")
         
         # Analyze system conditions for strategy selection
         complexity_factors = self._analyze_system_complexity(sorted_clips, unique_video_files)
@@ -103,40 +128,71 @@ class TimelineRenderer:
             strategy = LoadingStrategyType.SEQUENTIAL
             logger.info("Using sequential video loading (standard mode)")
         
-        # Use unified video loader
+        # Use unified video loader on valid specs only
         try:
+            if not valid_clip_specs:
+                raise VideoProcessingError("No valid clip specs could be created")
+            
             loader = UnifiedVideoLoader(
                 default_strategy=strategy,
                 cache=self.video_cache,
                 resource_manager=self.resource_manager
             )
             
-            loaded_clips = loader.load_clips(clip_specs, strategy=strategy)
+            loaded_clips = loader.load_clips(valid_clip_specs, strategy=strategy)
             
-            # Convert LoadedClip objects back to video clips and track failures
-            video_clips = []
-            failed_indices = []
+            # Reconstruct full video_clips array with proper index mapping
+            video_clips = [None] * len(sorted_clips)  # Start with all None
+            failed_indices = list(spec_creation_failures)  # Start with spec creation failures
             
-            for i, loaded_clip in enumerate(loaded_clips):
-                if loaded_clip and hasattr(loaded_clip, 'clip'):
-                    video_clips.append(loaded_clip.clip)
+            # Map loaded clips back to their original timeline positions
+            for valid_index, loaded_clip in enumerate(loaded_clips):
+                original_index = spec_index_mapping[valid_index]
+                
+                if loaded_clip is not None and hasattr(loaded_clip, 'clip') and loaded_clip.clip is not None:
+                    video_clips[original_index] = loaded_clip.clip
                 else:
-                    video_clips.append(None)
-                    failed_indices.append(i)
+                    # Loading failed for this valid spec
+                    video_clips[original_index] = None
+                    failed_indices.append(original_index)
             
-            # Validate loading results
+            # Sort and deduplicate failed_indices
+            failed_indices = sorted(list(set(failed_indices)))
+            
+            # Validate loading results with graceful degradation
             successful_clips = [clip for clip in video_clips if clip is not None]
+            
             if not successful_clips:
                 raise VideoProcessingError("No video clips could be loaded successfully")
+            
+            # Graceful degradation: Handle partial loading success
+            failed_count = len(failed_indices)
+            success_rate = len(successful_clips) / len(sorted_clips) * 100
+            
+            if failed_count > 0:
+                logger.warning(f"⚠️  Partial loading success: {len(successful_clips)}/{len(sorted_clips)} clips loaded ({success_rate:.1f}%)")
+                logger.warning(f"   Failed clips: {failed_count} due to memory pressure or processing errors")
+                logger.warning(f"   Failed indices: {failed_indices}")
                 
-            logger.info(f"Loaded {len(successful_clips)} video clips successfully")
+                if success_rate < 30:
+                    logger.error(f"❌ Success rate too low ({success_rate:.1f}%) - video quality will be severely impacted")
+                    raise VideoProcessingError(
+                        f"Insufficient clips loaded: {len(successful_clips)}/{len(sorted_clips)} ({success_rate:.1f}%)",
+                        details={"success_rate": success_rate, "failed_indices": failed_indices}
+                    )
+                elif success_rate < 60:
+                    logger.warning(f"⚠️  Moderate success rate ({success_rate:.1f}%) - continuing with degraded quality")
+                else:
+                    logger.info(f"✅ Good success rate ({success_rate:.1f}%) - continuing with minor quality impact")
+            else:
+                logger.info(f"✅ Perfect loading success: {len(successful_clips)} clips loaded (100%)")
             
             return video_clips, failed_indices, loader.resource_manager
             
         except Exception as e:
             logger.error(f"Unified loader failed: {e}")
-            # Fallback to empty results
-            return [], list(range(len(clip_specs))), self.resource_manager or VideoResourceManager()
+            # Fallback to empty results with proper failed indices
+            return [None] * len(sorted_clips), list(range(len(sorted_clips))), self.resource_manager or VideoResourceManager()
     
     def synchronize_timeline_with_loaded_clips(
         self, 
@@ -154,8 +210,14 @@ class TimelineRenderer:
         Returns:
             Clean list of video clips without None values
         """
-        # Defensive validation: Check for None clips
+        # Enhanced validation: Check for None clips with detailed logging
         none_clip_indices = [i for i, clip in enumerate(video_clips) if clip is None]
+        
+        logger.info(f"Timeline synchronization analysis:")
+        logger.info(f"  - Total clips requested: {len(video_clips)}")
+        logger.info(f"  - Timeline clips before sync: {len(timeline.clips)}")
+        logger.info(f"  - Failed indices reported: {failed_indices}")
+        logger.info(f"  - None clip indices found: {none_clip_indices}")
         
         if none_clip_indices:
             logger.info(f"Found {len(none_clip_indices)} None clips at indices {none_clip_indices}")
@@ -165,8 +227,15 @@ class TimelineRenderer:
             actual_none_indices = set(none_clip_indices)
             
             if expected_none_indices != actual_none_indices:
-                logger.warning(f"Index mismatch: Expected None at {expected_none_indices}, found at {actual_none_indices}")
+                logger.warning(f"Index mismatch detected:")
+                logger.warning(f"  - Expected None at: {sorted(expected_none_indices)}")
+                logger.warning(f"  - Actually None at: {sorted(actual_none_indices)}")
+                
+                # Use actual None indices as the authoritative source
                 failed_indices = sorted(list(actual_none_indices))
+                logger.info(f"  - Updated failed_indices to: {failed_indices}")
+        else:
+            logger.info("No None clips found - all clips loaded successfully")
         
         # Synchronize timeline by removing failed clips
         if failed_indices:
@@ -182,15 +251,33 @@ class TimelineRenderer:
         # Filter out None clips for clean rendering array
         clean_video_clips = [clip for clip in video_clips if clip is not None]
         
-        # Verify clip count consistency
+        # Verify clip count consistency with enhanced error reporting
         if len(clean_video_clips) != len(timeline.clips):
+            error_details = {
+                "clean_video_clips_count": len(clean_video_clips),
+                "timeline_clips_count": len(timeline.clips),
+                "failed_indices": failed_indices,
+                "failed_count": len(failed_indices),
+                "original_video_clips_count": len(video_clips),
+                "none_clip_indices": none_clip_indices
+            }
+            
+            logger.error(f"TIMELINE SYNCHRONIZATION ERROR - Detailed analysis:")
+            for key, value in error_details.items():
+                logger.error(f"  - {key}: {value}")
+            
             raise VideoProcessingError(
-                f"Clip count mismatch: {len(clean_video_clips)} valid clips vs {len(timeline.clips)} timeline clips"
+                f"Clip count mismatch: {len(clean_video_clips)} valid clips vs {len(timeline.clips)} timeline clips",
+                details=error_details
             )
         
-        logger.info(f"Final clip count - video_clips: {len(clean_video_clips)}, timeline.clips: {len(timeline.clips)}")
+        logger.info(f"✅ Timeline synchronization successful:")
+        logger.info(f"  - Final video clips: {len(clean_video_clips)}")
+        logger.info(f"  - Timeline clips: {len(timeline.clips)}")
+        logger.info(f"  - All counts match perfectly!")
         
         return clean_video_clips
+
     
     def _analyze_system_complexity(self, sorted_clips: List, unique_video_files: List) -> Dict[str, bool]:
         """Analyze system complexity factors to choose optimal loading strategy."""

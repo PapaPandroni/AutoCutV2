@@ -196,7 +196,7 @@ class VideoNormalizationPipeline:
                     else:
                         # Fallback to direct method calls
                         try:
-                            normalized_clip = normalized_clip.resized(newsize=target_size)
+                            normalized_clip = normalized_clip.resized(target_size)
                         except AttributeError:
                             try:
                                 normalized_clip = normalized_clip.resize(newsize=target_size)

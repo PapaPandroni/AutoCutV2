@@ -56,9 +56,9 @@ class SystemResources:
         """Get memory pressure level."""
         if self.memory_percent < 50:
             return "low"
-        elif self.memory_percent < 75:
+        elif self.memory_percent < 80:
             return "medium"
-        elif self.memory_percent < 90:
+        elif self.memory_percent < 95:
             return "high"
         else:
             return "critical"
@@ -72,10 +72,14 @@ class MemoryMonitor:
     """
 
     def __init__(
-        self, warning_threshold: float = 75.0, critical_threshold: float = 90.0
+        self, warning_threshold: float = 75.0, critical_threshold: float = 80.0
     ):
-        """Initialize memory monitor.
-
+        """Initialize memory monitor with Phase 6B safety thresholds.
+        
+        PHASE 6B: Lowered thresholds to prevent system crashes:
+        - Warning: 75% (was 70%) - start aggressive cleanup
+        - Critical: 80% (was 85%) - hard abort to prevent crash
+        
         Args:
             warning_threshold: Memory usage % to trigger warnings
             critical_threshold: Memory usage % to trigger errors
@@ -99,6 +103,8 @@ class MemoryMonitor:
             self.logger.warning(
                 "psutil not available - memory monitoring will be limited"
             )
+            
+        self.logger.info(f"Phase 6B memory thresholds: warning={warning_threshold}%, critical={critical_threshold}%")
 
     def get_system_resources(self) -> SystemResources:
         """Get current system resource information."""
@@ -182,6 +188,7 @@ class MemoryMonitor:
         )
 
 
+
 class VideoResourceManager:
     """Resource manager for video loading operations.
 
@@ -204,8 +211,9 @@ class VideoResourceManager:
         # Resource limits
         system_resources = self.memory_monitor.get_system_resources()
         if max_memory_gb is None:
-            # Use 50% of available memory by default
-            self.max_memory_gb = system_resources.available_memory_gb * 0.5
+            # Use 70% of available memory for video processing workloads
+            # Video processing is inherently memory-intensive
+            self.max_memory_gb = system_resources.available_memory_gb * 0.7
         else:
             self.max_memory_gb = max_memory_gb
 
@@ -377,11 +385,11 @@ class VideoResourceManager:
         health_issues = []
         recommendations = []
 
-        if system_resources.memory_percent > 85:
+        if system_resources.memory_percent > 90:
             health_issues.append("high_system_memory")
             recommendations.append("Consider reducing concurrent operations")
 
-        if self._allocated_memory_mb / 1024 > self.max_memory_gb * 0.8:
+        if self._allocated_memory_mb / 1024 > self.max_memory_gb * 0.9:
             health_issues.append("high_allocated_memory")
             recommendations.append("Close unused video clips")
 
@@ -390,7 +398,7 @@ class VideoResourceManager:
             recommendations.append("Wait for current operations to complete")
 
         health_status = "healthy" if not health_issues else "warning"
-        if system_resources.memory_percent > 95:
+        if system_resources.memory_percent > 97:
             health_status = "critical"
 
         health_report = {

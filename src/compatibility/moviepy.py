@@ -205,23 +205,15 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
     else:
         raise ValueError("Must specify either newsize or width/height parameters")
     
-    # Try modern MoviePy 2.x method first (resized)
+    # Try modern MoviePy 2.x method first (resized) - uses positional args
     try:
-        return clip.resized(newsize=target_size)
+        return clip.resized(target_size)
     except AttributeError:
-        # Fallback to older MoviePy 1.x method (resize)
+        # Fallback to older MoviePy 1.x method (resize) with named parameters
         try:
             return clip.resize(newsize=target_size)
         except AttributeError:
-            # If both fail, try alternative parameter names
-            try:
-                # Some versions might use different parameter names
-                return clip.resized(target_size)
-            except AttributeError:
-                try:
-                    return clip.resize(target_size)
-                except AttributeError:
-                    raise RuntimeError(f"Neither 'resized' nor 'resize' methods available on {type(clip)}")
+            raise RuntimeError(f"Neither 'resized' nor 'resize' methods available on {type(clip)}")
     except Exception as e:
         # Re-raise other exceptions
         raise
