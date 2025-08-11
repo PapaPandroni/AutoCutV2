@@ -397,6 +397,7 @@ class VideoLoadingStrategy(ABC):
 
     def _load_clip_from_disk(self, spec: ClipSpec) -> VideoFileClip:
         """Load clip from disk with format handling and universal resolution standardization."""
+        video = None
         try:
             # Load full video first
             video = VideoFileClip(spec.file_path)
@@ -417,10 +418,6 @@ class VideoLoadingStrategy(ABC):
                         self.logger.error(f"Neither subclipped nor subclip available for {spec}")
                         raise
                 
-                # CRITICAL: Don't close the original video as it may invalidate the subclip
-                # In MoviePy 2.x, subclips may depend on the parent video remaining open
-                # video.close()  # Disabled - may cause NoneType get_frame errors
-                
                 # Validate the subclip can access frames
                 try:
                     test_frame = clip.get_frame(0)
@@ -431,11 +428,27 @@ class VideoLoadingStrategy(ABC):
                     self.logger.error(f"Subclip validation failed for {spec}: {e}")
                     raise
                 
-                final_clip = clip
+                # CRITICAL FIX: For MoviePy 2.x subclips, we need to copy the clip to break dependency
+                # This prevents file handle leaks while avoiding NoneType errors
+                try:
+                    # Create an independent copy that doesn't rely on the parent video
+                    final_clip = clip.copy()
+                    
+                    # Now we can safely close the original video
+                    if video:
+                        video.close()
+                        video = None
+                        
+                except Exception as copy_error:
+                    self.logger.warning(f"Failed to copy subclip for {spec}: {copy_error}, using original")
+                    final_clip = clip
+                    # Don't close video in this case to prevent NoneType errors
+                    
             else:
                 # Return full video without creating subclip
                 self.logger.debug(f"Using full video (no subclip needed) for {spec}")
                 final_clip = video
+                # For full videos, we can't close the original since we're returning it directly
 
             # PHASE 6A: Universal Resolution Standardization to 1920x1080
             # Apply immediately during clip loading to prevent encoding issues
@@ -444,6 +457,13 @@ class VideoLoadingStrategy(ABC):
             return final_clip
 
         except Exception as e:
+            # Ensure we clean up the video handle on any error
+            if video:
+                try:
+                    video.close()
+                except:
+                    pass  # Ignore cleanup errors
+                    
             self.logger.error(f"Failed to load clip from disk for {spec}: {e}")
             # Handle iPhone H.265 compatibility issues
             if "codec" in str(e).lower() or "h265" in str(e).lower():

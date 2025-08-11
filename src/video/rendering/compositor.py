@@ -307,14 +307,56 @@ class VideoCompositor:
         concatenation_method = "compose" if target_format.get("requires_normalization", False) else "chain"
         logger.info(f"Using '{concatenation_method}' concatenation method")
         
-        # Perform concatenation with valid clips only
+        # Perform concatenation with enhanced null checking
         try:
-            logger.info(f"Starting concatenation with {len(valid_clips)} clips using {concatenation_method} method")
-            final_video = concatenate_videoclips(valid_clips, method=concatenation_method)
+            # CRITICAL FIX: Final defensive check before concatenation
+            # Check for None clips that may have slipped through normalization
+            pre_concat_valid_clips = []
+            corrupted_clip_count = 0
+            
+            for i, clip in enumerate(valid_clips):
+                if clip is None:
+                    logger.error(f"  Clip {i}: None (should have been filtered earlier!)")
+                    corrupted_clip_count += 1
+                    continue
+                    
+                # Test clip viability by checking key attributes
+                try:
+                    # Check if clip has essential attributes
+                    if not hasattr(clip, 'start'):
+                        logger.error(f"  Clip {i}: Missing 'start' attribute (corrupted)")
+                        corrupted_clip_count += 1
+                        continue
+                        
+                    if not hasattr(clip, 'duration') or clip.duration is None:
+                        logger.error(f"  Clip {i}: Missing or None duration (corrupted)")
+                        corrupted_clip_count += 1
+                        continue
+                        
+                    # Basic attribute access test
+                    _ = clip.start
+                    _ = clip.duration
+                    
+                    pre_concat_valid_clips.append(clip)
+                    
+                except Exception as attr_error:
+                    logger.error(f"  Clip {i}: Attribute access failed: {attr_error}")
+                    corrupted_clip_count += 1
+                    continue
+            
+            if corrupted_clip_count > 0:
+                logger.warning(f"🛡️  Defensive filtering removed {corrupted_clip_count} corrupted clips")
+                logger.warning(f"   Final clip count: {len(pre_concat_valid_clips)}/{len(valid_clips)}")
+            
+            if not pre_concat_valid_clips:
+                raise VideoProcessingError("No viable clips remaining after final corruption check")
+            
+            logger.info(f"Starting concatenation with {len(pre_concat_valid_clips)} verified clips using {concatenation_method} method")
+            final_video = concatenate_videoclips(pre_concat_valid_clips, method=concatenation_method)
             logger.info(f"Concatenation successful - final video duration: {final_video.duration:.2f}s")
         except Exception as e:
-            logger.error(f"Concatenation failed with {len(valid_clips)} clips")
-            for i, clip in enumerate(valid_clips):
+            logger.error(f"Concatenation failed with {len(pre_concat_valid_clips)} verified clips")
+            for i, clip in enumerate(pre_concat_valid_clips):
                 try:
                     logger.error(f"  Clip {i}: {type(clip)} - duration={getattr(clip, 'duration', 'N/A')}, size={getattr(clip, 'size', 'N/A')}")
                 except:
