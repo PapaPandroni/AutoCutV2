@@ -309,12 +309,46 @@ def write_videofile_safely(video_clip, output_path: str, compatibility_info: Dic
         moviepy2_unsupported_params = [
             'logger',              # Causes issues in some versions
             'temp_audiofile_fps',  # Not supported in MoviePy 2.x - removed parameter
+            'verbose',             # Not supported as keyword argument in some MoviePy versions
         ]
         
         for param in moviepy2_unsupported_params:
             if param in safe_kwargs:
                 logger.debug(f"Removing unsupported parameter: {param}")
                 del safe_kwargs[param]
+        
+        # Fix audio codec profile issues that cause FFmpeg errors
+        if 'audio_codec' in safe_kwargs:
+            audio_codec = safe_kwargs['audio_codec']
+            # Replace problematic audio codec profiles with safe defaults
+            if audio_codec in ['aac_low', 'aac_he', 'aac_he_v2']:
+                logger.debug(f"Replacing problematic audio codec '{audio_codec}' with 'aac'")
+                safe_kwargs['audio_codec'] = 'aac'
+                
+        # Handle FFmpeg parameters that might contain problematic audio settings
+        if 'ffmpeg_params' in safe_kwargs and isinstance(safe_kwargs['ffmpeg_params'], list):
+            ffmpeg_params = safe_kwargs['ffmpeg_params']
+            filtered_params = []
+            skip_next = False
+            
+            for i, param in enumerate(ffmpeg_params):
+                if skip_next:
+                    skip_next = False
+                    continue
+                    
+                # Remove problematic audio profile settings
+                if param in ['-profile:a', '-profile:audio']:
+                    # Skip this parameter and its value
+                    skip_next = True
+                    logger.debug(f"Removing FFmpeg audio profile parameter: {param}")
+                    continue
+                elif param == 'aac_low':
+                    logger.debug("Removing problematic aac_low from FFmpeg parameters")
+                    continue
+                else:
+                    filtered_params.append(param)
+            
+            safe_kwargs['ffmpeg_params'] = filtered_params
         
         video_clip.write_videofile(output_path, **safe_kwargs)
         
@@ -326,9 +360,10 @@ def write_videofile_safely(video_clip, output_path: str, compatibility_info: Dic
             essential_params = {
                 'codec': kwargs.get('codec', 'libx264'),
                 'fps': kwargs.get('fps', 24),
-                'ffmpeg_params': kwargs.get('ffmpeg_params', [])
+                'audio_codec': 'aac',  # Use safe audio codec
+                'ffmpeg_params': []    # Remove all FFmpeg parameters that might cause issues
             }
-            logger.warning("Retrying with minimal parameters")
+            logger.warning("Retrying with minimal parameters and safe audio codec")
             video_clip.write_videofile(output_path, **essential_params)
         except Exception as fallback_error:
             raise RuntimeError(f"Video writing failed even with fallback parameters: {fallback_error}")
