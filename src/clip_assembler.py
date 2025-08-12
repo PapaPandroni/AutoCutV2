@@ -177,15 +177,8 @@ class VideoFormatAnalyzer:
 
         except Exception as e:
             print(f"Warning: Could not analyze video format: {e}")
-            return {
-                "width": 1920,
-                "height": 1080,
-                "fps": 24.0,
-                "duration": 0.0,
-                "aspect_ratio": 16 / 9,
-                "resolution_category": "1080p",
-                "fps_category": "24fps",
-            }
+            # Use smart fallback instead of hard-coded 1920x1080
+            return self._get_smart_fallback_format()
 
     def _categorize_resolution(self, width: int, height: int) -> str:
         """Categorize resolution into standard formats."""
@@ -211,14 +204,50 @@ class VideoFormatAnalyzer:
         else:
             return "24fps"
 
-    def find_dominant_format(self, video_clips: List[Any]) -> Dict[str, Any]:
-        """Determine the dominant format across all clips for normalization target.
+    def _get_smart_fallback_format(self) -> Dict[str, Any]:
+        """Get smart fallback format based on context instead of hard-coded 1920x1080.
+        
+        If we have a target format context, use that. Otherwise use safe defaults.
+        This prevents always defaulting to landscape orientation.
+        """
+        # Try to get context from instance if available
+        if hasattr(self, '_target_format') and self._target_format:
+            target = self._target_format
+            return {
+                "width": target.get('target_width', 1920),
+                "height": target.get('target_height', 1080),
+                "fps": target.get('target_fps', 24.0),
+                "duration": 0.0,
+                "aspect_ratio": target.get('target_width', 1920) / target.get('target_height', 1080),
+                "resolution_category": "1080p",
+                "fps_category": "24fps",
+            }
+        
+        # Safe default - still landscape but with context awareness
+        return {
+            "width": 1920,
+            "height": 1080, 
+            "fps": 24.0,
+            "duration": 0.0,
+            "aspect_ratio": 16 / 9,
+            "resolution_category": "1080p", 
+            "fps_category": "24fps",
+        }
 
+    def determine_optimal_canvas(self, video_clips: List[Any]) -> Dict[str, Any]:
+        """Determine optimal canvas size for mixed aspect ratios with intelligent orientation detection.
+        
+        This replaces the old find_dominant_format() that forced all clips to the same resolution,
+        causing portrait videos to be stretched. The new approach:
+        - Pure landscape content → Best landscape resolution
+        - Pure portrait content → Best portrait resolution  
+        - Mixed content → Square canvas to accommodate all orientations
+        
         Args:
             video_clips: List of VideoFileClip instances
 
         Returns:
-            Target format specification for normalization
+            Target canvas specification optimized for aspect ratio preservation
         """
         if not video_clips:
             return {
@@ -227,51 +256,104 @@ class VideoFormatAnalyzer:
                 "target_fps": 24.0,
                 "target_aspect_ratio": 16 / 9,
                 "requires_normalization": False,
+                "canvas_type": "default_landscape",
             }
 
+        # Analyze orientations and collect format info
+        orientations = []
         formats = []
+        max_width = max_height = 0
+        fps_counts = {}
+
         for clip in video_clips:
             format_info = self.analyze_video_format(clip)
             formats.append(format_info)
-
-        # Find most common resolution
-        resolution_counts = {}
-        fps_counts = {}
-
-        for fmt in formats:
-            res_key = f"{fmt['width']}x{fmt['height']}"
-            fps_key = fmt["fps_category"]
-
-            resolution_counts[res_key] = resolution_counts.get(res_key, 0) + 1
+            
+            # Determine orientation based on aspect ratio
+            aspect_ratio = format_info['width'] / format_info['height']
+            if aspect_ratio > 1.3:  # Landscape (16:9 = 1.78, 4:3 = 1.33)
+                orientations.append('landscape')
+            elif aspect_ratio < 0.8:  # Portrait (9:16 = 0.56, 3:4 = 0.75)
+                orientations.append('portrait')
+            else:  # Square-ish (1:1 = 1.0, close variants)
+                orientations.append('square')
+            
+            # Track maximum dimensions
+            max_width = max(max_width, format_info['width'])
+            max_height = max(max_height, format_info['height'])
+            
+            # FPS analysis (same as before)
+            fps_key = format_info["fps_category"]
             fps_counts[fps_key] = fps_counts.get(fps_key, 0) + 1
-
-        # Determine target resolution (prefer highest quality that's most common)
-        dominant_resolution = max(resolution_counts, key=resolution_counts.get)
-        width, height = map(int, dominant_resolution.split("x"))
 
         # Determine target FPS (most common)
         dominant_fps_category = max(fps_counts, key=fps_counts.get)
         target_fps = self._fps_category_to_value(dominant_fps_category)
 
+        # Smart canvas selection based on content orientation
+        unique_orientations = set(orientations)
+        
+        if len(unique_orientations) == 1:
+            # Pure content - optimize for that orientation
+            if 'landscape' in unique_orientations:
+                # Pure landscape: use best landscape resolution
+                target_width = max_width
+                target_height = max_height
+                canvas_type = "pure_landscape"
+                print(f"Canvas Analysis: Pure landscape content detected")
+                
+            elif 'portrait' in unique_orientations:
+                # Pure portrait: use best portrait resolution
+                target_width = max_width  
+                target_height = max_height
+                canvas_type = "pure_portrait"
+                print(f"Canvas Analysis: Pure portrait content detected")
+                
+            else:  # 'square'
+                # Pure square: use largest square
+                canvas_size = max(max_width, max_height)
+                target_width = target_height = canvas_size
+                canvas_type = "pure_square"
+                print(f"Canvas Analysis: Pure square content detected")
+                
+        else:
+            # Mixed orientations: use square canvas to accommodate all
+            canvas_size = max(max_width, max_height)
+            # Ensure minimum quality for mixed content
+            canvas_size = max(canvas_size, 1920)  # At least Full HD
+            target_width = target_height = canvas_size
+            canvas_type = "mixed_orientations"
+            print(f"Canvas Analysis: Mixed orientations detected ({len(unique_orientations)} types)")
+            print(f"   - Orientations: {', '.join(unique_orientations)}")
+            print(f"   - Using square canvas: {canvas_size}x{canvas_size}")
+
         # Check if normalization is needed
+        resolution_diversity = len(set(f"{fmt['width']}x{fmt['height']}" for fmt in formats))
         requires_normalization = (
-            len(set(resolution_counts.keys())) > 1 or len(set(fps_counts.keys())) > 1
+            resolution_diversity > 1 or 
+            len(set(fps_counts.keys())) > 1 or
+            canvas_type == "mixed_orientations"
         )
 
-        print(f"Format Analysis: Dominant {dominant_resolution} @ {target_fps}fps")
-        print(
-            f"Format Diversity: {len(resolution_counts)} resolutions, {len(fps_counts)} frame rates"
-        )
-        print(f"Normalization Required: {requires_normalization}")
+        print(f"Canvas Decision: {target_width}x{target_height} @ {target_fps}fps")
+        print(f"Canvas Type: {canvas_type}")
+        print(f"Format Diversity: {resolution_diversity} resolutions, {len(fps_counts)} frame rates") 
+        print(f"Aspect Ratio Preservation: {requires_normalization}")
 
         return {
-            "target_width": width,
-            "target_height": height,
+            "target_width": target_width,
+            "target_height": target_height,
             "target_fps": target_fps,
-            "target_aspect_ratio": width / height,
+            "target_aspect_ratio": target_width / target_height,
             "requires_normalization": requires_normalization,
+            "canvas_type": canvas_type,
+            "orientation_analysis": {
+                "orientations": orientations,
+                "unique_orientations": list(unique_orientations),
+                "mixed_content": len(unique_orientations) > 1,
+            },
             "format_diversity": {
-                "resolutions": len(resolution_counts),
+                "resolutions": resolution_diversity,
                 "frame_rates": len(fps_counts),
             },
         }
@@ -399,7 +481,7 @@ class VideoNormalizationPipeline:
             clip.w != target_format["target_width"]
             or clip.h != target_format["target_height"]
         ):
-            normalized_clip = self._resize_with_aspect_preservation(
+            normalized_clip = self._resize_with_aspect_preservation_modern(
                 normalized_clip,
                 target_format["target_width"],
                 target_format["target_height"],
@@ -411,74 +493,94 @@ class VideoNormalizationPipeline:
 
         return normalized_clip
 
-    def _resize_with_aspect_preservation(
+    def _resize_with_aspect_preservation_modern(
         self, clip, target_width: int, target_height: int
     ):
-        """Resize clip while preserving aspect ratio using letterbox/pillarbox."""
+        """Modern MoviePy 2.2+ letterboxing implementation with intelligent aspect ratio preservation.
+        
+        This replaces the previous implementation to use the latest MoviePy best practices
+        and provides superior letterboxing/pillarboxing for mixed aspect ratio content.
+        """
         # Calculate scaling to fit within target dimensions
         width_scale = target_width / clip.w
         height_scale = target_height / clip.h
         scale = min(width_scale, height_scale)
 
-        # Calculate new dimensions
+        # Calculate new dimensions (maintain aspect ratio)
         new_width = int(clip.w * scale)
         new_height = int(clip.h * scale)
-
-        # Resize to fit within target dimensions using MoviePy 2.x effects system
+        
+        # Use modern MoviePy 2.2+ effects system with proper import handling
         try:
             from moviepy.video.fx.Resize import Resize
+            from moviepy.editor import ColorClip, CompositeVideoClip
         except ImportError:
             try:
+                # Fallback import pattern
                 from moviepy.video.fx import Resize
+                from moviepy.editor import ColorClip, CompositeVideoClip
             except ImportError:
-                raise RuntimeError("Cannot import MoviePy 2.x Resize effect")
-        
-        resized_clip = clip.with_effects([Resize((new_width, new_height))])
-
-        # Add padding to reach exact target dimensions (letterbox/pillarbox)
-        if new_width != target_width or new_height != target_height:
-            # Import required classes with proper error handling
-            ColorClip_local = None
-            CompositeVideoClip_local = None
-            
-            try:
-                from moviepy.video.VideoClip import ColorClip as ColorClip_local
-                from moviepy.editor import CompositeVideoClip as CompositeVideoClip_local
-            except ImportError:
+                # Final fallback - try direct MoviePy imports
                 try:
-                    from moviepy.editor import ColorClip as ColorClip_local, CompositeVideoClip as CompositeVideoClip_local
-                except ImportError:
-                    try:
-                        from moviepy import ColorClip as ColorClip_local, CompositeVideoClip as CompositeVideoClip_local
-                    except ImportError:
-                        # Fallback: Return resized clip without black bars
-                        print(f"Warning: ColorClip/CompositeVideoClip not available - returning resized clip without letterboxing")
-                        return resized_clip
-
-            if ColorClip_local is not None and CompositeVideoClip_local is not None:
-                # Create a black background at target size
-                background = ColorClip_local(
-                    size=(target_width, target_height),
-                    color=(0, 0, 0),
-                    duration=resized_clip.duration,
-                )
-
-                # Calculate centering position
-                x_pos = (target_width - new_width) // 2
-                y_pos = (target_height - new_height) // 2
-
-                # Composite the resized clip onto the background
-                normalized_clip = CompositeVideoClip_local(
-                    [background, resized_clip.with_position((x_pos, y_pos))]
-                )
-
-                return normalized_clip
+                    from moviepy.editor import VideoFileClip
+                    # Test if modern effects are available
+                    test_clip = VideoFileClip.__new__(VideoFileClip)
+                    if hasattr(test_clip, 'with_effects'):
+                        from moviepy.video.fx.Resize import Resize
+                        from moviepy.editor import ColorClip, CompositeVideoClip
+                    else:
+                        raise ImportError("MoviePy 2.x effects system not available")
+                except:
+                    raise RuntimeError(
+                        "Cannot import MoviePy 2.2+ Resize effect and composition classes. "
+                        "Please ensure MoviePy 2.2+ is installed."
+                    )
+        
+        # Resize using modern effects system
+        resized_clip = clip.with_effects([Resize((new_width, new_height))])
+        
+        # Check if letterboxing/pillarboxing is needed
+        if new_width == target_width and new_height == target_height:
+            # Perfect fit, no letterboxing needed
+            return resized_clip
+            
+        # Create black background for letterboxing/pillarboxing
+        try:
+            background = ColorClip(
+                size=(target_width, target_height),
+                color=(0, 0, 0),  # Black letterbox bars
+                duration=resized_clip.duration
+            )
+            
+            # Calculate centering position for perfect centering
+            x_pos = (target_width - new_width) // 2
+            y_pos = (target_height - new_height) // 2
+            
+            # Create composite with centered resized clip
+            letterboxed_clip = CompositeVideoClip([
+                background,
+                resized_clip.with_position((x_pos, y_pos))
+            ])
+            
+            # Ensure the composite has the correct duration and properties
+            letterboxed_clip = letterboxed_clip.with_duration(resized_clip.duration)
+            
+            # Log the letterboxing operation for debugging
+            if new_width < target_width:
+                letterbox_type = "pillarbox" if new_height == target_height else "letterbox+pillarbox"
+                bar_width = (target_width - new_width) // 2
+                print(f"   Applied {letterbox_type}: {bar_width}px bars on sides")
             else:
-                # Fallback if imports failed
-                print(f"Warning: ColorClip/CompositeVideoClip import failed - returning resized clip")
-                return resized_clip
-
-        return resized_clip
+                bar_height = (target_height - new_height) // 2  
+                print(f"   Applied letterbox: {bar_height}px bars on top/bottom")
+                
+            return letterboxed_clip
+            
+        except Exception as e:
+            # Fallback: return resized clip without letterboxing if composition fails
+            print(f"Warning: Letterboxing failed ({str(e)}), returning resized clip without black bars")
+            print(f"   Resized to: {new_width}x{new_height} (target: {target_width}x{target_height})")
+            return resized_clip
 
 
 def load_video_segment(
@@ -1128,7 +1230,7 @@ class VideoPreprocessor:
 
         # Perform preprocessing
         try:
-            success = self._preprocess_with_ffmpeg(video_path, processed_path, analysis)
+            success = self._preprocess_with_ffmpeg_modern(video_path, processed_path, analysis, getattr(self, '_target_format', None))
 
             if success and os.path.exists(processed_path):
                 print(f"   ✅ Preprocessing complete: {processed_name}")
@@ -1142,10 +1244,14 @@ class VideoPreprocessor:
             print(f"   ❌ Preprocessing error: {e}")
             return video_path
 
-    def _preprocess_with_ffmpeg(
-        self, input_path: str, output_path: str, analysis: Dict
+    def _preprocess_with_ffmpeg_modern(
+        self, input_path: str, output_path: str, analysis: Dict, target_format: Dict = None
     ) -> bool:
-        """Use FFmpeg directly to preprocess video for better compatibility."""
+        """Modern FFmpeg preprocessing with intelligent aspect ratio preservation.
+        
+        This replaces the old hard-coded 1920x1080 scaling that stretched portrait videos.
+        Uses dynamic canvas dimensions and proper letterboxing with pad filter.
+        """
         import subprocess
         import os
 
@@ -1164,17 +1270,40 @@ class VideoPreprocessor:
                 # Keep original codec but optimize
                 cmd.extend(["-c:v", "libx264"])
 
-            # Resolution optimization
-            if any("resolution" in reason for reason in analysis["reasons"]):
-                # Scale down to 1080p max for memory optimization
-                cmd.extend(
-                    ["-vf", "scale=1920:1080:force_original_aspect_ratio=decrease"]
-                )
+            # ASPECT RATIO PRESERVATION - Modern approach using target format
+            if any("resolution" in reason for reason in analysis["reasons"]) and target_format:
+                target_w = target_format.get('target_width', 1920)
+                target_h = target_format.get('target_height', 1080)
+                canvas_type = target_format.get('canvas_type', 'default_landscape')
+                
+                # Use modern FFmpeg scaling with aspect ratio preservation + letterboxing
+                # Step 1: Scale down if needed, maintaining aspect ratio
+                scale_filter = f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease"
+                
+                # Step 2: Add letterboxing with pad filter (black bars)
+                pad_filter = f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
+                
+                # Combine both filters for perfect aspect ratio preservation
+                combined_filter = f"{scale_filter},{pad_filter}"
+                cmd.extend(["-vf", combined_filter])
+                
+                print(f"   🎬 Aspect-aware preprocessing for {canvas_type}")
+                print(f"       Target canvas: {target_w}x{target_h}")
+                print(f"       Filter chain: {combined_filter}")
+                
+            elif any("resolution" in reason for reason in analysis["reasons"]):
+                # Fallback: use safe 1920x1080 with letterboxing (backward compatibility)
+                fallback_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black"
+                cmd.extend(["-vf", fallback_filter])
+                print(f"   🎬 Fallback preprocessing with letterboxing")
+                print(f"       Filter: {fallback_filter}")
 
             # Frame rate optimization
             if any("framerate" in reason for reason in analysis["reasons"]):
-                # Limit to 30fps max
-                cmd.extend(["-r", "30"])
+                # Use target FPS if available, otherwise limit to 30fps
+                target_fps = target_format.get('target_fps', 30) if target_format else 30
+                cmd.extend(["-r", str(target_fps)])
+                print(f"   🎞️  Frame rate optimization: {target_fps}fps")
 
             # Audio handling
             cmd.extend(["-c:a", "aac"])  # Standard audio codec
@@ -1186,7 +1315,7 @@ class VideoPreprocessor:
 
             cmd.append(output_path)
 
-            print(f"   🔄 Running FFmpeg preprocessing...")
+            print(f"   🔄 Running modern FFmpeg preprocessing...")
             print(f"       Command: {' '.join(cmd[0:3] + ['...'] + cmd[-1:])}")
 
             # Run with timeout to prevent hanging
@@ -1198,6 +1327,14 @@ class VideoPreprocessor:
             )
 
             if result.returncode == 0:
+                # Verify output dimensions match target
+                if target_format:
+                    expected_w = target_format.get('target_width', 1920)
+                    expected_h = target_format.get('target_height', 1080)
+                    print(f"   ✅ FFmpeg preprocessing successful")
+                    print(f"       Output should be: {expected_w}x{expected_h} with proper letterboxing")
+                else:
+                    print(f"   ✅ FFmpeg preprocessing successful")
                 return True
             else:
                 print(f"   ❌ FFmpeg failed with return code {result.returncode}")

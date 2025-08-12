@@ -23,18 +23,34 @@ class VideoFormatAnalyzer:
     This class handles format analysis and normalization decisions.
     """
     
-    def find_dominant_format(self, video_clips: List) -> Dict[str, Any]:
-        """Find the dominant format among video clips.
+    def determine_optimal_canvas(self, video_clips: List) -> Dict[str, Any]:
+        """Determine optimal canvas size for mixed aspect ratios with intelligent orientation detection.
+        
+        This replaces the old find_dominant_format() that forced all clips to the same resolution,
+        causing portrait videos to be stretched. The new approach:
+        - Pure landscape content → Best landscape resolution
+        - Pure portrait content → Best portrait resolution  
+        - Mixed content → Square canvas to accommodate all orientations
         
         Args:
             video_clips: List of video clips to analyze
             
         Returns:
-            Dictionary containing dominant format specifications
+            Dictionary containing optimal canvas specifications
         """
-        # Analyze all clips to find dominant format
-        format_counts = {}
-        total_clips = len(video_clips)
+        if not video_clips:
+            return {
+                "target_width": 1920,
+                "target_height": 1080,
+                "target_fps": 24.0,
+                "requires_normalization": False,
+                "canvas_type": "default_landscape",
+            }
+
+        # Analyze orientations and collect format info
+        orientations = []
+        fps_values = []
+        max_width = max_height = 0
         
         for i, clip in enumerate(video_clips):
             if clip is None:
@@ -46,38 +62,95 @@ class VideoFormatAnalyzer:
             size = getattr(clip, 'size', (1920, 1080))
             duration = getattr(clip, 'duration', 0)
             
-            format_key = f"{size[0]}x{size[1]}@{fps}fps"
-            format_counts[format_key] = format_counts.get(format_key, 0) + 1
+            fps_values.append(fps)
+            width, height = size
+            max_width = max(max_width, width)
+            max_height = max(max_height, height)
             
-            logger.debug(f"Clip {i}: {type(clip)} - duration {duration:.3f}s, format {format_key}")
+            # Determine orientation based on aspect ratio
+            aspect_ratio = width / height
+            if aspect_ratio > 1.3:  # Landscape (16:9 = 1.78, 4:3 = 1.33)
+                orientations.append('landscape')
+            elif aspect_ratio < 0.8:  # Portrait (9:16 = 0.56, 3:4 = 0.75)
+                orientations.append('portrait')
+            else:  # Square-ish (1:1 = 1.0, close variants)
+                orientations.append('square')
+            
+            logger.debug(f"Clip {i}: {type(clip)} - duration {duration:.3f}s, format {width}x{height}@{fps}fps, orientation: {orientations[-1]}")
+
+        # Calculate target FPS (average of all clips)
+        target_fps = sum(fps_values) / len(fps_values) if fps_values else 24.0
         
-        # Find most common format
-        if not format_counts:
-            # Default fallback format
-            dominant_format = {
-                "target_width": 1920,
-                "target_height": 1080, 
-                "target_fps": 24.0,
-                "requires_normalization": False
-            }
+        # Smart canvas selection based on content orientation
+        unique_orientations = set(orientations)
+        
+        if len(unique_orientations) == 1:
+            # Pure content - optimize for that orientation
+            if 'landscape' in unique_orientations:
+                # Pure landscape: use best landscape resolution
+                target_width = max_width
+                target_height = max_height
+                canvas_type = "pure_landscape"
+                logger.info(f"Canvas Analysis: Pure landscape content detected")
+                
+            elif 'portrait' in unique_orientations:
+                # Pure portrait: use best portrait resolution
+                target_width = max_width  
+                target_height = max_height
+                canvas_type = "pure_portrait"
+                logger.info(f"Canvas Analysis: Pure portrait content detected")
+                
+            else:  # 'square'
+                # Pure square: use largest square
+                canvas_size = max(max_width, max_height)
+                target_width = target_height = canvas_size
+                canvas_type = "pure_square"
+                logger.info(f"Canvas Analysis: Pure square content detected")
+                
         else:
-            dominant_key = max(format_counts, key=format_counts.get)
-            parts = dominant_key.split('@')
-            resolution = parts[0].split('x')
-            fps_str = parts[1].replace('fps', '')
+            # Mixed orientations: use square canvas to accommodate all
+            canvas_size = max(max_width, max_height)
+            # Ensure minimum quality for mixed content
+            canvas_size = max(canvas_size, 1920)  # At least Full HD
+            target_width = target_height = canvas_size
+            canvas_type = "mixed_orientations"
+            logger.info(f"Canvas Analysis: Mixed orientations detected ({len(unique_orientations)} types)")
+            logger.info(f"   - Orientations: {', '.join(unique_orientations)}")
+            logger.info(f"   - Using square canvas: {canvas_size}x{canvas_size}")
+
+        # Check if normalization is needed
+        resolution_set = set()
+        fps_set = set()
+        for clip in video_clips:
+            if clip is not None:
+                size = getattr(clip, 'size', (1920, 1080))
+                fps = getattr(clip, 'fps', 24.0)
+                resolution_set.add(f"{size[0]}x{size[1]}")
+                fps_set.add(round(fps, 1))
+
+        requires_normalization = (
+            len(resolution_set) > 1 or 
+            len(fps_set) > 1 or
+            canvas_type == "mixed_orientations"
+        )
+
+        logger.info(f"Canvas Decision: {target_width}x{target_height} @ {target_fps:.1f}fps")
+        logger.info(f"Canvas Type: {canvas_type}")
+        if requires_normalization:
+            logger.info("Format normalization required due to mixed formats or orientations")
             
-            dominant_format = {
-                "target_width": int(resolution[0]),
-                "target_height": int(resolution[1]),
-                "target_fps": float(fps_str),
-                "requires_normalization": len(format_counts) > 1
-            }
-        
-        logger.info(f"Dominant format: {dominant_format['target_width']}x{dominant_format['target_height']}@{dominant_format['target_fps']}fps")
-        if dominant_format["requires_normalization"]:
-            logger.info("Format normalization required due to mixed formats")
-            
-        return dominant_format
+        return {
+            "target_width": target_width,
+            "target_height": target_height,
+            "target_fps": target_fps,
+            "requires_normalization": requires_normalization,
+            "canvas_type": canvas_type,
+            "orientation_analysis": {
+                "orientations": orientations,
+                "unique_orientations": list(unique_orientations),
+                "mixed_content": len(unique_orientations) > 1,
+            },
+        }
     
     def detect_format_compatibility_issues(self, video_clips: List) -> List[Dict[str, Any]]:
         """Detect format compatibility issues that could cause artifacts.
@@ -259,7 +332,10 @@ class VideoCompositor:
                 else:
                     logger.debug(f"  Clip {i}: {type(clip)} - {getattr(clip, 'duration', 'unknown')}s")
         
-        target_format = self.format_analyzer.find_dominant_format(video_clips)
+        target_format = self.format_analyzer.determine_optimal_canvas(video_clips)
+        
+        # Store target format in analyzer for smart fallbacks
+        self.format_analyzer._target_format = target_format
         
         # Detect and log format compatibility issues
         format_issues = self.format_analyzer.detect_format_compatibility_issues(video_clips)
