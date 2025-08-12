@@ -381,9 +381,9 @@ def calculate_clip_constraints(bpm: float) -> Tuple[float, List[float]]:
     For a given BPM, calculate musically appropriate clip durations.
 
     Examples:
-    - 60 BPM = 1 beat/second → clips: 1s, 2s, 4s, 8s
-    - 120 BPM = 2 beats/second → clips: 0.5s, 1s, 2s, 4s
-    - 90 BPM = 1.5 beats/second → clips: 0.67s, 1.33s, 2.67s, 5.33s
+    - 60 BPM = 1 beat/second → clips: 2s, 4s, 8s
+    - 120 BPM = 2 beats/second → clips: 1s, 2s, 4s
+    - 90 BPM = 1.5 beats/second → clips: 1.33s, 2.67s, 5.33s
 
     Args:
         bpm: Beats per minute of the music track
@@ -399,11 +399,11 @@ def calculate_clip_constraints(bpm: float) -> Tuple[float, List[float]]:
 
     beat_duration = 60.0 / bpm
 
-    # Minimum clip is 1 beat (but at least 0.5 seconds)
-    min_duration = max(float(beat_duration), 0.5)
+    # Minimum clip is 2 beats (but at least 0.5 seconds for very slow songs)
+    min_duration = max(float(beat_duration * 2), 0.5)
 
-    # Allowed durations are musical multiples
-    multipliers = [1, 2, 4, 8, 16]
+    # Allowed durations are musical multiples starting from 2 beats
+    multipliers = [2, 4, 8, 16]
     allowed_durations = [float(beat_duration * m) for m in multipliers]
 
     # Filter out clips longer than 8 seconds
