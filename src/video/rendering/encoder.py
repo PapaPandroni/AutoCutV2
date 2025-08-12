@@ -217,7 +217,7 @@ class VideoEncoder:
             "audio_bitrate": "160k",   # Higher quality bitrate for Mac compatibility (was 128k)
             # PHASE 6C: Stability parameters
             "write_logfile": False,    # Disable log file to save I/O
-            "temp_audiofile_fps": 44100,  # Ensure consistent audio fps
+            # Note: temp_audiofile_fps parameter removed in MoviePy 2.x - audio fps handled by audio_fps parameter
             # Container format optimization
             "codec": moviepy_params.get("codec", "libx264"),
             "bitrate": moviepy_params.get("bitrate", "5000k"),

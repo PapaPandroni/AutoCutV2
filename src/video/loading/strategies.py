@@ -183,6 +183,82 @@ class LoadingStrategyType(Enum):
     AUTO = "auto"
 
 
+class VideoCache:
+    """Cache for parent video objects to prevent reader corruption in MoviePy 2.x.
+    
+    Maintains references to source VideoFileClip objects throughout the processing
+    pipeline to prevent the 'NoneType' object has no attribute 'get_frame' error
+    that occurs when subclipped videos lose their parent reader references.
+    """
+    
+    def __init__(self):
+        self._cache = {}  # filepath -> VideoFileClip
+        self._parent_videos = {}  # Cache for parent video objects to prevent reader corruption
+        self.logger = get_logger(__name__)
+    
+    def get_or_load_parent_video(self, filepath: str):
+        """Get cached parent video or load new one if not cached.
+        
+        This is the CRITICAL fix for MoviePy 2.x reader corruption - we maintain
+        parent video references to prevent subclipped videos from losing their readers.
+        """
+        if filepath not in self._parent_videos:
+            from compatibility.moviepy import import_moviepy_safely
+            VideoFileClip, _, _, _ = import_moviepy_safely()
+            
+            self.logger.debug(f"Loading parent video into cache: {filepath}")
+            self._parent_videos[filepath] = VideoFileClip(filepath)
+        
+        return self._parent_videos[filepath]
+    
+    def get_or_load(self, filepath: str):
+        """Legacy method for compatibility."""
+        return self.get_or_load_parent_video(filepath)
+    
+    def get(self, cache_key: str):
+        """Get cached clip by cache key."""
+        return self._cache.get(cache_key)
+    
+    def put(self, cache_key: str, clip, estimated_size_mb: float):
+        """Put clip in cache with estimated size."""
+        self._cache[cache_key] = clip
+        self.logger.debug(f"Cached clip: {cache_key} ({estimated_size_mb}MB)")
+    
+    def get_stats(self):
+        """Get cache statistics."""
+        return {
+            'cached_clips': len(self._cache),
+            'parent_videos': len(self._parent_videos)
+        }
+    
+    def clear(self):
+        """Clear cache and close all video objects.
+        
+        IMPORTANT: This should only be called when the entire processing pipeline
+        is complete to avoid causing NoneType reader errors.
+        """
+        # First clear regular clip cache
+        self._cache.clear()
+        
+        # Then close parent videos (this is safe to do at the end)
+        for filepath, clip in self._parent_videos.items():
+            try:
+                if hasattr(clip, 'close'):
+                    clip.close()
+                self.logger.debug(f"Closed parent video: {filepath}")
+            except Exception as e:
+                self.logger.warning(f"Failed to close parent video {filepath}: {e}")
+        
+        self._parent_videos.clear()
+    
+    def clear_clips_only(self):
+        """Clear only the clips cache, keeping parent videos alive."""
+        self._cache.clear()
+        self.logger.debug("Cleared clips cache, keeping parent videos alive")
+    
+    def __len__(self):
+        return len(self._cache) + len(self._parent_videos)
+
 class VideoLoadingStrategy(ABC):
     """Abstract base class for video loading strategies."""
 
@@ -396,23 +472,26 @@ class VideoLoadingStrategy(ABC):
             return False
 
     def _load_clip_from_disk(self, spec: ClipSpec) -> VideoFileClip:
-        """Load clip from disk with format handling and universal resolution standardization."""
-        video = None
+        """Load clip from disk with MoviePy 2.x reader corruption prevention.
+        
+        CRITICAL FIX: Uses parent video cache to prevent the NoneType get_frame error
+        that occurs when subclipped videos lose their parent reader references.
+        """
         try:
-            # Load full video first
-            video = VideoFileClip(spec.file_path)
+            # CRITICAL: Get parent video from cache to prevent reader corruption
+            parent_video = self.cache.get_or_load_parent_video(spec.file_path)
 
             # Create subclip if needed
-            if spec.start_time > 0 or spec.end_time < video.duration:
+            if spec.start_time > 0 or spec.end_time < parent_video.duration:
                 # Use the correct method based on MoviePy version
                 try:
                     # Try modern MoviePy 2.x method first
-                    clip = video.subclipped(spec.start_time, spec.end_time)
+                    clip = parent_video.subclipped(spec.start_time, spec.end_time)
                     self.logger.debug(f"Subclip created using subclipped() for {spec}")
                 except AttributeError:
                     # Fallback to older MoviePy 1.x method
                     try:
-                        clip = video.subclip(spec.start_time, spec.end_time)
+                        clip = parent_video.subclip(spec.start_time, spec.end_time)
                         self.logger.debug(f"Subclip created using subclip() for {spec}")
                     except AttributeError:
                         self.logger.error(f"Neither subclipped nor subclip available for {spec}")
@@ -428,42 +507,24 @@ class VideoLoadingStrategy(ABC):
                     self.logger.error(f"Subclip validation failed for {spec}: {e}")
                     raise
                 
-                # CRITICAL FIX: For MoviePy 2.x subclips, we need to copy the clip to break dependency
-                # This prevents file handle leaks while avoiding NoneType errors
-                try:
-                    # Create an independent copy that doesn't rely on the parent video
-                    final_clip = clip.copy()
-                    
-                    # Now we can safely close the original video
-                    if video:
-                        video.close()
-                        video = None
-                        
-                except Exception as copy_error:
-                    self.logger.warning(f"Failed to copy subclip for {spec}: {copy_error}, using original")
-                    final_clip = clip
-                    # Don't close video in this case to prevent NoneType errors
+                # CRITICAL: DO NOT close or copy the clip - this breaks the reader reference
+                # The parent video must stay alive for the subclip to work
+                self.logger.debug(f"Keeping parent video alive for subclip: {spec}")
+                final_clip = clip
                     
             else:
                 # Return full video without creating subclip
                 self.logger.debug(f"Using full video (no subclip needed) for {spec}")
-                final_clip = video
-                # For full videos, we can't close the original since we're returning it directly
+                final_clip = parent_video
 
-            # PHASE 6A: Universal Resolution Standardization to 1920x1080
+            # PHASE 6A: TEMPORARILY DISABLED - Resolution standardization causes MoviePy 2.x subclip reader corruption
             # Apply immediately during clip loading to prevent encoding issues
-            final_clip = self._standardize_clip_resolution(final_clip, spec)
+            # final_clip = self._standardize_clip_resolution(final_clip, spec)
+            self.logger.debug(f"Resolution standardization temporarily disabled for {spec}")
             
             return final_clip
 
         except Exception as e:
-            # Ensure we clean up the video handle on any error
-            if video:
-                try:
-                    video.close()
-                except:
-                    pass  # Ignore cleanup errors
-                    
             self.logger.error(f"Failed to load clip from disk for {spec}: {e}")
             # Handle iPhone H.265 compatibility issues
             if "codec" in str(e).lower() or "h265" in str(e).lower():
@@ -508,6 +569,16 @@ class VideoLoadingStrategy(ABC):
                 ColorClip_local = None
                 CompositeVideoClip_local = None
         
+        # Import the correct MoviePy 2.x Resize effect
+        try:
+            from moviepy.video.fx.Resize import Resize
+        except ImportError:
+            try:
+                from moviepy.video.fx import Resize
+            except ImportError:
+                self.logger.error(f"Cannot import Resize effect for MoviePy 2.x - falling back to original clip for {spec}")
+                return clip
+        
         try:
             # Get current dimensions
             current_width, current_height = clip.size
@@ -522,7 +593,7 @@ class VideoLoadingStrategy(ABC):
             if abs(current_aspect - target_aspect) < 0.01:
                 # Already 16:9 aspect ratio - just scale
                 self.logger.debug(f"Clip {spec} has 16:9 aspect ratio, scaling directly")
-                resized_clip = clip.resized((TARGET_WIDTH, TARGET_HEIGHT))
+                resized_clip = clip.with_effects([Resize((TARGET_WIDTH, TARGET_HEIGHT))])
             
             elif current_aspect > target_aspect:
                 # Landscape video wider than 16:9 (e.g., ultrawide)
@@ -530,7 +601,7 @@ class VideoLoadingStrategy(ABC):
                 new_height = int(TARGET_WIDTH / current_aspect)
                 self.logger.debug(f"Wide landscape {spec}: scaling to {TARGET_WIDTH}x{new_height}, adding top/bottom bars")
                 
-                scaled_clip = clip.resized((TARGET_WIDTH, new_height))
+                scaled_clip = clip.with_effects([Resize((TARGET_WIDTH, new_height))])
                 
                 # Add black background if ColorClip is available
                 if ColorClip_local is not None and CompositeVideoClip_local is not None:
@@ -544,10 +615,11 @@ class VideoLoadingStrategy(ABC):
                     # Fallback: Just scale and center without black bars
                     self.logger.warning(f"ColorClip unavailable - centering {spec} without black bars")
                     resized_clip = scaled_clip.with_position('center').with_fps(TARGET_FPS)
-                    # Manually pad to target size using resize if possible
+                    # Try to pad to target size using Resize effect
                     try:
-                        resized_clip = resized_clip.resized((TARGET_WIDTH, TARGET_HEIGHT))
-                    except:
+                        resized_clip = resized_clip.with_effects([Resize((TARGET_WIDTH, TARGET_HEIGHT))])
+                    except Exception as e:
+                        self.logger.warning(f"Failed to resize to target dimensions for {spec}: {e}")
                         # If resize fails, keep the scaled clip as-is
                         pass
                 
@@ -557,7 +629,7 @@ class VideoLoadingStrategy(ABC):
                 new_width = int(TARGET_HEIGHT * current_aspect)
                 self.logger.debug(f"Portrait/narrow {spec}: scaling to {new_width}x{TARGET_HEIGHT}, adding side bars")
                 
-                scaled_clip = clip.resized((new_width, TARGET_HEIGHT))
+                scaled_clip = clip.with_effects([Resize((new_width, TARGET_HEIGHT))])
                 
                 # Add black background if ColorClip is available
                 if ColorClip_local is not None and CompositeVideoClip_local is not None:
@@ -570,10 +642,11 @@ class VideoLoadingStrategy(ABC):
                     # Fallback: Just scale and center without black bars
                     self.logger.warning(f"ColorClip unavailable - centering {spec} without black bars")  
                     resized_clip = scaled_clip.with_position('center').with_fps(TARGET_FPS)
-                    # Manually pad to target size using resize if possible
+                    # Try to pad to target size using Resize effect
                     try:
-                        resized_clip = resized_clip.resized((TARGET_WIDTH, TARGET_HEIGHT))
-                    except:
+                        resized_clip = resized_clip.with_effects([Resize((TARGET_WIDTH, TARGET_HEIGHT))])
+                    except Exception as e:
+                        self.logger.warning(f"Failed to resize to target dimensions for {spec}: {e}")
                         # If resize fails, keep the scaled clip as-is
                         pass
             
@@ -597,6 +670,8 @@ class VideoLoadingStrategy(ABC):
             
         except Exception as e:
             self.logger.error(f"Failed to standardize resolution for {spec}: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             # Return original clip if standardization fails
             self.logger.warning(f"Falling back to original resolution for {spec}")
             return clip

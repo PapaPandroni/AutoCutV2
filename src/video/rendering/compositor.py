@@ -194,14 +194,9 @@ class VideoNormalizationPipeline:
                     if compatibility_info:
                         normalized_clip = resize_clip_safely(normalized_clip, newsize=target_size, compatibility_info=compatibility_info)
                     else:
-                        # Fallback to direct method calls
-                        try:
-                            normalized_clip = normalized_clip.resized(target_size)
-                        except AttributeError:
-                            try:
-                                normalized_clip = normalized_clip.resize(newsize=target_size)
-                            except AttributeError:
-                                logger.warning(f"Neither 'resized' nor 'resize' available for clip {i}")
+                        # The resize_clip_safely function should handle all resize operations
+                        logger.error(f"resize_clip_safely import failed but no fallback available for clip {i}")
+                        raise RuntimeError("Cannot resize clip without resize_clip_safely function")
                 except Exception as e:
                     logger.warning(f"Failed to normalize resolution for clip {i}: {e}")
             

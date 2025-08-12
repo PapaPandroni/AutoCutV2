@@ -182,7 +182,7 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info: Dict[str, An
 
 
 def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibility_info: Dict[str, Any] = None):
-    """Resize clip using version-compatible method.
+    """Resize clip using MoviePy 2.x effects system.
     
     Args:
         clip: Video clip instance
@@ -194,28 +194,34 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
     Returns:
         Resized video clip
     """
-    # Determine target size
-    if newsize is not None:
-        target_size = newsize
-    elif width is not None or height is not None:
-        current_size = getattr(clip, 'size', (1920, 1080))
-        target_width = width or current_size[0]
-        target_height = height or current_size[1] 
-        target_size = (target_width, target_height)
-    else:
-        raise ValueError("Must specify either newsize or width/height parameters")
-    
-    # Try modern MoviePy 2.x method first (resized) - uses positional args
+    # Import MoviePy 2.x Resize effect
     try:
-        return clip.resized(target_size)
-    except AttributeError:
-        # Fallback to older MoviePy 1.x method (resize) with named parameters
+        from moviepy.video.fx.Resize import Resize
+    except ImportError:
         try:
-            return clip.resize(newsize=target_size)
-        except AttributeError:
-            raise RuntimeError(f"Neither 'resized' nor 'resize' methods available on {type(clip)}")
+            from moviepy.video.fx import Resize
+        except ImportError:
+            logger.error("Cannot import Resize effect for MoviePy 2.x")
+            raise RuntimeError("MoviePy Resize effect not available")
+    
+    # Determine target parameters
+    try:
+        if newsize is not None:
+            # Direct size specification
+            return clip.with_effects([Resize(newsize)])
+        elif width is not None and height is not None:
+            # Width and height specified
+            return clip.with_effects([Resize((width, height))])
+        elif width is not None:
+            # Width only - height computed to maintain aspect ratio
+            return clip.with_effects([Resize(width=width)])
+        elif height is not None:
+            # Height only - width computed to maintain aspect ratio
+            return clip.with_effects([Resize(height=height)])
+        else:
+            raise ValueError("Must specify either newsize or width/height parameters")
     except Exception as e:
-        # Re-raise other exceptions
+        logger.error(f"Failed to resize clip using MoviePy 2.x effects: {e}")
         raise
 
 
@@ -296,13 +302,18 @@ def write_videofile_safely(video_clip, output_path: str, compatibility_info: Dic
         **kwargs: Additional parameters for write_videofile
     """
     try:
-        # Remove any parameters that might not be supported in all versions
+        # Remove any parameters that might not be supported in MoviePy 2.x
         safe_kwargs = kwargs.copy()
         
-        # Some versions of MoviePy might not support certain parameters
-        unsupported_params = ['logger']  # Add parameters that cause issues
-        for param in unsupported_params:
+        # MoviePy 2.x incompatible parameters that need to be removed
+        moviepy2_unsupported_params = [
+            'logger',              # Causes issues in some versions
+            'temp_audiofile_fps',  # Not supported in MoviePy 2.x - removed parameter
+        ]
+        
+        for param in moviepy2_unsupported_params:
             if param in safe_kwargs:
+                logger.debug(f"Removing unsupported parameter: {param}")
                 del safe_kwargs[param]
         
         video_clip.write_videofile(output_path, **safe_kwargs)

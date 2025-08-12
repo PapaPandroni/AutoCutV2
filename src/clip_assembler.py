@@ -424,8 +424,16 @@ class VideoNormalizationPipeline:
         new_width = int(clip.w * scale)
         new_height = int(clip.h * scale)
 
-        # Resize to fit within target dimensions
-        resized_clip = clip.resized((new_width, new_height))
+        # Resize to fit within target dimensions using MoviePy 2.x effects system
+        try:
+            from moviepy.video.fx.Resize import Resize
+        except ImportError:
+            try:
+                from moviepy.video.fx import Resize
+            except ImportError:
+                raise RuntimeError("Cannot import MoviePy 2.x Resize effect")
+        
+        resized_clip = clip.with_effects([Resize((new_width, new_height))])
 
         # Add padding to reach exact target dimensions (letterbox/pillarbox)
         if new_width != target_width or new_height != target_height:
