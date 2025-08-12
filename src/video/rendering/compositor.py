@@ -23,20 +23,18 @@ class VideoFormatAnalyzer:
     This class handles format analysis and normalization decisions.
     """
     
-    def determine_optimal_canvas(self, video_clips: List) -> Dict[str, Any]:
-        """Determine optimal canvas size for mixed aspect ratios with intelligent orientation detection.
+    def determine_optimal_landscape_canvas(self, video_clips: List) -> Dict[str, Any]:
+        """Determine optimal LANDSCAPE canvas size that preserves quality for all content.
         
-        This replaces the old find_dominant_format() that forced all clips to the same resolution,
-        causing portrait videos to be stretched. The new approach:
-        - Pure landscape content → Best landscape resolution
-        - Pure portrait content → Best portrait resolution  
-        - Mixed content → Square canvas to accommodate all orientations
+        CORRECTED APPROACH: Always outputs landscape orientation (width > height) while 
+        preserving maximum quality. Portrait and square content gets letterboxed within 
+        the landscape frame.
         
         Args:
             video_clips: List of video clips to analyze
             
         Returns:
-            Dictionary containing optimal canvas specifications
+            Dictionary containing optimal landscape canvas specifications
         """
         if not video_clips:
             return {
@@ -47,10 +45,10 @@ class VideoFormatAnalyzer:
                 "canvas_type": "default_landscape",
             }
 
-        # Analyze orientations and collect format info
-        orientations = []
+        # Analyze all content to find optimal landscape canvas
+        max_dimension = 0  # Track the largest dimension for quality preservation
         fps_values = []
-        max_width = max_height = 0
+        content_types = []
         
         for i, clip in enumerate(video_clips):
             if clip is None:
@@ -64,61 +62,64 @@ class VideoFormatAnalyzer:
             
             fps_values.append(fps)
             width, height = size
-            max_width = max(max_width, width)
-            max_height = max(max_height, height)
             
-            # Determine orientation based on aspect ratio
+            # Track the largest dimension across ALL clips for quality preservation
+            max_dimension = max(max_dimension, width, height)
+            
+            # Track content type for logging
             aspect_ratio = width / height
-            if aspect_ratio > 1.3:  # Landscape (16:9 = 1.78, 4:3 = 1.33)
-                orientations.append('landscape')
-            elif aspect_ratio < 0.8:  # Portrait (9:16 = 0.56, 3:4 = 0.75)
-                orientations.append('portrait')
-            else:  # Square-ish (1:1 = 1.0, close variants)
-                orientations.append('square')
+            if aspect_ratio > 1.3:  # Landscape
+                content_types.append('landscape')
+            elif aspect_ratio < 0.8:  # Portrait  
+                content_types.append('portrait')
+            else:  # Square-ish
+                content_types.append('square')
             
-            logger.debug(f"Clip {i}: {type(clip)} - duration {duration:.3f}s, format {width}x{height}@{fps}fps, orientation: {orientations[-1]}")
+            logger.debug(f"Clip {i}: {type(clip)} - duration {duration:.3f}s, format {width}x{height}@{fps}fps, type: {content_types[-1]}")
 
         # Calculate target FPS (average of all clips)
         target_fps = sum(fps_values) / len(fps_values) if fps_values else 24.0
         
-        # Smart canvas selection based on content orientation
-        unique_orientations = set(orientations)
+        # ALWAYS CREATE LANDSCAPE CANVAS - preserving maximum quality
+        # Use the largest dimension as width to preserve quality
+        target_width = max_dimension
         
-        if len(unique_orientations) == 1:
-            # Pure content - optimize for that orientation
-            if 'landscape' in unique_orientations:
-                # Pure landscape: use best landscape resolution
-                target_width = max_width
-                target_height = max_height
-                canvas_type = "pure_landscape"
-                logger.info(f"Canvas Analysis: Pure landscape content detected")
-                
-            elif 'portrait' in unique_orientations:
-                # Pure portrait: use best portrait resolution
-                target_width = max_width  
-                target_height = max_height
-                canvas_type = "pure_portrait"
-                logger.info(f"Canvas Analysis: Pure portrait content detected")
-                
-            else:  # 'square'
-                # Pure square: use largest square
-                canvas_size = max(max_width, max_height)
-                target_width = target_height = canvas_size
-                canvas_type = "pure_square"
-                logger.info(f"Canvas Analysis: Pure square content detected")
-                
+        # Calculate appropriate landscape height to maintain good aspect ratio
+        # Minimum 16:9 aspect ratio for professional appearance
+        min_aspect_ratio = 16.0 / 9.0  # 1.778
+        min_height_for_aspect = int(target_width / min_aspect_ratio)
+        
+        # For landscape content, try to use natural height; for others, enforce 16:9
+        landscape_heights = []
+        for clip in video_clips:
+            if clip is not None:
+                size = getattr(clip, 'size', (1920, 1080))
+                width, height = size
+                if width / height > 1.3:  # Landscape
+                    landscape_heights.append(height)
+        
+        if landscape_heights:
+            # Use the highest quality landscape height available
+            natural_height = max(landscape_heights)
+            target_height = max(min_height_for_aspect, natural_height)
         else:
-            # Mixed orientations: use square canvas to accommodate all
-            canvas_size = max(max_width, max_height)
-            # Ensure minimum quality for mixed content
-            canvas_size = max(canvas_size, 1920)  # At least Full HD
-            target_width = target_height = canvas_size
-            canvas_type = "mixed_orientations"
-            logger.info(f"Canvas Analysis: Mixed orientations detected ({len(unique_orientations)} types)")
-            logger.info(f"   - Orientations: {', '.join(unique_orientations)}")
-            logger.info(f"   - Using square canvas: {canvas_size}x{canvas_size}")
+            # No landscape content - enforce 16:9 aspect ratio
+            target_height = min_height_for_aspect
+        
+        # Ensure we maintain landscape orientation
+        if target_width <= target_height:
+            target_width = int(target_height * min_aspect_ratio)
 
-        # Check if normalization is needed
+        # Determine canvas characteristics for logging
+        unique_content_types = set(content_types)
+        if len(unique_content_types) == 1 and 'landscape' in unique_content_types:
+            canvas_type = "landscape_optimized"
+            description = "Pure landscape content - native landscape canvas"
+        else:
+            canvas_type = "landscape_universal"  
+            description = f"Mixed/portrait content - landscape canvas with letterboxing"
+
+        # Check if normalization is needed (always true for mixed content)
         resolution_set = set()
         fps_set = set()
         for clip in video_clips:
@@ -131,11 +132,17 @@ class VideoFormatAnalyzer:
         requires_normalization = (
             len(resolution_set) > 1 or 
             len(fps_set) > 1 or
-            canvas_type == "mixed_orientations"
+            len(unique_content_types) > 1  # Mixed content always needs normalization
         )
 
+        # Quality preservation logging
+        quality_info = f"4K" if max_dimension >= 3840 else f"HD+" if max_dimension >= 1920 else "HD"
+        logger.info(f"Canvas Analysis: {description}")
+        logger.info(f"   - Content types: {', '.join(unique_content_types)}")
+        logger.info(f"   - Quality level: {quality_info} (max dimension: {max_dimension}px)")
         logger.info(f"Canvas Decision: {target_width}x{target_height} @ {target_fps:.1f}fps")
-        logger.info(f"Canvas Type: {canvas_type}")
+        logger.info(f"Canvas Type: {canvas_type} (always landscape orientation)")
+        logger.info("Quality Preservation: ✅ No 4K downscaling")
         if requires_normalization:
             logger.info("Format normalization required due to mixed formats or orientations")
             
@@ -145,10 +152,12 @@ class VideoFormatAnalyzer:
             "target_fps": target_fps,
             "requires_normalization": requires_normalization,
             "canvas_type": canvas_type,
-            "orientation_analysis": {
-                "orientations": orientations,
-                "unique_orientations": list(unique_orientations),
-                "mixed_content": len(unique_orientations) > 1,
+            "quality_level": quality_info,
+            "max_dimension_preserved": max_dimension,
+            "content_analysis": {
+                "content_types": content_types,
+                "unique_content_types": list(unique_content_types),
+                "mixed_content": len(unique_content_types) > 1,
             },
         }
     
@@ -332,7 +341,7 @@ class VideoCompositor:
                 else:
                     logger.debug(f"  Clip {i}: {type(clip)} - {getattr(clip, 'duration', 'unknown')}s")
         
-        target_format = self.format_analyzer.determine_optimal_canvas(video_clips)
+        target_format = self.format_analyzer.determine_optimal_landscape_canvas(video_clips)
         
         # Store target format in analyzer for smart fallbacks
         self.format_analyzer._target_format = target_format
