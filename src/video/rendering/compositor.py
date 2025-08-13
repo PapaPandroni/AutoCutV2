@@ -23,29 +23,30 @@ class VideoFormatAnalyzer:
     This class handles format analysis and normalization decisions.
     """
     
-    def determine_optimal_landscape_canvas(self, video_clips: List) -> Dict[str, Any]:
-        """Determine optimal LANDSCAPE canvas size that preserves quality for all content.
+    def determine_optimal_canvas(self, video_clips: List) -> Dict[str, Any]:
+        """Determine optimal 4:3 canvas size that preserves quality for all content.
         
-        CORRECTED APPROACH: Always outputs landscape orientation (width > height) while 
-        preserving maximum quality. Portrait and square content gets letterboxed within 
-        the landscape frame.
+        UPDATED APPROACH: Always outputs 4:3 aspect ratio (width:height = 4:3) while 
+        preserving maximum quality. All content gets appropriately letterboxed/pillarboxed 
+        within the 4:3 frame.
         
         Args:
             video_clips: List of video clips to analyze
             
         Returns:
-            Dictionary containing optimal landscape canvas specifications
+            Dictionary containing optimal 4:3 canvas specifications
         """
         if not video_clips:
             return {
-                "target_width": 1920,
+                "target_width": 1440,
                 "target_height": 1080,
                 "target_fps": 24.0,
+                "target_aspect_ratio": 4 / 3,
                 "requires_normalization": False,
-                "canvas_type": "default_landscape",
+                "canvas_type": "default_4_3",
             }
 
-        # Analyze all content to find optimal landscape canvas
+        # Analyze all content to find optimal 4:3 canvas
         max_dimension = 0  # Track the largest dimension for quality preservation
         fps_values = []
         content_types = []
@@ -80,44 +81,48 @@ class VideoFormatAnalyzer:
         # Calculate target FPS (average of all clips)
         target_fps = sum(fps_values) / len(fps_values) if fps_values else 24.0
         
-        # ALWAYS CREATE LANDSCAPE CANVAS - preserving maximum quality
-        # Use the largest dimension as width to preserve quality
-        target_width = max_dimension
+        # ALWAYS CREATE 4:3 CANVAS - preserving maximum quality
+        # Target aspect ratio: 4:3 (1.333)
+        target_aspect_ratio = 4.0 / 3.0
         
-        # Calculate appropriate landscape height to maintain good aspect ratio
-        # Minimum 16:9 aspect ratio for professional appearance
-        min_aspect_ratio = 16.0 / 9.0  # 1.778
-        min_height_for_aspect = int(target_width / min_aspect_ratio)
+        # Determine optimal dimensions for 4:3 while preserving quality
+        # Use the largest dimension as a starting point for quality preservation
+        if max_dimension >= 3840:  # 4K content
+            # For 4K, use 2880x2160 (4:3 aspect ratio, high quality)
+            target_width = 2880
+            target_height = 2160
+        elif max_dimension >= 1920:  # HD content
+            # For HD, use 1440x1080 (4:3 aspect ratio, good quality)
+            target_width = 1440 
+            target_height = 1080
+        else:  # SD content
+            # For SD, use 960x720 (4:3 aspect ratio, standard quality)
+            target_width = 960
+            target_height = 720
         
-        # For landscape content, try to use natural height; for others, enforce 16:9
-        landscape_heights = []
-        for clip in video_clips:
-            if clip is not None:
-                size = getattr(clip, 'size', (1920, 1080))
-                width, height = size
-                if width / height > 1.3:  # Landscape
-                    landscape_heights.append(height)
-        
-        if landscape_heights:
-            # Use the highest quality landscape height available
-            natural_height = max(landscape_heights)
-            target_height = max(min_height_for_aspect, natural_height)
-        else:
-            # No landscape content - enforce 16:9 aspect ratio
-            target_height = min_height_for_aspect
-        
-        # Ensure we maintain landscape orientation
-        if target_width <= target_height:
-            target_width = int(target_height * min_aspect_ratio)
+        # Verify aspect ratio is exactly 4:3
+        calculated_aspect = target_width / target_height
+        if abs(calculated_aspect - target_aspect_ratio) > 0.01:
+            # Adjust width to ensure perfect 4:3 ratio
+            target_width = int(target_height * target_aspect_ratio)
 
         # Determine canvas characteristics for logging
         unique_content_types = set(content_types)
-        if len(unique_content_types) == 1 and 'landscape' in unique_content_types:
-            canvas_type = "landscape_optimized"
-            description = "Pure landscape content - native landscape canvas"
+        
+        # Canvas type based on content mix
+        if len(unique_content_types) == 1:
+            if 'landscape' in unique_content_types:
+                canvas_type = "4_3_landscape_optimized"
+                description = "Landscape content - 4:3 canvas with letterboxing"
+            elif 'portrait' in unique_content_types:
+                canvas_type = "4_3_portrait_optimized" 
+                description = "Portrait content - 4:3 canvas with pillarboxing"
+            else:
+                canvas_type = "4_3_square_optimized"
+                description = "Square content - 4:3 canvas with minimal bars"
         else:
-            canvas_type = "landscape_universal"  
-            description = f"Mixed/portrait content - landscape canvas with letterboxing"
+            canvas_type = "4_3_mixed_content"
+            description = "Mixed content types - 4:3 canvas with adaptive boxing"
 
         # Check if normalization is needed (always true for mixed content)
         resolution_set = set()
@@ -132,24 +137,26 @@ class VideoFormatAnalyzer:
         requires_normalization = (
             len(resolution_set) > 1 or 
             len(fps_set) > 1 or
-            len(unique_content_types) > 1  # Mixed content always needs normalization
+            len(unique_content_types) > 1 or
+            True  # Always normalize for 4:3 output since most content isn't 4:3
         )
 
         # Quality preservation logging
-        quality_info = f"4K" if max_dimension >= 3840 else f"HD+" if max_dimension >= 1920 else "HD"
+        quality_info = f"4K" if max_dimension >= 3840 else f"HD" if max_dimension >= 1920 else "SD"
         logger.info(f"Canvas Analysis: {description}")
         logger.info(f"   - Content types: {', '.join(unique_content_types)}")
         logger.info(f"   - Quality level: {quality_info} (max dimension: {max_dimension}px)")
-        logger.info(f"Canvas Decision: {target_width}x{target_height} @ {target_fps:.1f}fps")
-        logger.info(f"Canvas Type: {canvas_type} (always landscape orientation)")
-        logger.info("Quality Preservation: ✅ No 4K downscaling")
+        logger.info(f"Canvas Decision: {target_width}x{target_height} @ {target_fps:.1f}fps (4:3 aspect ratio)")
+        logger.info(f"Canvas Type: {canvas_type}")
+        logger.info("Quality Preservation: ✅ Optimal quality for 4:3 output")
         if requires_normalization:
-            logger.info("Format normalization required due to mixed formats or orientations")
+            logger.info("Format normalization required for 4:3 output")
             
         return {
             "target_width": target_width,
             "target_height": target_height,
             "target_fps": target_fps,
+            "target_aspect_ratio": target_aspect_ratio,
             "requires_normalization": requires_normalization,
             "canvas_type": canvas_type,
             "quality_level": quality_info,
@@ -341,7 +348,7 @@ class VideoCompositor:
                 else:
                     logger.debug(f"  Clip {i}: {type(clip)} - {getattr(clip, 'duration', 'unknown')}s")
         
-        target_format = self.format_analyzer.determine_optimal_landscape_canvas(video_clips)
+        target_format = self.format_analyzer.determine_optimal_canvas(video_clips)
         
         # Store target format in analyzer for smart fallbacks
         self.format_analyzer._target_format = target_format

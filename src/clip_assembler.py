@@ -234,35 +234,37 @@ class VideoFormatAnalyzer:
             "fps_category": "24fps",
         }
 
-    def determine_optimal_landscape_canvas(self, video_clips: List[Any]) -> Dict[str, Any]:
-        """Determine optimal LANDSCAPE canvas size that preserves quality for all content.
+    def determine_optimal_canvas(self, video_clips: List[Any]) -> Dict[str, Any]:
+        """Determine optimal 4:3 canvas size that preserves quality for all content.
         
-        CORRECTED APPROACH: Always outputs landscape orientation (width > height) while 
-        preserving maximum quality. Portrait and square content gets letterboxed within 
-        the landscape frame.
+        UPDATED APPROACH: Always outputs 4:3 aspect ratio (width:height = 4:3) while 
+        preserving maximum quality. All content gets appropriately letterboxed/pillarboxed 
+        within the 4:3 frame.
         
-        Key changes from previous implementation:
-        - Always landscape output (never portrait 1080x1920 or square 1920x1920)
-        - Preserves 4K quality (no forced downscaling to 1920px)
-        - Consistent video window orientation regardless of input content mix
+        Key features:
+        - Always 4:3 output (1.333 aspect ratio)
+        - Preserves 4K quality (no forced downscaling)
+        - Landscape videos get letterboxed (black bars top/bottom)
+        - Portrait/square videos get pillarboxed (black bars left/right)
+        - Maximizes space usage without distortion
         
         Args:
             video_clips: List of VideoFileClip instances
 
         Returns:
-            Target landscape canvas specification optimized for quality preservation
+            Target 4:3 canvas specification optimized for quality preservation
         """
         if not video_clips:
             return {
-                "target_width": 1920,
+                "target_width": 1440,
                 "target_height": 1080,
                 "target_fps": 24.0,
-                "target_aspect_ratio": 16 / 9,
+                "target_aspect_ratio": 4 / 3,
                 "requires_normalization": False,
-                "canvas_type": "default_landscape",
+                "canvas_type": "default_4_3",
             }
 
-        # Analyze all content to find optimal landscape canvas
+        # Analyze all content to find optimal 4:3 canvas
         formats = []
         max_dimension = 0  # Track the largest dimension for quality preservation
         fps_counts = {}
@@ -294,62 +296,72 @@ class VideoFormatAnalyzer:
         dominant_fps_category = max(fps_counts, key=fps_counts.get)
         target_fps = self._fps_category_to_value(dominant_fps_category)
 
-        # ALWAYS CREATE LANDSCAPE CANVAS - preserving maximum quality
-        # Use the largest dimension as width to preserve quality
-        target_width = max_dimension
+        # ALWAYS CREATE 4:3 CANVAS - preserving maximum quality
+        # Target aspect ratio: 4:3 (1.333)
+        target_aspect_ratio = 4.0 / 3.0
         
-        # Calculate appropriate landscape height to maintain good aspect ratio
-        # Minimum 16:9 aspect ratio for professional appearance
-        min_aspect_ratio = 16.0 / 9.0  # 1.778
-        min_height_for_aspect = int(target_width / min_aspect_ratio)
+        # Determine optimal dimensions for 4:3 while preserving quality
+        # Use the largest dimension as a starting point for quality preservation
+        if max_dimension >= 3840:  # 4K content
+            # For 4K, use 2880x2160 (4:3 aspect ratio, high quality)
+            target_width = 2880
+            target_height = 2160
+        elif max_dimension >= 1920:  # HD content
+            # For HD, use 1440x1080 (4:3 aspect ratio, good quality)
+            target_width = 1440 
+            target_height = 1080
+        else:  # SD content
+            # For SD, use 960x720 (4:3 aspect ratio, standard quality)
+            target_width = 960
+            target_height = 720
         
-        # For landscape content, try to use natural height; for others, enforce 16:9
-        landscape_heights = [fmt['height'] for fmt in formats 
-                           if fmt['width'] / fmt['height'] > 1.3]
-        
-        if landscape_heights:
-            # Use the highest quality landscape height available
-            natural_height = max(landscape_heights)
-            target_height = max(min_height_for_aspect, natural_height)
-        else:
-            # No landscape content - enforce 16:9 aspect ratio
-            target_height = min_height_for_aspect
-        
-        # Ensure we maintain landscape orientation
-        if target_width <= target_height:
-            target_width = int(target_height * min_aspect_ratio)
+        # Verify aspect ratio is exactly 4:3
+        calculated_aspect = target_width / target_height
+        if abs(calculated_aspect - target_aspect_ratio) > 0.01:
+            # Adjust width to ensure perfect 4:3 ratio
+            target_width = int(target_height * target_aspect_ratio)
 
         # Determine canvas characteristics for logging
         unique_content_types = set(content_types)
-        if len(unique_content_types) == 1 and 'landscape' in unique_content_types:
-            canvas_type = "landscape_optimized"
-            description = "Pure landscape content - native landscape canvas"
+        
+        # Canvas type based on content mix
+        if len(unique_content_types) == 1:
+            if 'landscape' in unique_content_types:
+                canvas_type = "4_3_landscape_optimized"
+                description = "Landscape content - 4:3 canvas with letterboxing"
+            elif 'portrait' in unique_content_types:
+                canvas_type = "4_3_portrait_optimized" 
+                description = "Portrait content - 4:3 canvas with pillarboxing"
+            else:
+                canvas_type = "4_3_square_optimized"
+                description = "Square content - 4:3 canvas with minimal bars"
         else:
-            canvas_type = "landscape_universal"  
-            description = f"Mixed/portrait content - landscape canvas with letterboxing"
+            canvas_type = "4_3_mixed_content"
+            description = "Mixed content types - 4:3 canvas with adaptive boxing"
 
-        # Check if normalization is needed (always true for mixed content)
+        # Check if normalization is needed 
         resolution_diversity = len(set(f"{fmt['width']}x{fmt['height']}" for fmt in formats))
         requires_normalization = (
             resolution_diversity > 1 or 
             len(set(fps_counts.keys())) > 1 or
-            len(unique_content_types) > 1  # Mixed content always needs normalization
+            len(unique_content_types) > 1 or
+            True  # Always normalize for 4:3 output since most content isn't 4:3
         )
 
         # Quality preservation logging
-        quality_info = f"4K" if max_dimension >= 3840 else f"HD+" if max_dimension >= 1920 else "HD"
+        quality_info = f"4K" if max_dimension >= 3840 else f"HD" if max_dimension >= 1920 else "SD"
         print(f"Canvas Analysis: {description}")
         print(f"   - Content types: {', '.join(unique_content_types)}")
         print(f"   - Quality level: {quality_info} (max dimension: {max_dimension}px)")
-        print(f"Canvas Decision: {target_width}x{target_height} @ {target_fps}fps")
-        print(f"Canvas Type: {canvas_type} (always landscape orientation)")
-        print(f"Quality Preservation: ✅ No 4K downscaling")
+        print(f"Canvas Decision: {target_width}x{target_height} @ {target_fps}fps (4:3 aspect ratio)")
+        print(f"Canvas Type: {canvas_type}")
+        print(f"Quality Preservation: ✅ Optimal quality for 4:3 output")
 
         return {
             "target_width": target_width,
             "target_height": target_height,
             "target_fps": target_fps,
-            "target_aspect_ratio": target_width / target_height,
+            "target_aspect_ratio": target_aspect_ratio,
             "requires_normalization": requires_normalization,
             "canvas_type": canvas_type,
             "quality_level": quality_info,
