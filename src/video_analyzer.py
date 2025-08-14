@@ -436,6 +436,198 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
         return 0
 
 
+def detect_camera_shake(video: VideoFileClip, start_time: float, end_time: float) -> float:
+    """Detect camera shake/instability using dense optical flow analysis.
+    
+    Uses dense optical flow to analyze global motion patterns and distinguish
+    between camera shake (bad) and subject movement (good).
+    
+    Args:
+        video: VideoFileClip object
+        start_time: Start time of segment in seconds
+        end_time: End time of segment in seconds
+    
+    Returns:
+        Stability score (0-100, higher means more stable/less shaky)
+    """
+    if VideoFileClip is None:
+        raise ImportError("MoviePy not available. Please install moviepy>=1.0.3")
+
+    duration = end_time - start_time
+    if duration < 0.3:  # Need at least 0.3s for motion analysis
+        return 100.0  # Assume stable if too short to analyze
+
+    try:
+        # Sample frames for stability analysis (every 0.33 seconds, max 8 frames)
+        sample_interval = max(0.33, duration / 8)
+        sample_times = []
+        current_time = start_time
+        while current_time <= end_time - 0.1:  # Leave small buffer
+            sample_times.append(current_time)
+            current_time += sample_interval
+
+        if len(sample_times) < 2:
+            return 100.0  # Assume stable if insufficient frames
+
+        stability_metrics = []
+
+        # Calculate dense optical flow between consecutive frames
+        prev_frame = None
+        for t in sample_times:
+            # Get frame and convert to grayscale
+            frame = video.get_frame(t)
+            gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+            
+            # Resize to speed up computation (maintain aspect ratio)
+            height, width = gray.shape
+            if width > 640:
+                scale = 640.0 / width
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+                gray = cv2.resize(gray, (new_width, new_height))
+
+            if prev_frame is not None:
+                # Calculate dense optical flow using Farneback method
+                flow = cv2.calcOpticalFlowFarneback(
+                    prev_frame, gray, 
+                    None,           # flow (output)
+                    0.5,           # pyr_scale: image scale (<1) to build pyramids
+                    3,             # levels: number of pyramid layers
+                    15,            # winsize: averaging window size
+                    3,             # iterations: number of iterations at each pyramid level
+                    5,             # poly_n: size of pixel neighborhood for polynomial expansion
+                    1.2,           # poly_sigma: standard deviation of Gaussian for smoothing
+                    0              # flags
+                )
+                
+                # Analyze the flow for camera shake characteristics
+                stability_score = _analyze_flow_stability(flow)
+                stability_metrics.append(stability_score)
+
+            prev_frame = gray
+
+        if not stability_metrics:
+            return 100.0  # Assume stable if no metrics calculated
+
+        # Return average stability score
+        avg_stability = np.mean(stability_metrics)
+        return float(np.clip(avg_stability, 0.0, 100.0))
+
+    except Exception:
+        # Return neutral stability score if analysis fails
+        return 50.0
+
+
+def _analyze_flow_stability(flow: np.ndarray) -> float:
+    """Analyze dense optical flow to determine camera stability.
+    
+    Args:
+        flow: Dense optical flow array (H x W x 2)
+        
+    Returns:
+        Stability score (0-100, higher is more stable)
+    """
+    if flow is None or flow.size == 0:
+        return 100.0
+        
+    try:
+        # Extract flow components
+        flow_x = flow[:, :, 0]
+        flow_y = flow[:, :, 1]
+        
+        # Calculate flow magnitude for each pixel
+        flow_magnitude = np.sqrt(flow_x**2 + flow_y**2)
+        
+        # Ignore very small movements (likely noise)
+        significant_motion_mask = flow_magnitude > 0.5
+        
+        if not np.any(significant_motion_mask):
+            return 100.0  # No significant motion = very stable
+        
+        # Get flow vectors for pixels with significant motion
+        significant_flow_x = flow_x[significant_motion_mask]
+        significant_flow_y = flow_y[significant_motion_mask]
+        
+        # 1. Global Motion Consistency Analysis
+        # Camera shake typically shows inconsistent/erratic global motion
+        mean_flow_x = np.mean(significant_flow_x)
+        mean_flow_y = np.mean(significant_flow_y)
+        
+        # Calculate how much each pixel's motion deviates from global mean
+        deviation_x = significant_flow_x - mean_flow_x
+        deviation_y = significant_flow_y - mean_flow_y
+        deviation_magnitude = np.sqrt(deviation_x**2 + deviation_y**2)
+        
+        # High deviation indicates inconsistent motion (camera shake)
+        motion_consistency = 100.0 - min(100.0, np.mean(deviation_magnitude) * 5)
+        
+        # 2. Global Motion Magnitude Analysis  
+        # Very high global motion often indicates camera shake or excessive movement
+        global_motion_magnitude = np.sqrt(mean_flow_x**2 + mean_flow_y**2)
+        
+        # Apply penalties for different levels of global motion
+        if global_motion_magnitude > 15:
+            # Very high motion - likely shake or very unstable
+            magnitude_penalty = min(60, (global_motion_magnitude - 15) * 3)
+        elif global_motion_magnitude > 8:
+            # Moderate-high motion - some penalty for excessive movement
+            magnitude_penalty = min(25, (global_motion_magnitude - 8) * 2)
+        elif global_motion_magnitude > 3:
+            # Moderate motion - small penalty for global movement
+            magnitude_penalty = min(15, (global_motion_magnitude - 3) * 1.5)
+        else:
+            # Low motion - no penalty
+            magnitude_penalty = 0
+            
+        magnitude_score = 100.0 - magnitude_penalty
+        
+        # 3. Motion Direction Uniformity
+        # Camera shake often has random directions, good motion has consistent direction
+        flow_angles = np.arctan2(significant_flow_y, significant_flow_x)
+        
+        # Calculate circular variance of flow angles (0 = all same direction, high = random directions)
+        mean_cos = np.mean(np.cos(flow_angles))
+        mean_sin = np.mean(np.sin(flow_angles))
+        circular_variance = 1 - np.sqrt(mean_cos**2 + mean_sin**2)
+        
+        # High circular variance indicates random motion directions (shake)
+        direction_consistency = 100.0 - (circular_variance * 100)
+        
+        # 4. Spatial Distribution Analysis
+        # Camera shake affects entire frame, localized motion affects specific regions
+        motion_pixel_ratio = np.sum(significant_motion_mask) / significant_motion_mask.size
+        
+        # If most pixels have motion, it's likely camera movement - apply additional scrutiny
+        if motion_pixel_ratio > 0.7:
+            # For global motion, emphasize consistency and reasonable magnitude
+            # If motion is very consistent but high magnitude, it might be camera movement
+            if motion_consistency > 95 and global_motion_magnitude > 5:
+                # Perfect consistency with high magnitude might indicate camera pan
+                # Apply moderate penalty to prefer less camera movement
+                spatial_consistency_score = 85.0 - min(10, (global_motion_magnitude - 5) * 1)
+            else:
+                # Use average of motion and direction consistency for global motion
+                spatial_consistency_score = (motion_consistency + direction_consistency) / 2
+        else:
+            # Localized motion is generally good (subject movement)
+            spatial_consistency_score = 90.0
+        
+        # Combine all metrics with weights
+        # Emphasize consistency metrics for shake detection
+        final_stability = (
+            0.30 * motion_consistency +      # How consistent is the motion?  
+            0.30 * magnitude_score +         # Is global motion magnitude reasonable?
+            0.25 * direction_consistency +   # Is motion direction consistent?
+            0.15 * spatial_consistency_score # Is spatial distribution reasonable?
+        )
+        
+        return float(np.clip(final_stability, 0.0, 100.0))
+        
+    except Exception:
+        # Return neutral score if analysis fails
+        return 50.0
+
+
 def analyze_video_file(
     file_path: str,
     bpm: float = None,
@@ -608,6 +800,10 @@ def analyze_video_file(
                 face_count = detect_faces(video, start_time, end_time)
                 logger.debug(f"Scene {scene_idx + 1} face count: {face_count}")
 
+                # Calculate camera stability score
+                stability_score = detect_camera_shake(video, start_time, end_time)
+                logger.debug(f"Scene {scene_idx + 1} stability score: {stability_score:.2f}")
+
                 # Create enhanced metadata
                 chunk_metadata = {
                     "source_file": os.path.basename(file_path),
@@ -619,16 +815,21 @@ def analyze_video_file(
                     "quality_score": quality_score,
                     "motion_score": motion_score,
                     "face_count": face_count,
+                    "stability_score": stability_score,
                 }
 
-                # Calculate enhanced combined score
-                # Base quality: 60% weight
-                # Motion: 25% weight (normalized to 0-100)
+                # Calculate enhanced combined score with stability penalty
+                # Quality: 60% weight (image quality metrics)
+                # Subject Motion: 15% weight (good localized movement)
+                # Stability: 10% weight (penalizes camera shake)
                 # Faces: 15% weight (cap at 100 for 4+ faces)
                 face_score = min(100, face_count * 25)  # 4+ faces = 100 points
 
                 enhanced_score = (
-                    0.60 * quality_score + 0.25 * motion_score + 0.15 * face_score
+                    0.60 * quality_score + 
+                    0.15 * motion_score + 
+                    0.10 * stability_score + 
+                    0.15 * face_score
                 )
 
                 # Create VideoChunk
