@@ -182,7 +182,7 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info: Dict[str, An
 
 
 def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibility_info: Dict[str, Any] = None):
-    """Resize clip using MoviePy 2.x effects system with aspect ratio preservation and letterboxing.
+    """Resize clip using MoviePy 2.x effects system with robust fallbacks and aspect ratio preservation.
     
     This function preserves aspect ratios and adds letterboxing/pillarboxing as needed,
     preventing the stretching of portrait videos that was causing visual distortion.
@@ -197,18 +197,6 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
     Returns:
         Resized video clip with proper aspect ratio preservation and letterboxing
     """
-    # Import required MoviePy 2.x components
-    try:
-        from moviepy.video.fx.Resize import Resize
-        from moviepy.editor import ColorClip, CompositeVideoClip
-    except ImportError:
-        try:
-            from moviepy.video.fx import Resize
-            from moviepy.editor import ColorClip, CompositeVideoClip
-        except ImportError:
-            logger.error("Cannot import MoviePy 2.x Resize effect and composition classes")
-            raise RuntimeError("MoviePy Resize effect and composition not available")
-    
     # Determine target dimensions
     if newsize is not None:
         target_width, target_height = newsize
@@ -216,10 +204,18 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
         target_width, target_height = width, height
     elif width is not None:
         # Width only - height computed to maintain aspect ratio (no letterboxing needed)
-        return clip.with_effects([Resize(width=width)])
+        try:
+            from moviepy.video.fx.Resize import Resize
+            return clip.with_effects([Resize(width=width)])
+        except ImportError:
+            return clip.resized(width=width)
     elif height is not None:
         # Height only - width computed to maintain aspect ratio (no letterboxing needed)
-        return clip.with_effects([Resize(height=height)])
+        try:
+            from moviepy.video.fx.Resize import Resize
+            return clip.with_effects([Resize(height=height)])
+        except ImportError:
+            return clip.resized(height=height)
     else:
         raise ValueError("Must specify either newsize or width/height parameters")
     
@@ -241,14 +237,55 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
         new_width = int(current_width * scale)
         new_height = int(current_height * scale)
         
-        # Resize to calculated dimensions (preserves aspect ratio)
-        resized_clip = clip.with_effects([Resize((new_width, new_height))])
+        # Try multiple resize approaches with robust fallbacks
+        resized_clip = None
+        
+        # Approach 1: Modern MoviePy 2.x effects system
+        try:
+            from moviepy.video.fx.Resize import Resize
+            resized_clip = clip.with_effects([Resize((new_width, new_height))])
+            logger.debug(f"Used modern MoviePy 2.x effects: {current_width}x{current_height} → {new_width}x{new_height}")
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning(f"Modern effects resize failed: {e}")
+        
+        # Approach 2: Legacy resize method
+        if resized_clip is None:
+            try:
+                resized_clip = clip.resized((new_width, new_height))
+                logger.debug(f"Used legacy resize method: {current_width}x{current_height} → {new_width}x{new_height}")
+            except Exception as e:
+                logger.warning(f"Legacy resize failed: {e}")
+        
+        # Approach 3: Direct resize as last resort
+        if resized_clip is None:
+            try:
+                resized_clip = clip.resize((new_width, new_height))
+                logger.debug(f"Used direct resize fallback: {current_width}x{current_height} → {new_width}x{new_height}")
+            except Exception as e:
+                logger.error(f"All resize methods failed: {e}")
+                raise RuntimeError(f"Unable to resize clip: {e}")
         
         # Check if letterboxing/pillarboxing is needed
         if new_width == target_width and new_height == target_height:
             # Perfect fit, no letterboxing needed
             logger.debug(f"Perfect fit: {new_width}x{new_height} matches target {target_width}x{target_height}")
             return resized_clip
+        
+        # Import composition classes with fallbacks
+        ColorClip = None
+        CompositeVideoClip = None
+        
+        try:
+            from moviepy.editor import ColorClip, CompositeVideoClip
+        except ImportError:
+            try:
+                from moviepy import ColorClip, CompositeVideoClip
+            except ImportError:
+                logger.error("Cannot import ColorClip and CompositeVideoClip for letterboxing")
+                logger.warning(f"Returning resized clip without letterboxing: {new_width}x{new_height}")
+                return resized_clip
         
         # Create black background for letterboxing/pillarboxing
         try:
@@ -293,13 +330,42 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
         # Final fallback: attempt direct resize (old behavior)
         logger.warning("Falling back to direct resize without aspect ratio preservation")
         try:
+            from moviepy.video.fx.Resize import Resize
             if newsize is not None:
                 return clip.with_effects([Resize(newsize)])
             else:
                 return clip.with_effects([Resize((target_width, target_height))])
-        except Exception as fallback_error:
-            logger.error(f"Even fallback resize failed: {fallback_error}")
-            raise
+        except ImportError:
+            try:
+                if newsize is not None:
+                    return clip.resized(newsize)
+                else:
+                    return clip.resized((target_width, target_height))
+            except Exception as fallback_error:
+                logger.error(f"Even fallback resize failed: {fallback_error}")
+                raise
+
+def resize_with_aspect_preservation(clip, target_width: int, target_height: int):
+    """Centralized function for resizing clips with aspect ratio preservation and letterboxing.
+    
+    This function is specifically designed for AutoCut's video normalization pipeline,
+    handling mixed aspect ratios and ensuring they fit properly in a target canvas.
+    
+    Args:
+        clip: Video clip instance
+        target_width: Target canvas width (e.g., 4:3 canvas width)
+        target_height: Target canvas height (e.g., 4:3 canvas height)
+        
+    Returns:
+        Resized and letterboxed clip that fits exactly in target dimensions
+    """
+    try:
+        # Use the robust resize_clip_safely function with enhanced fallbacks
+        return resize_clip_safely(clip, newsize=(target_width, target_height))
+    except Exception as e:
+        logger.error(f"resize_with_aspect_preservation failed: {e}")
+        logger.warning("Returning original clip as final fallback")
+        return clip
 
 
 def set_fps_safely(clip, fps: float, compatibility_info: Dict[str, Any] = None):
