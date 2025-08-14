@@ -90,8 +90,19 @@ class AudioSynchronizer:
             
             VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
             
-            # Use simple AudioFileClip approach (more reliable than complex safe_load_audio_file)
-            return AudioFileClip(audio_file)
+            # Use comprehensive robust audio loader to handle WAV files and FFMPEG_AudioReader issues
+            try:
+                # Import the robust audio loader from main codebase
+                import sys
+                import os
+                sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+                from audio_loader import load_audio_robust as robust_loader
+                return robust_loader(audio_file)
+            except ImportError:
+                # Fallback to the robust loader implementation from clip_assembler
+                sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+                from clip_assembler import load_audio_robust
+                return load_audio_robust(audio_file)
             
         except ImportError as e:
             raise AudioAnalysisError(f"Failed to import MoviePy compatibility layer: {str(e)}")

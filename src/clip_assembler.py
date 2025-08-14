@@ -46,16 +46,70 @@ try:
 except ImportError:
     # Fallback if audio_loader not available
     def load_audio_robust(audio_file):
-        from moviepy.editor import AudioFileClip
-        return AudioFileClip(audio_file)
+        """
+        Load audio using the robust multi-strategy loader from audio_loader module.
+        This replaces the problematic AudioFileClip fallback with the comprehensive
+        robust loader that handles WAV files and other formats safely.
+        """
+        try:
+            # Try to import and use the comprehensive robust audio loader
+            from audio_loader import load_audio_robust as robust_loader
+            return robust_loader(audio_file)
+        except ImportError:
+            # If audio_loader module not available, try alternative robust approach
+            print("Warning: audio_loader module not found, using alternative robust loading...")
+            
+            # Import moviepy safely with compatibility layer
+            from moviepy.editor import AudioFileClip
+            
+            try:
+                # First try standard MoviePy loading
+                audio_clip = AudioFileClip(audio_file)
+                return audio_clip
+            except (AttributeError, RuntimeError, OSError) as e:
+                if "proc" in str(e).lower() or "ffmpeg" in str(e).lower():
+                    print(f"MoviePy audio loading failed ({e}), trying FFmpeg subprocess fallback...")
+                    
+                    # Fallback to FFmpeg subprocess for problematic files
+                    try:
+                        import subprocess
+                        import numpy as np
+                        from moviepy.audio.AudioClip import AudioArrayClip
+                        
+                        # Use FFmpeg subprocess to bypass MoviePy's FFMPEG_AudioReader
+                        cmd = [
+                            "ffmpeg", "-i", audio_file,
+                            "-f", "s16le", "-acodec", "pcm_s16le", 
+                            "-ac", "2", "-ar", "44100", "-v", "quiet", "-"
+                        ]
+                        
+                        process = subprocess.run(cmd, capture_output=True, check=True, timeout=60)
+                        audio_data = np.frombuffer(process.stdout, dtype=np.int16)
+                        
+                        if len(audio_data) == 0:
+                            raise RuntimeError("No audio data extracted from file")
+                        
+                        # Convert to stereo float32 format
+                        audio_data = audio_data.reshape(-1, 2).astype(np.float32) / 32768.0
+                        audio_clip = AudioArrayClip(audio_data, fps=44100)
+                        
+                        print(f"✅ FFmpeg subprocess fallback successful for {audio_file}")
+                        return audio_clip
+                        
+                    except Exception as fallback_error:
+                        print(f"❌ All audio loading strategies failed: {fallback_error}")
+                        raise RuntimeError(f"Could not load audio file {audio_file}: {fallback_error}")
+                else:
+                    # Re-raise non-audio-specific errors
+                    raise
 
 
 # Variety patterns to prevent monotonous cutting
 VARIETY_PATTERNS = {
-    "energetic": [1, 1, 2, 1, 1, 4],  # Mostly fast with occasional pause
-    "buildup": [4, 2, 2, 1, 1, 1],  # Start slow, increase pace
-    "balanced": [2, 1, 2, 4, 2, 1],  # Mixed pacing
-    "dramatic": [1, 1, 1, 1, 8],  # Fast cuts then long hold
+    "energetic": [2, 2, 4, 2, 2, 8],  # Fast 2-beat cuts with occasional longer pause
+    "buildup": [8, 4, 4, 4, 4, 4],  # Start slow, maintain deliberate 4-beat pace
+    "balanced": [4, 4, 4, 8, 4, 4],  # Consistent 4-beat pacing with variety
+    "dramatic": [4, 4, 4, 4, 16],  # Build tension with 4-beat base, long dramatic hold
 }
 
 
