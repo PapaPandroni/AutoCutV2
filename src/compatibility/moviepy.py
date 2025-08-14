@@ -181,17 +181,18 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info: Dict[str, An
         raise
 
 
-def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibility_info: Dict[str, Any] = None):
-    """Resize clip using MoviePy 2.x effects system with robust fallbacks and aspect ratio preservation.
+def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode="smart", compatibility_info: Dict[str, Any] = None):
+    """Resize clip using MoviePy 2.x effects system with robust fallbacks and smart aspect ratio preservation.
     
     This function preserves aspect ratios and adds letterboxing/pillarboxing as needed,
-    preventing the stretching of portrait videos that was causing visual distortion.
+    with smart scaling that maximizes screen utilization while preserving content safety.
     
     Args:
         clip: Video clip instance
         newsize: Tuple of (width, height) or None
         width: Target width (alternative to newsize)
         height: Target height (alternative to newsize) 
+        scaling_mode: "fit" (conservative), "fill" (crop content), "smart" (adaptive)
         compatibility_info: Compatibility information (optional)
         
     Returns:
@@ -228,14 +229,53 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
         current_aspect = current_width / current_height
         target_aspect = target_width / target_height
         
-        # Calculate scaling to fit within target dimensions (preserve aspect ratio)
+        # Calculate scaling factors
         width_scale = target_width / current_width
         height_scale = target_height / current_height
-        scale = min(width_scale, height_scale)  # Fit within bounds, don't stretch
+        
+        # Determine scaling strategy based on mode
+        if scaling_mode == "fit":
+            # Conservative: fit entire video within canvas (current behavior)
+            scale = min(width_scale, height_scale)
+            scaling_reason = "fit mode - preserves all content"
+            
+        elif scaling_mode == "fill":
+            # Aggressive: fill entire canvas (may crop content)
+            scale = max(width_scale, height_scale)
+            scaling_reason = "fill mode - maximizes screen usage"
+            
+        elif scaling_mode == "smart":
+            # Smart: analyze crop percentage and decide
+            fit_scale = min(width_scale, height_scale)
+            fill_scale = max(width_scale, height_scale)
+            
+            # Calculate what percentage of content would be cropped
+            crop_ratio = fill_scale / fit_scale
+            crop_percentage = (crop_ratio - 1) * 100
+            
+            # Conservative threshold: only crop if very minimal
+            SAFE_CROP_THRESHOLD = 8.0  # Only 8% content loss maximum
+            
+            if crop_percentage <= SAFE_CROP_THRESHOLD:
+                scale = fill_scale
+                scaling_reason = f"smart mode - fill (crop: {crop_percentage:.1f}% ≤ {SAFE_CROP_THRESHOLD}%)"
+            else:
+                scale = fit_scale
+                scaling_reason = f"smart mode - fit (crop: {crop_percentage:.1f}% > {SAFE_CROP_THRESHOLD}%)"
+        else:
+            # Unknown mode: default to safe fit mode
+            scale = min(width_scale, height_scale)
+            scaling_reason = f"unknown mode '{scaling_mode}' - defaulting to fit"
+            logger.warning(f"Unknown scaling mode '{scaling_mode}', using fit mode")
         
         # Calculate new dimensions (maintain aspect ratio)
         new_width = int(current_width * scale)
         new_height = int(current_height * scale)
+        
+        # Log scaling decision for transparency
+        logger.info(f"Scaling decision: {current_width}x{current_height} → {new_width}x{new_height}")
+        logger.info(f"  Reason: {scaling_reason}")
+        logger.info(f"  Scale factor: {scale:.3f} (width: {width_scale:.3f}, height: {height_scale:.3f})")
         
         # Try multiple resize approaches with robust fallbacks
         resized_clip = None
@@ -317,6 +357,12 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
                 bar_height = (target_height - new_height) // 2  
                 logger.debug(f"Applied letterbox: {bar_height}px bars on top/bottom")
             
+            # Calculate and log screen utilization
+            video_area = new_width * new_height
+            canvas_area = target_width * target_height
+            utilization = (video_area / canvas_area) * 100
+            logger.info(f"  Screen utilization: {utilization:.1f}% ({video_area}/{canvas_area} pixels)")
+            
             return letterboxed_clip
             
         except Exception as letterbox_error:
@@ -345,27 +391,43 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, compatibilit
                 logger.error(f"Even fallback resize failed: {fallback_error}")
                 raise
 
-def resize_with_aspect_preservation(clip, target_width: int, target_height: int):
-    """Centralized function for resizing clips with aspect ratio preservation and letterboxing.
+def resize_with_aspect_preservation(clip, target_width: int, target_height: int, scaling_mode: str = "smart"):
+    """Centralized function for resizing clips with aspect ratio preservation and intelligent scaling.
     
     This function is specifically designed for AutoCut's video normalization pipeline,
-    handling mixed aspect ratios and ensuring they fit properly in a target canvas.
+    handling mixed aspect ratios and ensuring they fit properly in a target canvas while
+    maximizing screen utilization through smart scaling decisions.
     
     Args:
         clip: Video clip instance
         target_width: Target canvas width (e.g., 4:3 canvas width)
         target_height: Target canvas height (e.g., 4:3 canvas height)
+        scaling_mode: "smart" (adaptive), "fit" (conservative), "fill" (crop content)
         
     Returns:
         Resized and letterboxed clip that fits exactly in target dimensions
     """
     try:
-        # Use the robust resize_clip_safely function with enhanced fallbacks
-        return resize_clip_safely(clip, newsize=(target_width, target_height))
+        logger.info(f"Starting aspect ratio preservation: {clip.w}x{clip.h} → {target_width}x{target_height}")
+        logger.info(f"Using scaling mode: {scaling_mode}")
+        
+        # Use the robust resize_clip_safely function with enhanced smart scaling
+        result = resize_clip_safely(clip, newsize=(target_width, target_height), scaling_mode=scaling_mode)
+        
+        logger.info("Aspect ratio preservation completed successfully")
+        return result
+        
     except Exception as e:
         logger.error(f"resize_with_aspect_preservation failed: {e}")
-        logger.warning("Returning original clip as final fallback")
-        return clip
+        logger.warning("Attempting fallback to fit mode")
+        
+        # Fallback to conservative fit mode
+        try:
+            return resize_clip_safely(clip, newsize=(target_width, target_height), scaling_mode="fit")
+        except Exception as fallback_error:
+            logger.error(f"Fallback to fit mode also failed: {fallback_error}")
+            logger.warning("Returning original clip as final fallback")
+            return clip
 
 
 def set_fps_safely(clip, fps: float, compatibility_info: Dict[str, Any] = None):
