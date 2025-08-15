@@ -260,26 +260,59 @@ class AudioSynchronizer:
             logger.info(f"Applying musical fade-out: {fade_duration:.2f}s (8 beats)")
             logger.info(f"Fade starts at: {clip_duration - fade_duration:.2f}s")
             
-            # Import MoviePy audio effects
+            # Try MoviePy 2.x API with multiple fallback strategies
             try:
+                # Method 1: Try AudioFadeOut class with with_effects (MoviePy 2.x primary)
                 try:
-                    from compatibility.moviepy import import_moviepy_safely
+                    from moviepy.audio.fx.AudioFadeOut import AudioFadeOut
+                    faded_audio = audio_clip.with_effects([AudioFadeOut(fade_duration)])
+                    logger.info("Musical fade-out applied successfully using AudioFadeOut class")
+                    return faded_audio
                 except ImportError:
-                    def import_moviepy_safely():
-                        from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
-                        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                    logger.debug("AudioFadeOut class import failed, trying alternative import")
                 
-                # Import audio effects
-                from moviepy.audio.fx import audio_fadeout
+                # Method 2: Try importing from fx.all
+                try:
+                    from moviepy.audio.fx.all import AudioFadeOut
+                    faded_audio = audio_clip.with_effects([AudioFadeOut(fade_duration)])
+                    logger.info("Musical fade-out applied successfully using fx.all import")
+                    return faded_audio
+                except ImportError:
+                    logger.debug("fx.all AudioFadeOut import failed, trying legacy API")
                 
-                # Apply fade-out effect
-                faded_audio = audio_fadeout(audio_clip, fade_duration)
+                # Method 3: Try legacy MoviePy 1.x API (for backward compatibility)
+                try:
+                    from moviepy.audio.fx import audio_fadeout
+                    faded_audio = audio_fadeout(audio_clip, fade_duration)
+                    logger.info("Musical fade-out applied successfully using legacy API")
+                    return faded_audio
+                except ImportError:
+                    logger.debug("Legacy audio_fadeout import failed, using manual implementation")
                 
-                logger.info("Musical fade-out applied successfully")
+                # Method 4: Manual volume ramp fallback using MoviePy's fl method
+                logger.info("Using manual volume ramp fallback for fade-out")
+                
+                def volume_ramp_func(gf, t):
+                    """Create manual fadeout by ramping volume down."""
+                    frame = gf(t)
+                    fade_start = clip_duration - fade_duration
+                    
+                    if t >= fade_start:
+                        # Calculate fade factor (1.0 to 0.0)
+                        fade_progress = (t - fade_start) / fade_duration
+                        fade_progress = min(fade_progress, 1.0)  # Clamp to 1.0
+                        volume_factor = 1.0 - fade_progress
+                        # Apply volume reduction to all channels
+                        return frame * volume_factor
+                    else:
+                        return frame
+                
+                faded_audio = audio_clip.fl(volume_ramp_func, apply_to='audio')
+                logger.info("Musical fade-out applied successfully using manual volume ramp")
                 return faded_audio
                 
-            except ImportError as e:
-                logger.warning(f"Could not import MoviePy audio effects: {e}")
+            except Exception as e:
+                logger.warning(f"All fade-out methods failed: {e}")
                 logger.warning("Proceeding without fade-out")
                 return audio_clip
                 
