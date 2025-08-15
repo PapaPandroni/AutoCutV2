@@ -3396,6 +3396,8 @@ def render_video(
     output_path: str,
     max_workers: int = 3,
     progress_callback: Optional[callable] = None,
+    bmp: Optional[float] = None,
+    avg_beat_interval: Optional[float] = None,
 ) -> str:
     """Render final video with music synchronization - REFACTORED.
     
@@ -3415,6 +3417,8 @@ def render_video(
         output_path: Path for output video
         max_workers: Maximum parallel workers (legacy parameter)
         progress_callback: Optional callback for progress updates
+        bmp: Beats per minute for musical fade calculations
+        avg_beat_interval: Average time between beats in seconds
         
     Returns:
         Path to rendered video file
@@ -3432,7 +3436,9 @@ def render_video(
             audio_file=audio_file,
             output_path=output_path,
             max_workers=max_workers,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            bmp=bmp,
+            avg_beat_interval=avg_beat_interval,
         )
         
     except ImportError:
