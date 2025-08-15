@@ -47,12 +47,15 @@ class VideoRenderingOrchestrator:
         output_path: str,
         progress_callback: Optional[Callable] = None,
         add_transitions: bool = False,
-        transition_duration: float = 0.5
+        transition_duration: float = 0.5,
+        bpm: Optional[float] = None,
+        avg_beat_interval: Optional[float] = None
     ) -> str:
         """Render complete video with music synchronization.
         
         This is the main entry point that orchestrates the entire rendering pipeline
-        with fixes for MoviePy 2.2.1 audio-video sync issues.
+        with fixes for MoviePy 2.2.1 audio-video sync issues. Includes automatic
+        musical fade-out when insufficient clips exist.
         
         Args:
             timeline: ClipTimeline with all clips and timing
@@ -61,6 +64,8 @@ class VideoRenderingOrchestrator:
             progress_callback: Optional callback for progress updates
             add_transitions: Whether to add crossfade transitions
             transition_duration: Duration of transitions in seconds
+            bpm: Beats per minute for musical fade calculations
+            avg_beat_interval: Average time between beats in seconds
             
         Returns:
             Path to rendered video file
@@ -101,7 +106,8 @@ class VideoRenderingOrchestrator:
             
             synchronized_audio, final_audio_duration = \
                 self.audio_synchronizer.load_and_sync_audio(
-                    audio_file, final_video.duration, target_format
+                    audio_file, final_video.duration, target_format,
+                    bpm, avg_beat_interval
                 )
             
             # Attach audio to video
@@ -182,11 +188,14 @@ def render_video(
     output_path: str,
     max_workers: int = 3,
     progress_callback: Optional[Callable] = None,
+    bpm: Optional[float] = None,
+    avg_beat_interval: Optional[float] = None,
 ) -> str:
     """Main video rendering function for backward compatibility.
     
     This function provides the same interface as the original render_video
     from clip_assembler.py but uses the new modular rendering architecture.
+    Includes automatic musical fade-out when insufficient clips exist.
     
     Args:
         timeline: ClipTimeline with all clips and timing
@@ -194,6 +203,8 @@ def render_video(
         output_path: Path for output video
         max_workers: Maximum parallel workers (legacy parameter)
         progress_callback: Optional callback for progress updates
+        bpm: Beats per minute for musical fade calculations
+        avg_beat_interval: Average time between beats in seconds
         
     Returns:
         Path to rendered video file
@@ -208,4 +219,6 @@ def render_video(
         output_path=output_path,
         progress_callback=progress_callback,
         add_transitions=False,  # Default to no transitions for compatibility
+        bpm=bpm,
+        avg_beat_interval=avg_beat_interval,
     )

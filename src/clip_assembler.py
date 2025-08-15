@@ -3890,12 +3890,21 @@ def assemble_clips(
             overall_progress = 0.85 + (0.15 * progress)
             report_progress(f"Rendering: {step_name}", overall_progress)
 
+        # Calculate average beat interval for musical fade-out feature
+        avg_beat_interval = None
+        if len(beats) > 1:
+            beat_intervals = [beats[i + 1] - beats[i] for i in range(len(beats) - 1)]
+            avg_beat_interval = sum(beat_intervals) / len(beat_intervals)
+            logger.info(f"Average beat interval calculated: {avg_beat_interval:.3f}s")
+
         final_video_path = render_video(
             timeline=timeline,
             audio_file=audio_file,
             output_path=output_path,
             max_workers=max_workers,
             progress_callback=render_progress,
+            bpm=audio_data.get("bpm"),
+            avg_beat_interval=avg_beat_interval,
         )
 
         logger.info(f"✅ Video rendering complete: {final_video_path}")

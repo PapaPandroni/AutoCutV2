@@ -1,7 +1,7 @@
 """Audio synchronization system for video rendering."""
 
 import os
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 try:
     from core.logging_config import get_logger
     from core.exceptions import AudioAnalysisError, VideoProcessingError
@@ -34,7 +34,9 @@ class AudioSynchronizer:
         self, 
         audio_file: str, 
         video_duration: float, 
-        target_format: Dict[str, Any]
+        target_format: Dict[str, Any],
+        bpm: Optional[float] = None,
+        avg_beat_interval: Optional[float] = None
     ) -> Tuple[Any, float]:
         """Load audio and synchronize with video duration.
         
@@ -42,6 +44,8 @@ class AudioSynchronizer:
             audio_file: Path to audio file
             video_duration: Duration of video in seconds
             target_format: Target format specifications
+            bpm: Beats per minute for musical fade calculations
+            avg_beat_interval: Average time between beats in seconds
             
         Returns:
             Tuple of (synchronized_audio_clip, final_audio_duration)
@@ -63,9 +67,10 @@ class AudioSynchronizer:
         except Exception as e:
             raise AudioAnalysisError(f"Failed to load audio file {audio_file}: {str(e)}")
         
-        # Calculate frame-accurate audio duration
+        # Calculate frame-accurate audio duration with musical fade-out support
         synchronized_audio, final_duration = self._calculate_frame_accurate_sync(
-            audio_clip, original_audio_duration, video_duration, target_format
+            audio_clip, original_audio_duration, video_duration, target_format,
+            bpm, avg_beat_interval
         )
         
         return synchronized_audio, final_duration
@@ -112,15 +117,22 @@ class AudioSynchronizer:
         audio_clip: Any, 
         original_duration: float, 
         video_duration: float, 
-        target_format: Dict[str, Any]
+        target_format: Dict[str, Any],
+        bpm: Optional[float] = None,
+        avg_beat_interval: Optional[float] = None
     ) -> Tuple[Any, float]:
         """Calculate frame-accurate audio sync to prevent cutoff issues.
+        
+        Includes automatic musical fade-out when insufficient clips exist to fill
+        the entire music duration. Fades over the last 8 beats to maintain musical flow.
         
         Args:
             audio_clip: Original audio clip
             original_duration: Original audio duration
             video_duration: Target video duration 
             target_format: Target format specifications
+            bpm: Beats per minute for musical fade calculations
+            avg_beat_interval: Average time between beats in seconds
             
         Returns:
             Tuple of (synchronized_audio_clip, final_duration)
@@ -164,6 +176,15 @@ class AudioSynchronizer:
                 )
             except ImportError:
                 raise VideoProcessingError("MoviePy subclip compatibility function not available")
+            
+            # Check if we need to apply musical fade-out
+            # Apply fade if: significant audio reduction + beat information available
+            shortage_percentage = (original_duration - video_duration) / original_duration
+            if shortage_percentage > 0.1 and avg_beat_interval is not None:  # >10% shortage
+                logger.info(f"Insufficient clips detected: {shortage_percentage*100:.1f}% of audio unused")
+                synchronized_audio = self._apply_musical_fadeout(
+                    synchronized_audio, avg_beat_interval
+                )
         else:
             # Audio is shorter than video - use full audio
             logger.info(f"Audio ({original_duration:.6f}s) shorter than video ({video_duration:.6f}s)")
@@ -211,6 +232,61 @@ class AudioSynchronizer:
             
         except ImportError:
             raise VideoProcessingError("MoviePy audio attachment compatibility function not available")
+    
+    def _apply_musical_fadeout(self, audio_clip: Any, avg_beat_interval: float) -> Any:
+        """Apply musical fade-out over the last 8 beats.
+        
+        Args:
+            audio_clip: Audio clip to apply fade to
+            avg_beat_interval: Average time between beats in seconds
+            
+        Returns:
+            Audio clip with fade-out applied
+            
+        Raises:
+            VideoProcessingError: If fade effect cannot be applied
+        """
+        try:
+            # Calculate fade duration (8 beats)
+            fade_duration = 8 * avg_beat_interval
+            clip_duration = audio_clip.duration
+            
+            # Ensure fade doesn't exceed clip duration
+            fade_duration = min(fade_duration, clip_duration)
+            
+            # Ensure minimum fade duration for musicality
+            fade_duration = max(fade_duration, 1.0)  # At least 1 second
+            
+            logger.info(f"Applying musical fade-out: {fade_duration:.2f}s (8 beats)")
+            logger.info(f"Fade starts at: {clip_duration - fade_duration:.2f}s")
+            
+            # Import MoviePy audio effects
+            try:
+                try:
+                    from compatibility.moviepy import import_moviepy_safely
+                except ImportError:
+                    def import_moviepy_safely():
+                        from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                
+                # Import audio effects
+                from moviepy.audio.fx import audio_fadeout
+                
+                # Apply fade-out effect
+                faded_audio = audio_fadeout(audio_clip, fade_duration)
+                
+                logger.info("Musical fade-out applied successfully")
+                return faded_audio
+                
+            except ImportError as e:
+                logger.warning(f"Could not import MoviePy audio effects: {e}")
+                logger.warning("Proceeding without fade-out")
+                return audio_clip
+                
+        except Exception as e:
+            logger.error(f"Failed to apply musical fade-out: {e}")
+            logger.warning("Proceeding without fade-out")
+            return audio_clip
 
 
 def load_audio_robust(audio_file: str) -> Any:
