@@ -1,0 +1,10 @@
+34513c7 Fix musical fade-out with MoviePy 2.x API compatibility
+6c0b327 Fix critical typo: bmp → bpm in render_video function
+2c327bc Fix parameter mismatch in render_video call chain
+6823a0a Add automatic musical fade-out for insufficient video clips
+a6e6240 Add camera shake detection to penalize unstable footage
+e8fe7c9 Fix WAV audio processing errors and update minimum clip duration to 4 beats
+0dc760a Implement smart scaling for maximum screen utilization without distortion
+2337441 Fix MoviePy aspect ratio scaling for portrait and square videos
+a5bb7ff Fix MoviePy import compatibility in video resizing
+1ec0173 Switch video output from 16:9 to 4:3 aspect ratio
