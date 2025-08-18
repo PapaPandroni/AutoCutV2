@@ -27,23 +27,8 @@ from .beat_matcher import BeatMatcher, BeatMatchResult, BeatSyncSettings, Variet
 from .clip_selector import ClipSelector, SelectionCriteria, SelectionStrategy
 
 
-@dataclass
-class VideoChunk:
-    """Represents a video chunk for assembly (unified compatibility)."""
-    video_path: str
-    start_time: float
-    end_time: float
-    score: float
-    
-    # Optional metadata
-    motion_score: Optional[float] = None
-    face_score: Optional[float] = None
-    brightness_score: Optional[float] = None
-    sharpness_score: Optional[float] = None
-    
-    @property
-    def duration(self) -> float:
-        return self.end_time - self.start_time
+# Import VideoChunk from canonical location (already available in clip_selector)
+from .clip_selector import VideoChunk
 
 
 @dataclass
