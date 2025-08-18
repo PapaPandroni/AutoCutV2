@@ -814,13 +814,16 @@ def analyze_video_file(
                     0.15 * face_score
                 )
 
-                # Create VideoChunk
+                # Create VideoChunk with canonical signature
                 chunk = VideoChunk(
+                    video_path=file_path,
                     start_time=start_time,
                     end_time=end_time,
                     score=enhanced_score,
-                    video_path=file_path,
-                    metadata=chunk_metadata,
+                    motion_score=motion_score,
+                    face_score=min(100, face_count * 25),  # Convert face count to score (4+ faces = 100)
+                    brightness_score=None,  # Individual components not extracted yet
+                    sharpness_score=None,   # Individual components not extracted yet
                 )
 
                 chunks.append(chunk)
