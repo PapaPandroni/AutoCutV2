@@ -43,17 +43,8 @@ class VarietyPattern(Enum):
     DRAMATIC = "dramatic"
 
 
-@dataclass
-class VideoChunk:
-    """Represents a video chunk for beat matching (temporary compatibility)."""
-    video_path: str
-    start_time: float
-    end_time: float
-    score: float
-    
-    @property
-    def duration(self) -> float:
-        return self.end_time - self.start_time
+# Import VideoChunk from canonical location
+from .clip_selector import VideoChunk
 
 
 @dataclass
