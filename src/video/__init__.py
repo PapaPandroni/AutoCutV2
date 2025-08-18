@@ -14,6 +14,11 @@ Modules:
     preprocessing: Video preprocessing and format handling
 """
 
+# Import enhanced VideoChunk for unified usage
+from .assembly.clip_selector import VideoChunk
+
 # Version information
 __version__ = "2.0.0"
 __author__ = "AutoCut Development Team"
+
+__all__ = ['VideoChunk']
