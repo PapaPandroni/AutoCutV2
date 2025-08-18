@@ -44,14 +44,18 @@ except ImportError:
     except ImportError:
         # Final fallback for testing without moviepy installation
         VideoFileClip = CompositeVideoClip = concatenate_videoclips = None
+# Import VideoChunk from canonical location
 try:
-    from video_analyzer import VideoChunk
+    from video import VideoChunk
 except ImportError:
-    # Fallback if video_analyzer not available
-    class VideoChunk:
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
+    try:
+        from video_analyzer import VideoChunk
+    except ImportError:
+        # Fallback if modules not available
+        class VideoChunk:
+            def __init__(self, **kwargs):
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
 
 # Import robust audio loading system
 try:
