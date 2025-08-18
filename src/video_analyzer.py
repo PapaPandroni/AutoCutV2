@@ -20,30 +20,12 @@ except ImportError:
         VideoFileClip = None
 
 
-class VideoChunk:
-    """Represents a scored video segment."""
-
-    def __init__(
-        self,
-        start_time: float,
-        end_time: float,
-        score: float,
-        video_path: str,
-        metadata: Optional[Dict] = None,
-    ):
-        self.start_time = start_time
-        self.end_time = end_time
-        self.score = score
-        self.video_path = video_path
-        self.metadata = metadata or {}
-
-    @property
-    def duration(self) -> float:
-        """Duration of the video chunk in seconds."""
-        return self.end_time - self.start_time
-
-    def __repr__(self) -> str:
-        return f"VideoChunk({self.start_time:.1f}-{self.end_time:.1f}, score={self.score:.1f})"
+# Import VideoChunk from the canonical location
+try:
+    from .video import VideoChunk
+except ImportError:
+    # Fallback import path for backwards compatibility
+    from video.assembly.clip_selector import VideoChunk
 
 
 def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
