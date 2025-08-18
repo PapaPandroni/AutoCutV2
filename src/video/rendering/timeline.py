@@ -5,29 +5,36 @@ import gc
 from typing import List, Optional, Callable, Dict, Any, Tuple
 
 try:
+    # Relative imports for package execution
     from ..loading.strategies import UnifiedVideoLoader, LoadingStrategyType, ClipSpec, LoadedClip
     from ..loading.cache import VideoCache
     from ..loading.resource_manager import VideoResourceManager
 except ImportError:
-    # Fallback definitions if loading modules not available
-    class UnifiedVideoLoader:
-        def load_clips(self, clip_specs): return []
-    class LoadingStrategyType:
-        SEQUENTIAL = "sequential"
-        ROBUST = "robust"
-        AUTO = "auto"
-    class ClipSpec:
-        pass
-    class LoadedClip:
-        def __init__(self, clip, spec, load_time, strategy_used):
-            self.clip = clip
-            self.spec = spec
-            self.load_time = load_time
-            self.strategy_used = strategy_used
-    class VideoCache:
-        def clear(self): pass
-    class VideoResourceManager:
-        def cleanup_delayed_videos(self): pass 
+    try:
+        # Absolute imports for direct execution  
+        from video.loading.strategies import UnifiedVideoLoader, LoadingStrategyType, ClipSpec, LoadedClip
+        from video.loading.cache import VideoCache
+        from video.loading.resource_manager import VideoResourceManager
+    except ImportError:
+        # Fallback definitions if loading modules not available
+        class UnifiedVideoLoader:
+            def load_clips(self, clip_specs): return []
+        class LoadingStrategyType:
+            SEQUENTIAL = "sequential"
+            ROBUST = "robust"
+            AUTO = "auto"
+        class ClipSpec:
+            pass
+        class LoadedClip:
+            def __init__(self, clip, spec, load_time, strategy_used):
+                self.clip = clip
+                self.spec = spec
+                self.load_time = load_time
+                self.strategy_used = strategy_used
+        class VideoCache:
+            def clear(self): pass
+        class VideoResourceManager:
+            def cleanup_delayed_videos(self): pass 
 try:
     from core.logging_config import get_logger
     from core.exceptions import VideoProcessingError

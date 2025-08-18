@@ -20,8 +20,14 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 
-from ...core.exceptions import ValidationError, raise_validation_error
-from ...core.logging_config import get_logger, log_performance, LoggingContext
+# Dual import pattern for package/direct execution compatibility
+try:
+    from ...core.exceptions import ValidationError, raise_validation_error
+    from ...core.logging_config import get_logger, log_performance, LoggingContext
+except ImportError:
+    # Fallback for direct execution
+    from core.exceptions import ValidationError, raise_validation_error
+    from core.logging_config import get_logger, log_performance, LoggingContext
 from .timeline import ClipTimeline, TimelineEntry, TimelinePosition
 from .beat_matcher import BeatMatcher, BeatMatchResult, BeatSyncSettings, VarietyPattern
 from .clip_selector import ClipSelector, SelectionCriteria, SelectionStrategy
