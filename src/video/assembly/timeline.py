@@ -17,8 +17,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple, Set
 
-from ...core.exceptions import ValidationError, raise_validation_error
-from ...core.logging_config import get_logger, log_performance
+# Dual import pattern for package/direct execution compatibility
+try:
+    from ...core.exceptions import ValidationError, raise_validation_error
+    from ...core.logging_config import get_logger, log_performance
+except ImportError:
+    # Fallback for direct execution
+    from core.exceptions import ValidationError, raise_validation_error
+    from core.logging_config import get_logger, log_performance
 
 
 @dataclass
@@ -482,6 +488,20 @@ class ClipTimeline:
                     overlaps.append((entry1, entry2))
         
         return overlaps
+    
+    @property
+    def clips(self):
+        """Compatibility property for video.rendering system.
+        
+        The rendering system expects timeline.clips but ClipTimeline uses entries.
+        This property provides interface compatibility without breaking existing code.
+        """
+        return self.entries
+    
+    @clips.setter 
+    def clips(self, value):
+        """Allow rendering system to set clips (maps to entries)."""
+        self.entries = value
     
     def __len__(self) -> int:
         """Get number of entries in timeline."""
