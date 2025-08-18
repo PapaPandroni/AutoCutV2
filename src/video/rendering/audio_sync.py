@@ -323,13 +323,6 @@ class AudioSynchronizer:
 
 
 def load_audio_robust(audio_file: str) -> Any:
-    """Legacy function for backward compatibility.
-    
-    Args:
-        audio_file: Path to audio file
-        
-    Returns:
-        AudioFileClip instance
-    """
-    synchronizer = AudioSynchronizer()
-    return synchronizer._load_audio_robust(audio_file)
+    """Legacy function for backward compatibility."""
+    from audio_loader import load_audio_robust as robust_loader
+    return robust_loader(audio_file)
