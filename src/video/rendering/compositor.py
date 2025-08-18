@@ -237,13 +237,19 @@ class VideoNormalizationPipeline:
             
         logger.info("Applying format normalization to prevent artifacts")
         
-        # Import compatibility functions
+        # Import compatibility functions with dual import pattern
         try:
-            from compatibility.moviepy import resize_clip_safely, set_fps_safely, check_moviepy_api_compatibility
+            # Relative import for package execution
+            from ...compatibility.moviepy import resize_clip_safely, set_fps_safely, check_moviepy_api_compatibility
             compatibility_info = check_moviepy_api_compatibility()
         except ImportError:
-            logger.error("MoviePy compatibility layer not available - normalization may fail")
-            compatibility_info = None
+            try:
+                # Absolute import for direct execution
+                from compatibility.moviepy import resize_clip_safely, set_fps_safely, check_moviepy_api_compatibility
+                compatibility_info = check_moviepy_api_compatibility()
+            except ImportError:
+                logger.error("MoviePy compatibility layer not available - normalization may fail")
+                compatibility_info = None
         
         normalized_clips = []
         target_fps = target_format["target_fps"]
@@ -319,14 +325,19 @@ class VideoCompositor:
         Raises:
             VideoProcessingError: If composition fails
         """
-        # Import MoviePy safely
+        # Import MoviePy safely with dual import pattern
         try:
             try:
-                from compatibility.moviepy import import_moviepy_safely
+                # Relative import for package execution
+                from ...compatibility.moviepy import import_moviepy_safely
             except ImportError:
-                def import_moviepy_safely():
-                    from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
-                    return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                try:
+                    # Absolute import for direct execution
+                    from compatibility.moviepy import import_moviepy_safely
+                except ImportError:
+                    def import_moviepy_safely():
+                        from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
             
             VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
         except ImportError:

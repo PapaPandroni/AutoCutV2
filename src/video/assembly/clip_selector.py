@@ -21,8 +21,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Dict, Any, Optional, Tuple, Set
 
-from ...core.exceptions import ValidationError, raise_validation_error
-from ...core.logging_config import get_logger, log_performance, LoggingContext
+# Dual import pattern for package/direct execution compatibility
+try:
+    from ...core.exceptions import ValidationError, raise_validation_error
+    from ...core.logging_config import get_logger, log_performance, LoggingContext
+except ImportError:
+    # Fallback for direct execution
+    from core.exceptions import ValidationError, raise_validation_error
+    from core.logging_config import get_logger, log_performance, LoggingContext
 
 
 class SelectionStrategy(Enum):

@@ -11,12 +11,22 @@ The rendering system is extracted from the original clip_assembler.py god module
 as part of the Phase 3 refactoring to create maintainable, testable components.
 """
 
-from .compositor import VideoCompositor, VideoFormatAnalyzer, VideoNormalizationPipeline
-from .encoder import VideoEncoder, detect_optimal_codec_settings
-from .timeline import TimelineRenderer
-from .transitions import TransitionEngine, add_transitions
-from .audio_sync import AudioSynchronizer, load_audio_robust
-from .renderer import VideoRenderingOrchestrator, render_video
+# Dual import pattern for package/direct execution compatibility
+try:
+    from .compositor import VideoCompositor, VideoFormatAnalyzer, VideoNormalizationPipeline
+    from .encoder import VideoEncoder, detect_optimal_codec_settings
+    from .timeline import TimelineRenderer
+    from .transitions import TransitionEngine, add_transitions
+    from .audio_sync import AudioSynchronizer, load_audio_robust
+    from .renderer import VideoRenderingOrchestrator, render_video
+except ImportError:
+    # Fallback for direct execution
+    from compositor import VideoCompositor, VideoFormatAnalyzer, VideoNormalizationPipeline
+    from encoder import VideoEncoder, detect_optimal_codec_settings
+    from timeline import TimelineRenderer
+    from transitions import TransitionEngine, add_transitions
+    from audio_sync import AudioSynchronizer, load_audio_robust
+    from renderer import VideoRenderingOrchestrator, render_video
 
 __all__ = [
     # Main rendering components

@@ -17,11 +17,20 @@ except ImportError:
     
     class VideoProcessingError(Exception):
         pass
-from .timeline import TimelineRenderer
-from .compositor import VideoCompositor
-from .audio_sync import AudioSynchronizer  
-from .encoder import VideoEncoder
-from .transitions import TransitionEngine
+# Dual import pattern for package/direct execution compatibility
+try:
+    from .timeline import TimelineRenderer
+    from .compositor import VideoCompositor
+    from .audio_sync import AudioSynchronizer  
+    from .encoder import VideoEncoder
+    from .transitions import TransitionEngine
+except ImportError:
+    # Fallback for direct execution
+    from timeline import TimelineRenderer
+    from compositor import VideoCompositor
+    from audio_sync import AudioSynchronizer  
+    from encoder import VideoEncoder
+    from transitions import TransitionEngine
 
 logger = get_logger(__name__)
 

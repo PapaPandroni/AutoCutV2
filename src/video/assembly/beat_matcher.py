@@ -21,9 +21,20 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Dict, Any, Optional, Tuple
 
-from ...core.exceptions import ValidationError, raise_validation_error
-from ...core.logging_config import get_logger, log_performance, LoggingContext
-from .timeline import ClipTimeline, TimelineEntry, TimelinePosition
+# Dual import pattern for package/direct execution compatibility  
+try:
+    from ...core.exceptions import ValidationError, raise_validation_error
+    from ...core.logging_config import get_logger, log_performance
+except ImportError:
+    # Fallback for direct execution
+    from core.exceptions import ValidationError, raise_validation_error
+    from core.logging_config import get_logger, log_performance, LoggingContext
+
+# Dual import pattern for timeline
+try:
+    from .timeline import ClipTimeline, TimelineEntry, TimelinePosition
+except ImportError:
+    from video.assembly.timeline import ClipTimeline, TimelineEntry, TimelinePosition
 
 
 # Variety patterns for dynamic clip pacing

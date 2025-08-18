@@ -3431,8 +3431,12 @@ def render_video(
         RuntimeError: If rendering fails (for backward compatibility)
     """
     try:
-        # Import the new modular rendering system
-        from video.rendering import render_video as render_video_modular
+        # Import the new modular rendering system with dual import pattern
+        try:
+            from video.rendering.renderer import render_video as render_video_modular
+        except ImportError:
+            # Fallback for package execution context
+            from .video.rendering.renderer import render_video as render_video_modular
         
         # Delegate to the new modular system
         return render_video_modular(
@@ -3445,9 +3449,9 @@ def render_video(
             avg_beat_interval=avg_beat_interval,
         )
         
-    except ImportError:
-        # Fallback to legacy implementation if modules not available
-        raise RuntimeError("New rendering system not available - refactoring incomplete")
+    except ImportError as import_err:
+        # Log the import issue for debugging
+        raise RuntimeError(f"New rendering system not available - import failed: {import_err}")
     except Exception as e:
         # Maintain backward compatibility with RuntimeError
         raise RuntimeError(f"Video rendering failed: {str(e)}")

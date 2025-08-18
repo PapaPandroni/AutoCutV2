@@ -18,8 +18,8 @@ import click
 # Add src directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-# Import the API we'll create
-from src.api import AutoCutAPI
+# Import the API - no src. prefix needed since src is in path
+from api import AutoCutAPI
 
 # Global API instance
 api = AutoCutAPI()

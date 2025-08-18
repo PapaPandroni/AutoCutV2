@@ -13,18 +13,11 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
-# Import core AutoCut modules
-try:
-    from .clip_assembler import assemble_clips
-    from .video.validation import VideoValidator, ValidationResult
-    from .hardware.detection import HardwareDetector
-    from .utils import SUPPORTED_VIDEO_FORMATS, find_all_video_files
-except ImportError:
-    # Fallback for direct execution
-    from clip_assembler import assemble_clips
-    from video.validation import VideoValidator, ValidationResult
-    from hardware.detection import HardwareDetector
-    from utils import SUPPORTED_VIDEO_FORMATS, find_all_video_files
+# Import core AutoCut modules (src is in path, so no relative imports needed)
+from clip_assembler import assemble_clips
+from video.validation import VideoValidator, ValidationResult
+from hardware.detection import HardwareDetector
+from utils import SUPPORTED_VIDEO_FORMATS, find_all_video_files
 
 
 @dataclass
