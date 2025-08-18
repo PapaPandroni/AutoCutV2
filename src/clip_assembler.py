@@ -15,12 +15,25 @@ from collections import defaultdict
 try:
     from system_profiler import SystemProfiler
     from adaptive_monitor import AdaptiveWorkerMonitor
+    from memory.monitor import get_memory_info
 except ImportError:
     # Fallback if modules not available
     class SystemProfiler:
         def __init__(self): pass
     class AdaptiveWorkerMonitor:
         def __init__(self): pass
+    # Fallback get_memory_info if memory.monitor not available
+    def get_memory_info():
+        try:
+            memory = psutil.virtual_memory()
+            return {
+                "total_gb": memory.total / (1024**3),
+                "available_gb": memory.available / (1024**3),
+                "used_gb": memory.used / (1024**3),
+                "percent": memory.percent,
+            }
+        except Exception:
+            return {"total_gb": 0, "available_gb": 0, "used_gb": 0, "percent": 0}
 
 try:
     from moviepy.editor import VideoFileClip, CompositeVideoClip, concatenate_videoclips
@@ -2430,19 +2443,6 @@ def load_video_clips_with_robust_error_handling(
     # The caller MUST call resource_manager.cleanup_delayed_videos() after concatenation
     return video_clips, failed_indices, error_report, resource_manager
 
-
-def get_memory_info() -> Dict[str, float]:
-    """Get current system memory usage information."""
-    try:
-        memory = psutil.virtual_memory()
-        return {
-            "total_gb": memory.total / (1024**3),
-            "available_gb": memory.available / (1024**3),
-            "used_gb": memory.used / (1024**3),
-            "percent": memory.percent,
-        }
-    except Exception:
-        return {"total_gb": 0, "available_gb": 0, "used_gb": 0, "percent": 0}
 
 
 def load_video_clips_parallel(
