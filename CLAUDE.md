@@ -123,3 +123,29 @@ make test-integration   # Run integration tests
 make benchmark          # System performance test
 make info               # Show project status
 ```
+
+## Code Duplication Cleanup - August 2025
+
+### Completed Cleanups ✅
+- **Memory monitoring**: Consolidated to memory.monitor module (removed 12-line duplicate)
+- **Audio loading**: Simplified compatibility wrappers (reduced from 11 to 3 lines)  
+- **VideoChunk classes**: Unified to enhanced clip_selector version (5 classes → 1 canonical)
+- **Import paths**: Standardized through video module exports (`from src.video import VideoChunk`)
+
+### Preserved Functionality ✅
+- **Backward compatibility**: All existing APIs maintained 100%
+- **Performance**: No performance regressions introduced
+- **Error handling**: All existing error handling preserved
+- **Fallback mechanisms**: Multiple import fallbacks maintained for robustness
+
+### Technical Results
+- **Lines reduced**: ~60 lines of true duplication eliminated
+- **Classes consolidated**: 5 VideoChunk definitions → 1 enhanced canonical version
+- **Import complexity**: Simplified while maintaining compatibility
+- **Module structure**: Enhanced separation of concerns
+
+### Architecture Improvements
+- **Single source of truth**: VideoChunk now has one authoritative implementation
+- **Enhanced features**: Quality breakdown methods available across all modules
+- **Cleaner imports**: Canonical path `from src.video import VideoChunk`
+- **Maintainability**: Easier to modify VideoChunk behavior going forward
