@@ -15,13 +15,22 @@ import subprocess
 import tempfile
 from enum import Enum
 
-# Import our custom exceptions
-from ..core.exceptions import (
-    ValidationError,
-    iPhoneCompatibilityError,
-    VideoProcessingError,
-    raise_validation_error,
-)
+# Import our custom exceptions with dual import pattern
+try:
+    from ..core.exceptions import (
+        ValidationError,
+        iPhoneCompatibilityError,
+        VideoProcessingError,
+        raise_validation_error,
+    )
+except ImportError:
+    # Fallback for direct execution
+    from core.exceptions import (
+        ValidationError,
+        iPhoneCompatibilityError,
+        VideoProcessingError,
+        raise_validation_error,
+    )
 
 
 class ValidationType(Enum):

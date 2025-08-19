@@ -12,8 +12,12 @@ import time
 import tempfile
 from typing import Dict, Any, List, Tuple, Optional
 
-# Import our custom exceptions
-from ..core.exceptions import HardwareAccelerationError
+# Import our custom exceptions with dual import pattern
+try:
+    from ..core.exceptions import HardwareAccelerationError
+except ImportError:
+    # Fallback for direct execution
+    from core.exceptions import HardwareAccelerationError
 
 
 class HardwareDetector:
