@@ -13,6 +13,10 @@ Pillow>=10.0.0
 # System monitoring for memory optimization
 psutil>=5.9.0
 
+# Memory-efficient video processing (Phase 1 optimization)
+deffcode>=0.2.5  # FFmpeg-based video I/O for streaming analysis
+av>=10.0.0       # PyAV for low-level video operations
+
 # CLI framework
 click>=8.0.0
 
