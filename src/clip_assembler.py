@@ -594,7 +594,10 @@ class VideoNormalizationPipeline:
         # Use the centralized resize function from our compatibility layer
         try:
             # Import the enhanced resize function from our compatibility module
-            from .compatibility.moviepy import resize_with_aspect_preservation
+            try:
+                from compatibility.moviepy import resize_with_aspect_preservation
+            except ImportError:
+                from .compatibility.moviepy import resize_with_aspect_preservation
             
             print(f"   Using centralized resize: {clip.w}x{clip.h} → {target_width}x{target_height}")
             return resize_with_aspect_preservation(clip, target_width, target_height)
@@ -3433,6 +3436,7 @@ def render_video(
     try:
         # Import the new modular rendering system with dual import pattern
         try:
+            # Try absolute import first for autocut.py context
             from video.rendering.renderer import render_video as render_video_modular
         except ImportError:
             # Fallback for package execution context
@@ -3474,8 +3478,11 @@ def add_transitions(
         Composite video with transitions
     """
     try:
-        # Import the new modular transition system
-        from video.rendering import add_transitions as add_transitions_modular
+        # Import the new modular transition system with dual import pattern
+        try:
+            from video.rendering import add_transitions as add_transitions_modular
+        except ImportError:
+            from .video.rendering import add_transitions as add_transitions_modular
         
         # Delegate to the new modular system
         return add_transitions_modular(clips, transition_duration)
@@ -3522,8 +3529,13 @@ def assemble_clips(
     import os
     import logging
     import mimetypes
-    from .audio_analyzer import analyze_audio
-    from .video_analyzer import analyze_video_file
+    # Dual import pattern for package/direct execution compatibility
+    try:
+        from audio_analyzer import analyze_audio
+        from video_analyzer import analyze_video_file
+    except ImportError:
+        from .audio_analyzer import analyze_audio
+        from .video_analyzer import analyze_video_file
 
     def validate_audio_file_comprehensive(audio_path: str) -> tuple:
         """Comprehensive audio file validation before processing.
@@ -3978,8 +3990,11 @@ def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
         - List of FFmpeg-specific parameters for ffmpeg_params argument
     """
     try:
-        # Import the new modular encoder system
-        from video.rendering import detect_optimal_codec_settings as detect_codec_modular
+        # Import the new modular encoder system with dual import pattern
+        try:
+            from video.rendering import detect_optimal_codec_settings as detect_codec_modular
+        except ImportError:
+            from .video.rendering import detect_optimal_codec_settings as detect_codec_modular
         
         # Delegate to the new modular system
         return detect_codec_modular()
@@ -4005,15 +4020,20 @@ def detect_optimal_codec_settings_with_diagnostics() -> Tuple[
         - List of FFmpeg-specific parameters for ffmpeg_params argument
         - Dictionary of diagnostic information and capability details
     """
-    # Import enhanced detection from new hardware module
+    # Import enhanced detection from new hardware module with dual import pattern
     try:
-        from .hardware.detection import detect_optimal_codec_settings_enhanced
+        # Try absolute import first for autocut.py context
+        from hardware.detection import detect_optimal_codec_settings_enhanced
     except ImportError:
-        # Fallback for backwards compatibility
         try:
-            from .utils import detect_optimal_codec_settings_enhanced
+            # Try relative import for package context
+            from .hardware.detection import detect_optimal_codec_settings_enhanced
         except ImportError:
-            from utils import detect_optimal_codec_settings_enhanced
+            # Fallback for backwards compatibility
+            try:
+                from utils import detect_optimal_codec_settings_enhanced
+            except ImportError:
+                from .utils import detect_optimal_codec_settings_enhanced
 
     return detect_optimal_codec_settings_enhanced()
 
