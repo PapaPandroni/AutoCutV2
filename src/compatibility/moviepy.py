@@ -182,21 +182,30 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info: Dict[str, An
 
 
 def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode="smart", compatibility_info: Dict[str, Any] = None):
-    """Resize clip using MoviePy 2.x effects system with robust fallbacks and smart aspect ratio preservation.
+    """Resize clip using MoviePy 2.x effects system with content-aware smart scaling for optimal screen utilization.
     
     This function preserves aspect ratios and adds letterboxing/pillarboxing as needed,
-    with smart scaling that maximizes screen utilization while preserving content safety.
+    with enhanced smart scaling that uses adaptive thresholds based on content and canvas types
+    to maximize screen utilization while preserving content safety.
+    
+    ENHANCED SMART MODE:
+    - Landscape→Landscape: 15% crop threshold (same family)
+    - Landscape→Square: 25% crop threshold (moderate mismatch) 
+    - Portrait→Portrait: 15% crop threshold (same family)
+    - Portrait→Square: 25% crop threshold (moderate mismatch)
+    - Cross-type (Land↔Port): 8% crop threshold (major mismatch)
+    - Square content: 15% crop threshold (universal)
     
     Args:
         clip: Video clip instance
         newsize: Tuple of (width, height) or None
         width: Target width (alternative to newsize)
         height: Target height (alternative to newsize) 
-        scaling_mode: "fit" (conservative), "fill" (crop content), "smart" (adaptive)
+        scaling_mode: "fit" (conservative), "fill" (aggressive), "smart" (adaptive with content-aware thresholds)
         compatibility_info: Compatibility information (optional)
         
     Returns:
-        Resized video clip with proper aspect ratio preservation and letterboxing
+        Resized video clip with proper aspect ratio preservation and intelligent letterboxing
     """
     # Determine target dimensions
     if newsize is not None:
@@ -245,7 +254,7 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
             scaling_reason = "fill mode - maximizes screen usage"
             
         elif scaling_mode == "smart":
-            # Smart: analyze crop percentage and decide
+            # Enhanced Smart: content-aware and canvas-aware crop thresholds
             fit_scale = min(width_scale, height_scale)
             fill_scale = max(width_scale, height_scale)
             
@@ -253,15 +262,44 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
             crop_ratio = fill_scale / fit_scale
             crop_percentage = (crop_ratio - 1) * 100
             
-            # Conservative threshold: only crop if very minimal
-            SAFE_CROP_THRESHOLD = 8.0  # Only 8% content loss maximum
+            # Determine content type from aspect ratio
+            content_type = "landscape" if current_aspect > 1.3 else "portrait" if current_aspect < 0.8 else "square"
             
+            # Determine canvas type from target aspect ratio  
+            canvas_type = "landscape" if target_aspect > 1.3 else "portrait" if target_aspect < 0.8 else "square"
+            
+            # ADAPTIVE CROP THRESHOLDS based on content and canvas analysis
+            if content_type == "landscape":
+                if canvas_type == "landscape":
+                    # Landscape → Landscape: very permissive (same family)
+                    SAFE_CROP_THRESHOLD = 15.0
+                elif canvas_type == "square":
+                    # Landscape → Square: moderately permissive
+                    SAFE_CROP_THRESHOLD = 25.0  
+                else:
+                    # Landscape → Portrait: conservative (major mismatch)
+                    SAFE_CROP_THRESHOLD = 8.0
+            elif content_type == "portrait":
+                if canvas_type == "portrait":
+                    # Portrait → Portrait: very permissive (same family)
+                    SAFE_CROP_THRESHOLD = 15.0
+                elif canvas_type == "square":
+                    # Portrait → Square: moderately permissive
+                    SAFE_CROP_THRESHOLD = 25.0
+                else:
+                    # Portrait → Landscape: conservative (major mismatch)
+                    SAFE_CROP_THRESHOLD = 8.0
+            else:  # square content
+                # Square content: moderate threshold for any canvas
+                SAFE_CROP_THRESHOLD = 15.0
+            
+            # Decision logic with enhanced reasoning
             if crop_percentage <= SAFE_CROP_THRESHOLD:
                 scale = fill_scale
-                scaling_reason = f"smart mode - fill (crop: {crop_percentage:.1f}% ≤ {SAFE_CROP_THRESHOLD}%)"
+                scaling_reason = f"smart mode - fill (crop: {crop_percentage:.1f}% ≤ {SAFE_CROP_THRESHOLD}% for {content_type}→{canvas_type})"
             else:
                 scale = fit_scale
-                scaling_reason = f"smart mode - fit (crop: {crop_percentage:.1f}% > {SAFE_CROP_THRESHOLD}%)"
+                scaling_reason = f"smart mode - fit (crop: {crop_percentage:.1f}% > {SAFE_CROP_THRESHOLD}% for {content_type}→{canvas_type})"
         else:
             # Unknown mode: default to safe fit mode
             scale = min(width_scale, height_scale)
@@ -392,20 +430,25 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
                 raise
 
 def resize_with_aspect_preservation(clip, target_width: int, target_height: int, scaling_mode: str = "smart"):
-    """Centralized function for resizing clips with aspect ratio preservation and intelligent scaling.
+    """Centralized function for resizing clips with content-aware intelligent scaling and optimal screen utilization.
     
-    This function is specifically designed for AutoCut's video normalization pipeline,
-    handling mixed aspect ratios and ensuring they fit properly in a target canvas while
-    maximizing screen utilization through smart scaling decisions.
+    This function is specifically designed for AutoCut's enhanced video normalization pipeline,
+    handling mixed aspect ratios with dynamic canvas selection and content-aware crop thresholds
+    to maximize screen utilization while maintaining content safety.
+    
+    OPTIMIZED FOR DYNAMIC CANVAS SYSTEM:
+    - Works seamlessly with 16:9, 4:3, and 9:16 canvases
+    - Content-aware thresholds minimize black bars
+    - Preserves video quality through intelligent cropping decisions
     
     Args:
         clip: Video clip instance
-        target_width: Target canvas width (e.g., 4:3 canvas width)
-        target_height: Target canvas height (e.g., 4:3 canvas height)
-        scaling_mode: "smart" (adaptive), "fit" (conservative), "fill" (crop content)
+        target_width: Target canvas width (from dynamic canvas selection)
+        target_height: Target canvas height (from dynamic canvas selection)
+        scaling_mode: "smart" (content-aware adaptive), "fit" (conservative), "fill" (aggressive)
         
     Returns:
-        Resized and letterboxed clip that fits exactly in target dimensions
+        Resized and letterboxed clip optimized for target canvas with minimal black bars
     """
     try:
         logger.info(f"Starting aspect ratio preservation: {clip.w}x{clip.h} → {target_width}x{target_height}")

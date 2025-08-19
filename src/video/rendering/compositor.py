@@ -24,32 +24,41 @@ class VideoFormatAnalyzer:
     """
     
     def determine_optimal_canvas(self, video_clips: List) -> Dict[str, Any]:
-        """Determine optimal 4:3 canvas size that preserves quality for all content.
+        """Determine optimal canvas size with dynamic aspect ratio selection for maximum screen utilization.
         
-        UPDATED APPROACH: Always outputs 4:3 aspect ratio (width:height = 4:3) while 
-        preserving maximum quality. All content gets appropriately letterboxed/pillarboxed 
-        within the 4:3 frame.
+        ENHANCED APPROACH: Analyzes content to choose optimal aspect ratio:
+        - Predominantly landscape content → 16:9 canvas (better screen utilization)
+        - Predominantly portrait content → 9:16 canvas 
+        - Mixed or square content → 4:3 canvas (universal compatibility)
+        
+        This reduces black bars significantly while preserving content quality.
         
         Args:
             video_clips: List of video clips to analyze
             
         Returns:
-            Dictionary containing optimal 4:3 canvas specifications
+            Dictionary containing optimal canvas specifications with dynamic aspect ratio
         """
         if not video_clips:
+            # Default to 16:9 HD for no content
             return {
-                "target_width": 1440,
+                "target_width": 1920,
                 "target_height": 1080,
                 "target_fps": 24.0,
-                "target_aspect_ratio": 4 / 3,
+                "target_aspect_ratio": 16 / 9,
                 "requires_normalization": False,
-                "canvas_type": "default_4_3",
+                "canvas_type": "default_16_9",
             }
 
-        # Analyze all content to find optimal 4:3 canvas
+        # Analyze all content for optimal canvas selection
         max_dimension = 0  # Track the largest dimension for quality preservation
         fps_values = []
-        content_types = []
+        content_analysis = {
+            'landscape': 0,  # aspect > 1.3
+            'portrait': 0,   # aspect < 0.8  
+            'square': 0,     # 0.8 <= aspect <= 1.3
+            'total_clips': 0
+        }
         
         for i, clip in enumerate(video_clips):
             if clip is None:
@@ -67,64 +76,108 @@ class VideoFormatAnalyzer:
             # Track the largest dimension across ALL clips for quality preservation
             max_dimension = max(max_dimension, width, height)
             
-            # Track content type for logging
+            # Analyze content type for canvas decision
             aspect_ratio = width / height
-            if aspect_ratio > 1.3:  # Landscape
-                content_types.append('landscape')
-            elif aspect_ratio < 0.8:  # Portrait  
-                content_types.append('portrait')
-            else:  # Square-ish
-                content_types.append('square')
+            content_analysis['total_clips'] += 1
             
-            logger.debug(f"Clip {i}: {type(clip)} - duration {duration:.3f}s, format {width}x{height}@{fps}fps, type: {content_types[-1]}")
+            if aspect_ratio > 1.3:  # Landscape
+                content_analysis['landscape'] += 1
+                content_type = 'landscape'
+            elif aspect_ratio < 0.8:  # Portrait  
+                content_analysis['portrait'] += 1
+                content_type = 'portrait'
+            else:  # Square-ish
+                content_analysis['square'] += 1
+                content_type = 'square'
+            
+            logger.debug(f"Clip {i}: {type(clip)} - duration {duration:.3f}s, format {width}x{height}@{fps}fps, type: {content_type} (aspect: {aspect_ratio:.3f})")
 
         # Calculate target FPS (average of all clips)
         target_fps = sum(fps_values) / len(fps_values) if fps_values else 24.0
         
-        # ALWAYS CREATE 4:3 CANVAS - preserving maximum quality
-        # Target aspect ratio: 4:3 (1.333)
-        target_aspect_ratio = 4.0 / 3.0
+        # DYNAMIC CANVAS SELECTION based on content analysis
+        total_clips = content_analysis['total_clips']
+        landscape_ratio = content_analysis['landscape'] / total_clips if total_clips > 0 else 0
+        portrait_ratio = content_analysis['portrait'] / total_clips if total_clips > 0 else 0
         
-        # Determine optimal dimensions for 4:3 while preserving quality
-        # Use the largest dimension as a starting point for quality preservation
+        # Decision thresholds for canvas aspect ratio
+        LANDSCAPE_THRESHOLD = 0.7  # 70% landscape content
+        PORTRAIT_THRESHOLD = 0.7   # 70% portrait content
+        
+        # Choose optimal canvas aspect ratio
+        if landscape_ratio >= LANDSCAPE_THRESHOLD:
+            # Predominantly landscape content - use 16:9 for better screen utilization
+            target_aspect_ratio = 16.0 / 9.0
+            canvas_family = "16_9"
+            canvas_description = f"Landscape-optimized 16:9 canvas ({landscape_ratio:.1%} landscape content)"
+        elif portrait_ratio >= PORTRAIT_THRESHOLD:
+            # Predominantly portrait content - use 9:16
+            target_aspect_ratio = 9.0 / 16.0  
+            canvas_family = "9_16"
+            canvas_description = f"Portrait-optimized 9:16 canvas ({portrait_ratio:.1%} portrait content)"
+        else:
+            # Mixed content or square-heavy - use 4:3 for universal compatibility
+            target_aspect_ratio = 4.0 / 3.0
+            canvas_family = "4_3"
+            canvas_description = f"Mixed-content 4:3 canvas (L:{landscape_ratio:.1%}, P:{portrait_ratio:.1%}, S:{1-landscape_ratio-portrait_ratio:.1%})"
+        
+        # Determine optimal dimensions based on quality level and chosen aspect ratio
         if max_dimension >= 3840:  # 4K content
-            # For 4K, use 2880x2160 (4:3 aspect ratio, high quality)
-            target_width = 2880
-            target_height = 2160
+            if canvas_family == "16_9":
+                target_width, target_height = 3840, 2160  # 4K 16:9
+            elif canvas_family == "9_16":
+                target_width, target_height = 2160, 3840  # 4K 9:16
+            else:  # 4:3
+                target_width, target_height = 2880, 2160  # 4K 4:3
+            quality_level = "4K"
         elif max_dimension >= 1920:  # HD content
-            # For HD, use 1440x1080 (4:3 aspect ratio, good quality)
-            target_width = 1440 
-            target_height = 1080
+            if canvas_family == "16_9":
+                target_width, target_height = 1920, 1080  # HD 16:9
+            elif canvas_family == "9_16":
+                target_width, target_height = 1080, 1920  # HD 9:16
+            else:  # 4:3
+                target_width, target_height = 1440, 1080  # HD 4:3
+            quality_level = "HD"
         else:  # SD content
-            # For SD, use 960x720 (4:3 aspect ratio, standard quality)
-            target_width = 960
-            target_height = 720
+            if canvas_family == "16_9":
+                target_width, target_height = 1280, 720   # SD 16:9
+            elif canvas_family == "9_16":
+                target_width, target_height = 720, 1280   # SD 9:16
+            else:  # 4:3
+                target_width, target_height = 960, 720    # SD 4:3
+            quality_level = "SD"
         
-        # Verify aspect ratio is exactly 4:3
+        # Verify aspect ratio precision
         calculated_aspect = target_width / target_height
         if abs(calculated_aspect - target_aspect_ratio) > 0.01:
-            # Adjust width to ensure perfect 4:3 ratio
+            # Adjust width to ensure perfect aspect ratio
             target_width = int(target_height * target_aspect_ratio)
 
-        # Determine canvas characteristics for logging
-        unique_content_types = set(content_types)
+        # Generate canvas type identifier
+        unique_content_types = {k for k, v in content_analysis.items() if v > 0 and k != 'total_clips'}
         
-        # Canvas type based on content mix
-        if len(unique_content_types) == 1:
-            if 'landscape' in unique_content_types:
-                canvas_type = "4_3_landscape_optimized"
-                description = "Landscape content - 4:3 canvas with letterboxing"
-            elif 'portrait' in unique_content_types:
-                canvas_type = "4_3_portrait_optimized" 
-                description = "Portrait content - 4:3 canvas with pillarboxing"
+        if canvas_family == "16_9":
+            if len(unique_content_types) == 1 and 'landscape' in unique_content_types:
+                canvas_type = "16_9_landscape_optimized"
             else:
-                canvas_type = "4_3_square_optimized"
-                description = "Square content - 4:3 canvas with minimal bars"
-        else:
-            canvas_type = "4_3_mixed_content"
-            description = "Mixed content types - 4:3 canvas with adaptive boxing"
+                canvas_type = "16_9_mixed_optimized"
+        elif canvas_family == "9_16":
+            if len(unique_content_types) == 1 and 'portrait' in unique_content_types:
+                canvas_type = "9_16_portrait_optimized"
+            else:
+                canvas_type = "9_16_mixed_optimized"
+        else:  # 4:3
+            if len(unique_content_types) == 1:
+                if 'landscape' in unique_content_types:
+                    canvas_type = "4_3_landscape_optimized"
+                elif 'portrait' in unique_content_types:
+                    canvas_type = "4_3_portrait_optimized" 
+                else:
+                    canvas_type = "4_3_square_optimized"
+            else:
+                canvas_type = "4_3_mixed_content"
 
-        # Check if normalization is needed (always true for mixed content)
+        # Check if normalization is needed
         resolution_set = set()
         fps_set = set()
         for clip in video_clips:
@@ -138,19 +191,18 @@ class VideoFormatAnalyzer:
             len(resolution_set) > 1 or 
             len(fps_set) > 1 or
             len(unique_content_types) > 1 or
-            True  # Always normalize for 4:3 output since most content isn't 4:3
+            True  # Always normalize since most content won't match chosen canvas exactly
         )
 
-        # Quality preservation logging
-        quality_info = f"4K" if max_dimension >= 3840 else f"HD" if max_dimension >= 1920 else "SD"
-        logger.info(f"Canvas Analysis: {description}")
-        logger.info(f"   - Content types: {', '.join(unique_content_types)}")
-        logger.info(f"   - Quality level: {quality_info} (max dimension: {max_dimension}px)")
-        logger.info(f"Canvas Decision: {target_width}x{target_height} @ {target_fps:.1f}fps (4:3 aspect ratio)")
+        # Enhanced logging with canvas selection rationale
+        logger.info(f"Canvas Analysis: {canvas_description}")
+        logger.info(f"   - Content distribution: Landscape {content_analysis['landscape']}, Portrait {content_analysis['portrait']}, Square {content_analysis['square']}")
+        logger.info(f"   - Quality level: {quality_level} (max dimension: {max_dimension}px)")
+        logger.info(f"Canvas Decision: {target_width}x{target_height} @ {target_fps:.1f}fps ({target_aspect_ratio:.3f} aspect ratio)")
         logger.info(f"Canvas Type: {canvas_type}")
-        logger.info("Quality Preservation: ✅ Optimal quality for 4:3 output")
+        logger.info(f"Screen Utilization: \u2705 Optimized for {canvas_family.replace('_', ':')} content")
         if requires_normalization:
-            logger.info("Format normalization required for 4:3 output")
+            logger.info("Format normalization required for optimal canvas output")
             
         return {
             "target_width": target_width,
@@ -159,12 +211,19 @@ class VideoFormatAnalyzer:
             "target_aspect_ratio": target_aspect_ratio,
             "requires_normalization": requires_normalization,
             "canvas_type": canvas_type,
-            "quality_level": quality_info,
+            "canvas_family": canvas_family,
+            "quality_level": quality_level,
             "max_dimension_preserved": max_dimension,
             "content_analysis": {
-                "content_types": content_types,
-                "unique_content_types": list(unique_content_types),
-                "mixed_content": len(unique_content_types) > 1,
+                "landscape_count": content_analysis['landscape'],
+                "portrait_count": content_analysis['portrait'],
+                "square_count": content_analysis['square'],
+                "total_clips": content_analysis['total_clips'],
+                "landscape_ratio": landscape_ratio,
+                "portrait_ratio": portrait_ratio,
+                "dominant_type": "landscape" if landscape_ratio >= LANDSCAPE_THRESHOLD else 
+                               "portrait" if portrait_ratio >= PORTRAIT_THRESHOLD else "mixed",
+                "canvas_selection_reason": canvas_description
             },
         }
     
