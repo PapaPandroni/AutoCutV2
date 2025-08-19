@@ -16,13 +16,29 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Callable
 
-# Import our custom exceptions and codec detection
-from ..core.exceptions import (
-    TranscodingError,
-    VideoProcessingError,
-    raise_transcoding_error,
-)
-from .codec_detection import CodecDetector
+# Import our custom exceptions with dual import pattern
+try:
+    # Try absolute import first for autocut.py execution context
+    from core.exceptions import (
+        TranscodingError,
+        VideoProcessingError,
+        raise_transcoding_error,
+    )
+except ImportError:
+    # Fallback to relative import for package execution context
+    from ..core.exceptions import (
+        TranscodingError,
+        VideoProcessingError,
+        raise_transcoding_error,
+    )
+
+# Import CodecDetector with dual import pattern
+try:
+    # Try absolute import first for autocut.py execution context
+    from video.codec_detection import CodecDetector
+except ImportError:
+    # Fallback to relative import for package execution context
+    from .codec_detection import CodecDetector
 
 
 class TranscodingService:

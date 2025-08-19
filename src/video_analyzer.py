@@ -20,12 +20,13 @@ except ImportError:
         VideoFileClip = None
 
 
-# Import VideoChunk from the canonical location
+# Import VideoChunk from the canonical location with dual import pattern
 try:
-    from .video import VideoChunk
-except ImportError:
-    # Fallback import path for backwards compatibility
+    # Try absolute import first for autocut.py execution context
     from video.assembly.clip_selector import VideoChunk
+except ImportError:
+    # Fallback to relative import for package execution context
+    from .video import VideoChunk
 
 
 def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
@@ -46,12 +47,20 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
     """
     import os
 
-    # Import video preprocessing from new transcoding module
+    # Import video preprocessing from new transcoding module with dual import pattern
     try:
-        from .video.transcoding import preprocess_video_if_needed
+        # Try absolute import first for autocut.py execution context
+        from video.transcoding import preprocess_video_if_needed
     except ImportError:
-        # Fallback for backwards compatibility
-        from .utils import preprocess_video_if_needed
+        try:
+            # Try relative import for package execution context
+            from .video.transcoding import preprocess_video_if_needed
+        except ImportError:
+            # Final fallback to utils module
+            try:
+                from utils import preprocess_video_if_needed
+            except ImportError:
+                from .utils import preprocess_video_if_needed
 
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Video file not found: {file_path}")
@@ -668,7 +677,11 @@ def analyze_video_file(
     else:
         # No BPM provided, use config default
         try:
-            from .utils import get_config_value
+            # Import config utility with dual import pattern
+            try:
+                from utils import get_config_value
+            except ImportError:
+                from .utils import get_config_value
 
             calculated_min_duration = get_config_value("min_clip_duration", 0.5)
         except ImportError:

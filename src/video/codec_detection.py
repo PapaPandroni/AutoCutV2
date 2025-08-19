@@ -12,8 +12,13 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
 
-# Import our custom exceptions
-from ..core.exceptions import VideoProcessingError
+# Import our custom exceptions with dual import pattern
+try:
+    # Try absolute import first for autocut.py execution context
+    from core.exceptions import VideoProcessingError
+except ImportError:
+    # Fallback to relative import for package execution context
+    from ..core.exceptions import VideoProcessingError
 
 
 class CodecDetector:
