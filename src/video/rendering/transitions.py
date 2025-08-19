@@ -61,14 +61,19 @@ class TransitionEngine:
             VideoProcessingError: If clips list is invalid
         """
         try:
-            # Import MoviePy safely
+            # Import MoviePy safely with dual import pattern
             try:
-                from compatibility.moviepy import import_moviepy_safely
+                # Relative import for package execution
+                from ...compatibility.moviepy import import_moviepy_safely
             except ImportError:
-                # Fallback if compatibility module not available
-                def import_moviepy_safely():
-                    from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
-                    return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                try:
+                    # Absolute import for direct execution
+                    from compatibility.moviepy import import_moviepy_safely
+                except ImportError:
+                    # Fallback if compatibility module not available
+                    def import_moviepy_safely():
+                        from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
             
             VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
         except ImportError:

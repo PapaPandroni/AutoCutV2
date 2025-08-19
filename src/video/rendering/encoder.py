@@ -253,15 +253,20 @@ class VideoEncoder:
         import psutil
         
         try:
-            # Import compatibility layer
+            # Import compatibility layer with dual import pattern
             try:
-                from compatibility.moviepy import write_videofile_safely, check_moviepy_api_compatibility
+                # Relative import for package execution
+                from ...compatibility.moviepy import write_videofile_safely, check_moviepy_api_compatibility
             except ImportError:
-                # Fallback if compatibility module not available
-                def write_videofile_safely(video, path, compatibility_info, **kwargs):
-                    video.write_videofile(path, **kwargs)
-                def check_moviepy_api_compatibility():
-                    return {"version_detected": "unknown", "method_mappings": {"subclip": "subclip", "set_audio": "set_audio"}}
+                try:
+                    # Absolute import for direct execution
+                    from compatibility.moviepy import write_videofile_safely, check_moviepy_api_compatibility
+                except ImportError:
+                    # Fallback if compatibility module not available
+                    def write_videofile_safely(video, path, compatibility_info, **kwargs):
+                        video.write_videofile(path, **kwargs)
+                    def check_moviepy_api_compatibility():
+                        return {"version_detected": "unknown", "method_mappings": {"subclip": "subclip", "set_audio": "set_audio"}}
             
             # Get compatibility info if not cached
             if not self.compatibility_info:

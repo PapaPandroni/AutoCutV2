@@ -203,7 +203,15 @@ class VideoCache:
         parent video references to prevent subclipped videos from losing their readers.
         """
         if filepath not in self._parent_videos:
-            from compatibility.moviepy import import_moviepy_safely
+            # Dual import pattern for compatibility.moviepy
+            try:
+                from compatibility.moviepy import import_moviepy_safely
+            except ImportError:
+                # Fallback: create minimal function for basic MoviePy import
+                def import_moviepy_safely():
+                    from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                    return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+            
             VideoFileClip, _, _, _ = import_moviepy_safely()
             
             self.logger.debug(f"Loading parent video into cache: {filepath}")
