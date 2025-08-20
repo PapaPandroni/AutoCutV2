@@ -600,7 +600,9 @@ class VideoNormalizationPipeline:
                 from .compatibility.moviepy import resize_with_aspect_preservation
             
             print(f"   Using centralized resize: {clip.w}x{clip.h} → {target_width}x{target_height}")
-            return resize_with_aspect_preservation(clip, target_width, target_height)
+            print(f"   LEGACY SYSTEM: Using scaling_mode='fill' for maximum screen utilization")
+            # CRITICAL FIX: Add scaling_mode="fill" to match new system and maximize screen utilization
+            return resize_with_aspect_preservation(clip, target_width, target_height, scaling_mode="fill")
             
         except ImportError:
             # Fallback to local implementation if compatibility module not available
@@ -612,7 +614,9 @@ class VideoNormalizationPipeline:
         # Calculate scaling to fit within target dimensions
         width_scale = target_width / clip.w
         height_scale = target_height / clip.h
-        scale = min(width_scale, height_scale)
+        scale = max(width_scale, height_scale)  # FIXED: Use max() for fill scaling instead of min() for fit scaling
+        print(f"   LEGACY FALLBACK: Using fill scaling (max) for maximum screen utilization")
+        print(f"   Scale factors - width: {width_scale:.3f}, height: {height_scale:.3f}, selected: {scale:.3f} (fill mode)")
 
         # Calculate new dimensions (maintain aspect ratio)
         new_width = int(clip.w * scale)
@@ -698,7 +702,9 @@ class VideoNormalizationPipeline:
         # Calculate scaling to fit within target dimensions
         width_scale = target_width / clip.w
         height_scale = target_height / clip.h
-        scale = min(width_scale, height_scale)
+        scale = max(width_scale, height_scale)  # FIXED: Use max() for fill scaling instead of min() for fit scaling
+        print(f"   LEGACY FALLBACK: Using fill scaling (max) for maximum screen utilization")
+        print(f"   Scale factors - width: {width_scale:.3f}, height: {height_scale:.3f}, selected: {scale:.3f} (fill mode)")
 
         # Calculate new dimensions (maintain aspect ratio)
         new_width = int(clip.w * scale)
