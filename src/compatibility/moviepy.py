@@ -347,10 +347,24 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
                 logger.error(f"All resize methods failed: {e}")
                 raise RuntimeError(f"Unable to resize clip: {e}")
         
-        # Check if letterboxing/pillarboxing is needed
+        # CRITICAL FIX: Check if letterboxing should be applied based on scaling mode
         if new_width == target_width and new_height == target_height:
             # Perfect fit, no letterboxing needed
             logger.debug(f"Perfect fit: {new_width}x{new_height} matches target {target_width}x{target_height}")
+            return resized_clip
+        
+        # NEW: For fill mode, return resized clip directly without letterboxing
+        # This eliminates cascading letterboxing that was causing black bars on all sides
+        if scaling_mode == "fill":
+            logger.info(f"Fill mode: Returning resized clip without letterboxing to maximize screen utilization")
+            logger.info(f"  Dimensions: {new_width}x{new_height} (target: {target_width}x{target_height})")
+            
+            # Calculate screen utilization for fill mode
+            video_area = new_width * new_height
+            target_area = target_width * target_height
+            utilization = (video_area / target_area) * 100
+            logger.info(f"  Screen utilization (fill mode): {utilization:.1f}% - no letterboxing applied")
+            
             return resized_clip
         
         # Import composition classes with fallbacks
@@ -367,7 +381,9 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
                 logger.warning(f"Returning resized clip without letterboxing: {new_width}x{new_height}")
                 return resized_clip
         
-        # Create black background for letterboxing/pillarboxing
+        # Create black background for letterboxing/pillarboxing (fit/smart modes only)
+        logger.info(f"Applying letterboxing for '{scaling_mode}' mode to ensure proper aspect ratio")
+        
         try:
             background = ColorClip(
                 size=(target_width, target_height),
@@ -388,20 +404,23 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
             # Ensure the composite has the correct duration
             letterboxed_clip = letterboxed_clip.with_duration(resized_clip.duration)
             
-            # Log letterboxing operation for debugging
+            # Enhanced logging for letterboxing operations
             if new_width < target_width:
                 letterbox_type = "pillarbox" if new_height == target_height else "letterbox+pillarbox"
                 bar_width = (target_width - new_width) // 2
-                logger.debug(f"Applied {letterbox_type}: {bar_width}px bars on sides")
+                logger.info(f"Applied {letterbox_type}: {bar_width}px bars on sides")
+                logger.info(f"  Reason: Content scaled to fit target width while preserving aspect ratio")
             else:
                 bar_height = (target_height - new_height) // 2  
-                logger.debug(f"Applied letterbox: {bar_height}px bars on top/bottom")
+                logger.info(f"Applied letterbox: {bar_height}px bars on top/bottom")
+                logger.info(f"  Reason: Content scaled to fit target height while preserving aspect ratio")
             
             # Calculate and log screen utilization
             video_area = new_width * new_height
             canvas_area = target_width * target_height
             utilization = (video_area / canvas_area) * 100
-            logger.info(f"  Screen utilization: {utilization:.1f}% ({video_area}/{canvas_area} pixels)")
+            logger.info(f"  Screen utilization (with letterboxing): {utilization:.1f}% ({video_area}/{canvas_area} pixels)")
+            logger.info(f"  Mode: {scaling_mode} - letterboxing applied to preserve content and aspect ratio")
             
             return letterboxed_clip
             

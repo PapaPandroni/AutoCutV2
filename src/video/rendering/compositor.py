@@ -474,9 +474,33 @@ class VideoCompositor:
         # Validate valid clip durations
         total_expected_duration = self._validate_valid_clip_durations(valid_clips, timeline)
         
-        # Choose concatenation method based on format requirements
-        concatenation_method = "compose" if target_format.get("requires_normalization", False) else "chain"
-        logger.info(f"Using '{concatenation_method}' concatenation method")
+        # ENHANCED: Intelligent concatenation method selection to avoid cascading letterboxing
+        # Check if all clips have uniform dimensions after normalization
+        target_dimensions = (target_format["target_width"], target_format["target_height"])
+        clip_dimensions = set()
+        
+        for clip in valid_clips:
+            if clip is not None:
+                clip_size = getattr(clip, 'size', target_dimensions)
+                clip_dimensions.add(clip_size)
+        
+        # Use chain method if all clips have same dimensions (avoids additional composition)
+        all_clips_uniform = len(clip_dimensions) <= 1
+        
+        if all_clips_uniform and len(clip_dimensions) == 1:
+            uniform_size = list(clip_dimensions)[0]
+            if uniform_size == target_dimensions:
+                concatenation_method = "chain"
+                logger.info(f"Using 'chain' concatenation - all clips are uniform {uniform_size}")
+                logger.info("  This eliminates cascading composition that can add unwanted letterboxing")
+            else:
+                concatenation_method = "compose"
+                logger.info(f"Using 'compose' concatenation - clips {uniform_size} need size adjustment to {target_dimensions}")
+        else:
+            concatenation_method = "compose"
+            logger.info(f"Using 'compose' concatenation - mixed clip dimensions detected: {clip_dimensions}")
+        
+        logger.info(f"Concatenation method selected: '{concatenation_method}'")
         
         # Perform concatenation with enhanced null checking
         try:
