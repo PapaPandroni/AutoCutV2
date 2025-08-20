@@ -314,6 +314,12 @@ class VideoNormalizationPipeline:
         target_fps = target_format["target_fps"]
         target_size = (target_format["target_width"], target_format["target_height"])
         
+        # Determine optimal scaling mode for maximum screen utilization
+        canvas_type = target_format.get("canvas_family", "16_9")
+        scaling_mode = "fill"  # Use fill mode for maximum screen utilization without distortion
+        
+        logger.info(f"Using scaling mode: {scaling_mode} for {canvas_type} canvas to maximize screen utilization")
+        
         for i, clip in enumerate(video_clips):
             if clip is None:
                 normalized_clips.append(None)
@@ -346,7 +352,14 @@ class VideoNormalizationPipeline:
                 logger.debug(f"Normalizing clip {i} resolution: {current_size} -> {target_size}")
                 try:
                     if compatibility_info:
-                        normalized_clip = resize_clip_safely(normalized_clip, newsize=target_size, compatibility_info=compatibility_info)
+                        # CRITICAL FIX: Use 'fill' mode for maximum screen utilization
+                        normalized_clip = resize_clip_safely(
+                            normalized_clip, 
+                            newsize=target_size, 
+                            scaling_mode=scaling_mode,
+                            compatibility_info=compatibility_info
+                        )
+                        logger.debug(f"Clip {i} resized with {scaling_mode} mode for optimal screen utilization")
                     else:
                         # The resize_clip_safely function should handle all resize operations
                         logger.error(f"resize_clip_safely import failed but no fallback available for clip {i}")
@@ -356,7 +369,8 @@ class VideoNormalizationPipeline:
             
             normalized_clips.append(normalized_clip)
         
-        logger.info(f"Format normalization complete for {len(normalized_clips)} clips")
+        logger.info(f"Format normalization complete for {len(normalized_clips)} clips using {scaling_mode} mode")
+        logger.info("Enhanced screen utilization: landscape videos will fill height with minimal black bars")
         return normalized_clips
 
 

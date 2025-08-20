@@ -251,7 +251,9 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         elif scaling_mode == "fill":
             # Aggressive: fill entire canvas (may crop content)
             scale = max(width_scale, height_scale)
-            scaling_reason = "fill mode - maximizes screen usage"
+            content_type = "landscape" if current_aspect > 1.3 else "portrait" if current_aspect < 0.8 else "square"
+            canvas_type = "landscape" if target_aspect > 1.3 else "portrait" if target_aspect < 0.8 else "square"
+            scaling_reason = f"fill mode - maximizes screen usage ({content_type}→{canvas_type})"
             
         elif scaling_mode == "smart":
             # Enhanced Smart: content-aware and canvas-aware crop thresholds
