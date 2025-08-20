@@ -158,11 +158,14 @@ class VideoEncoder:
             "-async", "1",          # Audio sync parameter
         ]
         
-        # Add resolution/fps parameters if normalization was applied
+        # Add FPS parameters if normalization was applied
+        # NOTE: Removed destructive "-s" force-scaling parameter that was destroying 
+        # aspect ratio work done by VideoCompositor. The composed video should already
+        # be at correct dimensions with proper letterboxing.
         if target_format.get("requires_normalization", False):
             format_consistency_params.extend([
-                "-r", str(target_format["target_fps"]),  # Force target frame rate
-                "-s", f"{target_format['target_width']}x{target_format['target_height']}",  # Force resolution
+                "-r", str(target_format["target_fps"]),  # Force target frame rate (safe)
+                # REMOVED: "-s" force-scaling parameter - composition stage handles dimensions
             ])
         
         # PHASE 6D: Mac-specific AAC audio parameters for QuickTime compatibility
