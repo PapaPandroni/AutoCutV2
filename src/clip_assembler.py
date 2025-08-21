@@ -2764,6 +2764,41 @@ def render_video(
         if VideoFileClip is None:
             raise RuntimeError("MoviePy VideoFileClip is not available - check MoviePy installation")
         
+        # Import robust audio loading system to prevent proc errors
+        print("DEBUG: Importing robust audio loading system...")
+        try:
+            # Try to import from audio_loader module first
+            from audio_loader import load_audio_robust
+            print("DEBUG: load_audio_robust imported from audio_loader module")
+        except ImportError:
+            try:
+                # Fallback: try local definition in this file
+                load_audio_robust = locals().get('load_audio_robust')
+                if load_audio_robust is None:
+                    raise ImportError("load_audio_robust not found in local scope")
+                print("DEBUG: load_audio_robust found in local scope")
+            except Exception:
+                # Final fallback: define a minimal robust audio loader
+                def load_audio_robust(audio_file):
+                    """Minimal robust audio loader as final fallback."""
+                    print(f"WARNING: Using minimal fallback audio loader for {audio_file}")
+                    return AudioFileClip(audio_file)
+                print("DEBUG: Using minimal fallback audio loader")
+        
+        # Validate audio file before processing
+        if not os.path.exists(audio_file):
+            raise RuntimeError(f"Audio file not found: {audio_file}")
+        print(f"DEBUG: Audio file validation passed: {audio_file}")
+        
+        # Check audio file size for potential issues
+        try:
+            audio_size = os.path.getsize(audio_file)
+            print(f"DEBUG: Audio file size: {audio_size / (1024*1024):.2f} MB")
+            if audio_size == 0:
+                raise RuntimeError(f"Audio file is empty: {audio_file}")
+        except Exception as size_error:
+            print(f"WARNING: Could not check audio file size: {size_error}")
+        
         # Get MoviePy compatibility info for safe subclip operations
         try:
             from compatibility.moviepy import check_moviepy_api_compatibility, subclip_safely
@@ -2825,8 +2860,14 @@ def render_video(
         if progress_callback:
             progress_callback("Loading audio", 0.6)
         
-        # Load and attach audio
-        audio_clip = AudioFileClip(audio_file)
+        # Load and attach audio using robust loading system
+        print(f"DEBUG: Loading audio using robust loader: {audio_file}")
+        try:
+            audio_clip = load_audio_robust(audio_file)
+            print("DEBUG: Robust audio loading successful")
+        except Exception as audio_error:
+            print(f"ERROR: Robust audio loading failed: {audio_error}")
+            raise RuntimeError(f"Failed to load audio file {audio_file}: {audio_error}")
         
         # Trim audio to match video duration or vice versa
         video_duration = final_video.duration
@@ -2853,12 +2894,21 @@ def render_video(
                 except AttributeError:
                     final_video = final_video.subclip(0, audio_duration)
         
-        # Apply musical fade-out if we have beat information
+        # Apply musical fade-out if we have beat information with robust error handling
         if avg_beat_interval and audio_duration > video_duration:
             # Calculate fade duration (2-4 beats, max 3 seconds)
             fade_duration = min(avg_beat_interval * 3, 3.0)
             print(f"Applying musical fade-out: {fade_duration:.2f}s")
-            audio_clip = audio_clip.audio_fadein(0.1).audio_fadeout(fade_duration)
+            try:
+                # Apply fade operations with proc error prevention
+                print("DEBUG: Applying audio fade operations with error handling...")
+                audio_clip = audio_clip.audio_fadein(0.1).audio_fadeout(fade_duration)
+                print("DEBUG: Audio fade operations completed successfully")
+            except Exception as fade_error:
+                print(f"WARNING: Audio fade operations failed: {fade_error}")
+                print("DEBUG: Continuing without audio fades to prevent proc errors")
+                # Continue without fades rather than failing completely - this prevents
+                # the creation of new FFMPEG_AudioReader instances that could trigger proc errors
         
         # Attach audio to video
         final_video = final_video.set_audio(audio_clip)
@@ -2924,12 +2974,32 @@ def render_video(
             except:
                 pass
                 
-        # Clean up final video and audio
+        # Enhanced audio cleanup to prevent proc errors
+        print("DEBUG: Cleaning up audio resources...")
         try:
-            final_video.close()
-            audio_clip.close()
-        except:
-            pass
+            # Close audio clip and any internal readers
+            if hasattr(audio_clip, 'close'):
+                audio_clip.close()
+                print("DEBUG: Audio clip closed successfully")
+            
+            # Additional cleanup for FFMPEG_AudioReader instances
+            if hasattr(audio_clip, 'reader') and hasattr(audio_clip.reader, 'proc'):
+                try:
+                    audio_clip.reader.proc.terminate()
+                    print("DEBUG: Audio reader process terminated")
+                except:
+                    pass
+                    
+        except Exception as audio_cleanup_error:
+            print(f"WARNING: Audio cleanup failed: {audio_cleanup_error}")
+        
+        # Clean up final video
+        try:
+            if hasattr(final_video, 'close'):
+                final_video.close()
+                print("DEBUG: Final video closed successfully")
+        except Exception as video_cleanup_error:
+            print(f"WARNING: Video cleanup failed: {video_cleanup_error}")
         
         print(f"✅ Video rendered successfully: {output_path}")
         return output_path
