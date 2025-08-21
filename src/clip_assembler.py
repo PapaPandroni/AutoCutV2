@@ -2757,30 +2757,66 @@ def render_video(
         from typing import List
         
         # Import MoviePy components safely
+        print("DEBUG: Importing MoviePy components...")
         VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
+        print(f"DEBUG: MoviePy imports successful - VideoFileClip: {VideoFileClip is not None}")
+        
+        if VideoFileClip is None:
+            raise RuntimeError("MoviePy VideoFileClip is not available - check MoviePy installation")
         
         if progress_callback:
             progress_callback("Loading video clips", 0.1)
         
         # Load video clips from timeline
         video_clips = []
+        print(f"DEBUG: Timeline has {len(timeline.clips)} clips to load")
+        
         for i, clip_info in enumerate(timeline.clips):
             try:
+                print(f"DEBUG: Loading clip {i+1}: {clip_info}")
+                
+                # Check if file exists
+                video_file_path = clip_info["video_file"]
+                if not os.path.exists(video_file_path):
+                    print(f"ERROR: Video file does not exist: {video_file_path}")
+                    continue
+                
+                print(f"DEBUG: File exists, creating VideoFileClip for: {video_file_path}")
                 # Load video segment
-                video_clip = VideoFileClip(clip_info["video_file"])
-                segment = video_clip.subclip(clip_info["start"], clip_info["end"])
+                video_clip = VideoFileClip(video_file_path)
+                print(f"DEBUG: VideoFileClip created, duration: {video_clip.duration}s")
+                
+                # Validate clip timing
+                start_time = clip_info["start"]
+                end_time = clip_info["end"]
+                if end_time > video_clip.duration:
+                    print(f"WARNING: Clip end time {end_time}s exceeds video duration {video_clip.duration}s, adjusting")
+                    end_time = video_clip.duration
+                
+                if start_time >= end_time:
+                    print(f"ERROR: Invalid clip timing - start {start_time}s >= end {end_time}s")
+                    video_clip.close()
+                    continue
+                
+                print(f"DEBUG: Creating subclip from {start_time}s to {end_time}s")
+                segment = video_clip.subclip(start_time, end_time)
                 video_clips.append(segment)
+                print(f"DEBUG: Successfully loaded clip {i+1}, segment duration: {segment.duration}s")
                 
                 if progress_callback:
                     progress = 0.1 + (0.4 * (i + 1) / len(timeline.clips))
                     progress_callback(f"Loading clip {i+1}/{len(timeline.clips)}", progress)
                     
             except Exception as e:
-                print(f"Warning: Failed to load clip {i+1}: {e}")
+                print(f"ERROR: Failed to load clip {i+1}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
         
+        print(f"DEBUG: Successfully loaded {len(video_clips)} out of {len(timeline.clips)} clips")
+        
         if not video_clips:
-            raise RuntimeError("No video clips could be loaded")
+            raise RuntimeError(f"No video clips could be loaded from {len(timeline.clips)} timeline clips")
         
         if progress_callback:
             progress_callback("Concatenating video clips", 0.5)
