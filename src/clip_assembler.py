@@ -2726,7 +2726,155 @@ def apply_variety_pattern(pattern_name: str, beat_count: int) -> List[int]:
     return result
 
 
-# render_video function extracted to src/video/timeline_renderer.py
+def render_video(
+    timeline: ClipTimeline,
+    audio_file: str,
+    output_path: str,
+    max_workers: int = 3,
+    progress_callback: Optional[callable] = None,
+    bpm: Optional[float] = None,
+    avg_beat_interval: Optional[float] = None,
+) -> str:
+    """Render final video with music synchronization.
+    
+    Args:
+        timeline: ClipTimeline with all clips and timing
+        audio_file: Path to music file
+        output_path: Path for output video
+        max_workers: Maximum parallel workers (legacy parameter)
+        progress_callback: Optional callback for progress updates
+        bpm: Beats per minute for musical fade calculations
+        avg_beat_interval: Average time between beats in seconds
+        
+    Returns:
+        Path to rendered video file
+        
+    Raises:
+        RuntimeError: If rendering fails
+    """
+    try:
+        import os
+        from typing import List
+        
+        # Import MoviePy components safely
+        VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
+        
+        if progress_callback:
+            progress_callback("Loading video clips", 0.1)
+        
+        # Load video clips from timeline
+        video_clips = []
+        for i, clip_info in enumerate(timeline.clips):
+            try:
+                # Load video segment
+                video_clip = VideoFileClip(clip_info["video_file"])
+                segment = video_clip.subclip(clip_info["start"], clip_info["end"])
+                video_clips.append(segment)
+                
+                if progress_callback:
+                    progress = 0.1 + (0.4 * (i + 1) / len(timeline.clips))
+                    progress_callback(f"Loading clip {i+1}/{len(timeline.clips)}", progress)
+                    
+            except Exception as e:
+                print(f"Warning: Failed to load clip {i+1}: {e}")
+                continue
+        
+        if not video_clips:
+            raise RuntimeError("No video clips could be loaded")
+        
+        if progress_callback:
+            progress_callback("Concatenating video clips", 0.5)
+        
+        # Concatenate video clips
+        final_video = concatenate_videoclips(video_clips, method="compose")
+        
+        if progress_callback:
+            progress_callback("Loading audio", 0.6)
+        
+        # Load and attach audio
+        audio_clip = AudioFileClip(audio_file)
+        
+        # Trim audio to match video duration or vice versa
+        video_duration = final_video.duration
+        audio_duration = audio_clip.duration
+        
+        if audio_duration > video_duration:
+            # Trim audio to video length
+            audio_clip = audio_clip.subclip(0, video_duration)
+        else:
+            # Trim video to audio length  
+            final_video = final_video.subclip(0, audio_duration)
+        
+        # Apply musical fade-out if we have beat information
+        if avg_beat_interval and audio_duration > video_duration:
+            # Calculate fade duration (2-4 beats, max 3 seconds)
+            fade_duration = min(avg_beat_interval * 3, 3.0)
+            print(f"Applying musical fade-out: {fade_duration:.2f}s")
+            audio_clip = audio_clip.audio_fadein(0.1).audio_fadeout(fade_duration)
+        
+        # Attach audio to video
+        final_video = final_video.set_audio(audio_clip)
+        
+        if progress_callback:
+            progress_callback("Encoding video", 0.7)
+        
+        # Get optimal encoding settings
+        try:
+            encoder = VideoEncoder()
+            moviepy_params, ffmpeg_params = encoder.detect_optimal_codec_settings()
+        except:
+            # Fallback encoding settings
+            moviepy_params = {"codec": "libx264", "bitrate": "5000k", "audio_codec": "aac"}
+            ffmpeg_params = ["-preset", "medium", "-crf", "23"]
+        
+        # Prepare encoding parameters
+        encoding_params = {
+            **moviepy_params,
+            "ffmpeg_params": ffmpeg_params,
+            "temp_audiofile": "temp-audio.m4a",
+            "remove_temp": True,
+            "verbose": False,
+            "logger": None,
+        }
+        
+        # Create output directory
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Encode video with compatibility layer
+        try:
+            from compatibility.moviepy import write_videofile_safely, check_moviepy_api_compatibility
+            compatibility_info = check_moviepy_api_compatibility()
+            
+            write_videofile_safely(
+                final_video,
+                output_path,
+                compatibility_info,
+                **encoding_params
+            )
+        except ImportError:
+            # Fallback if compatibility module not available
+            final_video.write_videofile(output_path, **encoding_params)
+        
+        if progress_callback:
+            progress_callback("Video rendering complete", 1.0)
+        
+        # Clean up clips
+        for clip in video_clips:
+            try:
+                clip.close()
+            except:
+                pass
+        try:
+            final_video.close()
+            audio_clip.close()
+        except:
+            pass
+        
+        print(f"✅ Video rendered successfully: {output_path}")
+        return output_path
+        
+    except Exception as e:
+        raise RuntimeError(f"Failed to render video: {str(e)}")
 
 
 def add_transitions(
@@ -3245,10 +3393,61 @@ def assemble_clips(
         pass  # Non-critical, ignore errors  # Non-critical, ignore errors  # Non-critical, ignore errors
 
 
-# detect_optimal_codec_settings function extracted to src/video/encoder.py
+def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
+    """Detect optimal codec settings for video encoding.
+    
+    Returns:
+        Tuple containing:
+        - Dictionary of MoviePy parameters for write_videofile()
+        - List of FFmpeg-specific parameters for ffmpeg_params argument
+    """
+    try:
+        # Try to use the extracted VideoEncoder class
+        encoder = VideoEncoder()
+        return encoder.detect_optimal_codec_settings()
+    except:
+        # Fallback to safe default settings
+        moviepy_params = {
+            "codec": "libx264",
+            "bitrate": "5000k",
+            "audio_codec": "aac",
+            "audio_bitrate": "128k",
+        }
+        
+        ffmpeg_params = [
+            "-preset", "medium",
+            "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+        ]
+        
+        return moviepy_params, ffmpeg_params
 
 
-# detect_optimal_codec_settings_with_diagnostics function extracted to src/video/encoder.py
+def detect_optimal_codec_settings_with_diagnostics() -> Tuple[
+    Dict[str, Any], List[str], Dict[str, str]
+]:
+    """Enhanced codec settings detection with full diagnostic information.
+
+    Returns:
+        Tuple containing:
+        - Dictionary of MoviePy parameters for write_videofile()
+        - List of FFmpeg-specific parameters for ffmpeg_params argument
+        - Dictionary of diagnostic information and capability details
+    """
+    try:
+        # Try to use the extracted VideoEncoder class
+        encoder = VideoEncoder()
+        return encoder.detect_optimal_codec_settings_with_diagnostics()
+    except:
+        # Fallback with basic diagnostics
+        moviepy_params, ffmpeg_params = detect_optimal_codec_settings()
+        diagnostics = {
+            "encoder_type": "FALLBACK",
+            "hardware_acceleration": "false",
+            "platform": "unknown"
+        }
+        return moviepy_params, ffmpeg_params, diagnostics
 
 
 if __name__ == "__main__":
