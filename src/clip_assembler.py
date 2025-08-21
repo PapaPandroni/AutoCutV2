@@ -2764,6 +2764,16 @@ def render_video(
         if VideoFileClip is None:
             raise RuntimeError("MoviePy VideoFileClip is not available - check MoviePy installation")
         
+        # Get MoviePy compatibility info for safe subclip operations
+        try:
+            from compatibility.moviepy import check_moviepy_api_compatibility, subclip_safely
+            compatibility_info = check_moviepy_api_compatibility()
+            print(f"DEBUG: MoviePy compatibility: {compatibility_info.get('version_detected', 'unknown')}")
+        except ImportError:
+            print("WARNING: Compatibility module not available, using fallback subclip method")
+            compatibility_info = None
+            subclip_safely = None
+        
         if progress_callback:
             progress_callback("Loading video clips", 0.1)
         
@@ -2799,7 +2809,20 @@ def render_video(
                     continue
                 
                 print(f"DEBUG: Creating subclip from {start_time}s to {end_time}s")
-                segment = video_clip.subclip(start_time, end_time)
+                # Use compatibility-safe subclip method
+                if subclip_safely:
+                    segment = subclip_safely(video_clip, start_time, end_time, compatibility_info)
+                else:
+                    # Fallback: try both modern and legacy API
+                    try:
+                        segment = video_clip.subclipped(start_time, end_time)  # Modern MoviePy 2.x
+                        print("DEBUG: Used modern subclipped() method")
+                    except AttributeError:
+                        try:
+                            segment = video_clip.subclip(start_time, end_time)  # Legacy MoviePy 1.x
+                            print("DEBUG: Used legacy subclip() method")
+                        except AttributeError:
+                            raise RuntimeError(f"Neither 'subclipped' nor 'subclip' methods available on {type(video_clip)}")
                 video_clips.append(segment)
                 print(f"DEBUG: Successfully loaded clip {i+1}, segment duration: {segment.duration}s")
                 
@@ -2836,10 +2859,24 @@ def render_video(
         
         if audio_duration > video_duration:
             # Trim audio to video length
-            audio_clip = audio_clip.subclip(0, video_duration)
+            if subclip_safely:
+                audio_clip = subclip_safely(audio_clip, 0, video_duration, compatibility_info)
+            else:
+                # Fallback: try both modern and legacy API for audio
+                try:
+                    audio_clip = audio_clip.subclipped(0, video_duration)
+                except AttributeError:
+                    audio_clip = audio_clip.subclip(0, video_duration)
         else:
             # Trim video to audio length  
-            final_video = final_video.subclip(0, audio_duration)
+            if subclip_safely:
+                final_video = subclip_safely(final_video, 0, audio_duration, compatibility_info)
+            else:
+                # Fallback: try both modern and legacy API for video
+                try:
+                    final_video = final_video.subclipped(0, audio_duration)
+                except AttributeError:
+                    final_video = final_video.subclip(0, audio_duration)
         
         # Apply musical fade-out if we have beat information
         if avg_beat_interval and audio_duration > video_duration:
