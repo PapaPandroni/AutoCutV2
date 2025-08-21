@@ -2777,69 +2777,44 @@ def render_video(
         if progress_callback:
             progress_callback("Loading video clips", 0.1)
         
-        # Load video clips from timeline
-        video_clips = []
+        # Convert timeline to format expected by robust loading system
         print(f"DEBUG: Timeline has {len(timeline.clips)} clips to load")
         
-        for i, clip_info in enumerate(timeline.clips):
-            try:
-                print(f"DEBUG: Loading clip {i+1}: {clip_info}")
-                
-                # Check if file exists
-                video_file_path = clip_info["video_file"]
-                if not os.path.exists(video_file_path):
-                    print(f"ERROR: Video file does not exist: {video_file_path}")
-                    continue
-                
-                print(f"DEBUG: File exists, creating VideoFileClip for: {video_file_path}")
-                # Load video segment
-                video_clip = VideoFileClip(video_file_path)
-                print(f"DEBUG: VideoFileClip created, duration: {video_clip.duration}s")
-                
-                # Validate clip timing
-                start_time = clip_info["start"]
-                end_time = clip_info["end"]
-                if end_time > video_clip.duration:
-                    print(f"WARNING: Clip end time {end_time}s exceeds video duration {video_clip.duration}s, adjusting")
-                    end_time = video_clip.duration
-                
-                if start_time >= end_time:
-                    print(f"ERROR: Invalid clip timing - start {start_time}s >= end {end_time}s")
-                    video_clip.close()
-                    continue
-                
-                print(f"DEBUG: Creating subclip from {start_time}s to {end_time}s")
-                # Use compatibility-safe subclip method
-                if subclip_safely:
-                    segment = subclip_safely(video_clip, start_time, end_time, compatibility_info)
-                else:
-                    # Fallback: try both modern and legacy API
-                    try:
-                        segment = video_clip.subclipped(start_time, end_time)  # Modern MoviePy 2.x
-                        print("DEBUG: Used modern subclipped() method")
-                    except AttributeError:
-                        try:
-                            segment = video_clip.subclip(start_time, end_time)  # Legacy MoviePy 1.x
-                            print("DEBUG: Used legacy subclip() method")
-                        except AttributeError:
-                            raise RuntimeError(f"Neither 'subclipped' nor 'subclip' methods available on {type(video_clip)}")
-                video_clips.append(segment)
-                print(f"DEBUG: Successfully loaded clip {i+1}, segment duration: {segment.duration}s")
-                
-                if progress_callback:
-                    progress = 0.1 + (0.4 * (i + 1) / len(timeline.clips))
-                    progress_callback(f"Loading clip {i+1}/{len(timeline.clips)}", progress)
-                    
-            except Exception as e:
-                print(f"ERROR: Failed to load clip {i+1}: {type(e).__name__}: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
+        # Prepare clip data for robust loading system
+        video_files = list(set(clip_info["video_file"] for clip_info in timeline.clips))
+        sorted_clips = []
         
-        print(f"DEBUG: Successfully loaded {len(video_clips)} out of {len(timeline.clips)} clips")
+        for i, clip_info in enumerate(timeline.clips):
+            sorted_clips.append({
+                "video_file": clip_info["video_file"],
+                "start": clip_info["start"], 
+                "end": clip_info["end"],
+                "score": clip_info.get("score", 50.0),
+                "index": i
+            })
+        
+        print(f"DEBUG: Using robust loading system for {len(sorted_clips)} clips from {len(video_files)} files")
+        
+        # Use existing robust loading system that handles proc errors properly
+        try:
+            video_clips, failed_indices, error_report, resource_manager = load_video_clips_with_robust_error_handling(
+                sorted_clips=sorted_clips,
+                video_files=video_files,
+                progress_callback=lambda step, prog: progress_callback(f"Loading: {step}", 0.1 + 0.4 * prog) if progress_callback else None
+            )
+            
+            print(f"DEBUG: Robust loading completed - {len(video_clips)} clips loaded, {len(failed_indices)} failed")
+            if error_report.get("total_errors", 0) > 0:
+                print(f"DEBUG: Error report: {error_report}")
+                
+        except Exception as e:
+            print(f"ERROR: Robust loading system failed: {e}")
+            import traceback
+            traceback.print_exc()
+            raise RuntimeError(f"Failed to load video clips using robust loading system: {e}")
         
         if not video_clips:
-            raise RuntimeError(f"No video clips could be loaded from {len(timeline.clips)} timeline clips")
+            raise RuntimeError(f"No video clips could be loaded from {len(timeline.clips)} timeline clips using robust loading system")
         
         if progress_callback:
             progress_callback("Concatenating video clips", 0.5)
@@ -2931,12 +2906,25 @@ def render_video(
         if progress_callback:
             progress_callback("Video rendering complete", 1.0)
         
-        # Clean up clips
+        # Clean up clips and resource manager
+        print("DEBUG: Cleaning up video resources...")
+        
+        # Clean up resource manager (prevents proc errors)
+        try:
+            if 'resource_manager' in locals():
+                resource_manager.cleanup_all()
+                print("DEBUG: Resource manager cleaned up successfully")
+        except Exception as cleanup_error:
+            print(f"WARNING: Resource manager cleanup failed: {cleanup_error}")
+        
+        # Clean up individual clips
         for clip in video_clips:
             try:
                 clip.close()
             except:
                 pass
+                
+        # Clean up final video and audio
         try:
             final_video.close()
             audio_clip.close()
