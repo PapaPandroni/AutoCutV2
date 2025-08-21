@@ -2801,13 +2801,14 @@ def render_video(
         
         # Get MoviePy compatibility info for safe subclip operations
         try:
-            from compatibility.moviepy import check_moviepy_api_compatibility, subclip_safely
+            from compatibility.moviepy import check_moviepy_api_compatibility, subclip_safely, attach_audio_safely
             compatibility_info = check_moviepy_api_compatibility()
             print(f"DEBUG: MoviePy compatibility: {compatibility_info.get('version_detected', 'unknown')}")
         except ImportError:
-            print("WARNING: Compatibility module not available, using fallback subclip method")
+            print("WARNING: Compatibility module not available, using fallback methods")
             compatibility_info = None
             subclip_safely = None
+            attach_audio_safely = None
         
         if progress_callback:
             progress_callback("Loading video clips", 0.1)
@@ -2900,9 +2901,26 @@ def render_video(
             fade_duration = min(avg_beat_interval * 3, 3.0)
             print(f"Applying musical fade-out: {fade_duration:.2f}s")
             try:
-                # Apply fade operations with proc error prevention
-                print("DEBUG: Applying audio fade operations with error handling...")
-                audio_clip = audio_clip.audio_fadein(0.1).audio_fadeout(fade_duration)
+                # Apply fade operations with MoviePy API compatibility
+                print("DEBUG: Applying audio fade operations with compatibility handling...")
+                
+                # Try modern MoviePy 2.x effects system first
+                try:
+                    from moviepy.audio.fx.Fadeout import Fadeout
+                    from moviepy.audio.fx.Fadein import Fadein
+                    audio_clip = audio_clip.with_effects([Fadein(0.1), Fadeout(fade_duration)])
+                    print("DEBUG: Used modern MoviePy 2.x effects for audio fades")
+                except ImportError:
+                    # Fallback to legacy methods if available
+                    try:
+                        if hasattr(audio_clip, 'audio_fadein') and hasattr(audio_clip, 'audio_fadeout'):
+                            audio_clip = audio_clip.audio_fadein(0.1).audio_fadeout(fade_duration)
+                            print("DEBUG: Used legacy audio_fadein/audio_fadeout methods")
+                        else:
+                            print("DEBUG: Audio fade methods not available, skipping fades")
+                    except Exception as legacy_error:
+                        print(f"DEBUG: Legacy fade methods failed: {legacy_error}")
+                        
                 print("DEBUG: Audio fade operations completed successfully")
             except Exception as fade_error:
                 print(f"WARNING: Audio fade operations failed: {fade_error}")
@@ -2910,8 +2928,32 @@ def render_video(
                 # Continue without fades rather than failing completely - this prevents
                 # the creation of new FFMPEG_AudioReader instances that could trigger proc errors
         
-        # Attach audio to video
-        final_video = final_video.set_audio(audio_clip)
+        # Attach audio to video with MoviePy API compatibility
+        print("DEBUG: Attaching audio to video with compatibility handling...")
+        try:
+            if compatibility_info and attach_audio_safely:
+                # Use the compatibility layer if available
+                final_video = attach_audio_safely(final_video, audio_clip, compatibility_info)
+                print("DEBUG: Used attach_audio_safely compatibility function")
+            else:
+                # Try multiple methods for audio attachment
+                try:
+                    # Try modern MoviePy 2.x method first
+                    final_video = final_video.with_audio(audio_clip)
+                    print("DEBUG: Used with_audio method")
+                except AttributeError:
+                    try:
+                        # Fallback to legacy set_audio method
+                        final_video = final_video.set_audio(audio_clip)
+                        print("DEBUG: Used set_audio method")
+                    except AttributeError:
+                        print("WARNING: Neither with_audio nor set_audio methods available")
+                        print(f"DEBUG: final_video type: {type(final_video)}")
+                        print(f"DEBUG: Available methods: {[m for m in dir(final_video) if 'audio' in m.lower()]}")
+                        raise RuntimeError(f"Cannot attach audio to {type(final_video)} - no compatible method found")
+        except Exception as audio_attach_error:
+            print(f"ERROR: Failed to attach audio: {audio_attach_error}")
+            raise RuntimeError(f"Failed to attach audio to video: {audio_attach_error}")
         
         if progress_callback:
             progress_callback("Encoding video", 0.7)
