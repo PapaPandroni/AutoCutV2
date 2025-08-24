@@ -169,67 +169,39 @@ class VideoFormatAnalyzer:
         dominant_fps_category = max(fps_counts, key=fps_counts.get)
         target_fps = self._fps_category_to_value(dominant_fps_category)
 
-        # INTELLIGENT CANVAS SELECTION - content-aware aspect ratio optimization
-        # CRITICAL FIX: Pure landscape content should use 16:9 canvas to eliminate letterboxing
-        unique_content_types = set(content_types)
+        # ALWAYS CREATE 4:3 CANVAS - preserving maximum quality
+        # Target aspect ratio: 4:3 (1.333)
+        target_aspect_ratio = 4.0 / 3.0
         
-        if len(unique_content_types) == 1 and 'landscape' in unique_content_types:
-            # Pure landscape content - use 16:9 canvas for maximum screen utilization
-            target_aspect_ratio = 16.0 / 9.0  # 1.777
-            
-            print(f"🎯 CANVAS OPTIMIZATION: Pure landscape content detected")
-            print(f"   Using 16:9 canvas to eliminate letterboxing for landscape videos")
-            
-            # Determine optimal dimensions for 16:9 while preserving quality
-            if max_dimension >= 3840:  # 4K content
-                # For 4K, use 3840x2160 (16:9 aspect ratio, high quality)
-                target_width = 3840
-                target_height = 2160
-            elif max_dimension >= 1920:  # HD content
-                # For HD, use 1920x1080 (16:9 aspect ratio, good quality)
-                target_width = 1920 
-                target_height = 1080
-            else:  # SD content
-                # For SD, use 1280x720 (16:9 aspect ratio, standard quality)
-                target_width = 1280
-                target_height = 720
-        else:
-            # Mixed content or portrait content - use 4:3 canvas with appropriate letterboxing
-            target_aspect_ratio = 4.0 / 3.0  # 1.333
-            
-            print(f"🎯 CANVAS OPTIMIZATION: Mixed/portrait content detected")
-            print(f"   Using 4:3 canvas with letterboxing for optimal mixed content handling")
-            
-            # Determine optimal dimensions for 4:3 while preserving quality
-            if max_dimension >= 3840:  # 4K content
-                # For 4K, use 2880x2160 (4:3 aspect ratio, high quality)
-                target_width = 2880
-                target_height = 2160
-            elif max_dimension >= 1920:  # HD content
-                # For HD, use 1440x1080 (4:3 aspect ratio, good quality)
-                target_width = 1440 
-                target_height = 1080
-            else:  # SD content
-                # For SD, use 960x720 (4:3 aspect ratio, standard quality)
-                target_width = 960
-                target_height = 720
+        # Determine optimal dimensions for 4:3 while preserving quality
+        # Use the largest dimension as a starting point for quality preservation
+        if max_dimension >= 3840:  # 4K content
+            # For 4K, use 2880x2160 (4:3 aspect ratio, high quality)
+            target_width = 2880
+            target_height = 2160
+        elif max_dimension >= 1920:  # HD content
+            # For HD, use 1440x1080 (4:3 aspect ratio, good quality)
+            target_width = 1440 
+            target_height = 1080
+        else:  # SD content
+            # For SD, use 960x720 (4:3 aspect ratio, standard quality)
+            target_width = 960
+            target_height = 720
         
-        # Verify aspect ratio is exactly as intended
+        # Verify aspect ratio is exactly 4:3
         calculated_aspect = target_width / target_height
         if abs(calculated_aspect - target_aspect_ratio) > 0.01:
-            # Adjust width to ensure perfect aspect ratio
+            # Adjust width to ensure perfect 4:3 ratio
             target_width = int(target_height * target_aspect_ratio)
 
-        # Determine canvas characteristics for logging based on intelligent selection
-        # Canvas type based on content mix and selected aspect ratio
+        # Determine canvas characteristics for logging
+        unique_content_types = set(content_types)
+        
+        # Canvas type based on content mix
         if len(unique_content_types) == 1:
             if 'landscape' in unique_content_types:
-                if target_aspect_ratio > 1.6:  # 16:9 canvas
-                    canvas_type = "16_9_landscape_optimized"
-                    description = "Pure landscape content - 16:9 canvas with minimal letterboxing"
-                else:  # 4:3 canvas (fallback case)
-                    canvas_type = "4_3_landscape_optimized"
-                    description = "Landscape content - 4:3 canvas with letterboxing"
+                canvas_type = "4_3_landscape_optimized"
+                description = "Landscape content - 4:3 canvas with letterboxing"
             elif 'portrait' in unique_content_types:
                 canvas_type = "4_3_portrait_optimized" 
                 description = "Portrait content - 4:3 canvas with pillarboxing"
@@ -254,9 +226,11 @@ class VideoFormatAnalyzer:
         print(f"Canvas Analysis: {description}")
         print(f"   - Content types: {', '.join(unique_content_types)}")
         print(f"   - Quality level: {quality_info} (max dimension: {max_dimension}px)")
-        print(f"Canvas Decision: {target_width}x{target_height} @ {target_fps}fps (4:3 aspect ratio)")
+        aspect_ratio_str = "16:9" if target_aspect_ratio > 1.6 else "4:3"
+        print(f"Canvas Decision: {target_width}x{target_height} @ {target_fps}fps ({aspect_ratio_str} aspect ratio)")
         print(f"Canvas Type: {canvas_type}")
-        print(f"Quality Preservation: ✅ Optimal quality for 4:3 output")
+        output_type = "16:9" if target_aspect_ratio > 1.6 else "4:3"
+        print(f"Quality Preservation: ✅ Optimal quality for {output_type} output")
 
         return {
             "target_width": target_width,
