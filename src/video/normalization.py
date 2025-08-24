@@ -95,67 +95,79 @@ class VideoNormalizationPipeline:
                 from .compatibility.moviepy import resize_with_aspect_preservation
             
             print(f"   Using centralized resize: {clip.w}x{clip.h} → {target_width}x{target_height}")
-            print(f"   LEGACY SYSTEM: Using scaling_mode='fill' for maximum screen utilization")
-            # CRITICAL FIX: Add scaling_mode="fill" to match new system and maximize screen utilization
-            return resize_with_aspect_preservation(clip, target_width, target_height, scaling_mode="fill")
+            print(f"   NEW SYSTEM: Using scaling_mode='fit' to preserve all content with minimal letterboxing")
+            # NEW APPROACH: Use fit mode to preserve all video content without cropping
+            return resize_with_aspect_preservation(clip, target_width, target_height, scaling_mode="fit")
             
         except ImportError:
             # Fallback to local implementation if compatibility module not available
             print(f"   Using local fallback resize: {clip.w}x{clip.h} → {target_width}x{target_height}")
-            return self._resize_with_local_fallback(clip, target_width, target_height, scaling_mode="fill")
+            return self._resize_with_local_fallback(clip, target_width, target_height, scaling_mode="fit")
     
-    def _resize_with_local_fallback(self, clip, target_width: int, target_height: int, scaling_mode: str = "fill"):
-        """Local fallback resize implementation for when compatibility module is not available."""
-        # Import the import_moviepy_safely function (this will need to be handled during import updates)
+    def _resize_with_local_fallback(self, clip, target_width: int, target_height: int, scaling_mode: str = "fit"):
+        """Resize clip to target dimensions with intelligent letterboxing to maximize content.
+        
+        NEW APPROACH: Always preserve all video content (no cropping) while maximizing
+        video size within the target canvas. Uses minimal letterboxing only when needed.
+        
+        Args:
+            clip: VideoFileClip to resize
+            target_width: Target canvas width
+            target_height: Target canvas height  
+            scaling_mode: "fit" (preserve all content) or "fill" (crop to fill)
+        """
+        # Import the import_moviepy_safely function
         try:
             from ..clip_assembler import import_moviepy_safely
         except ImportError:
-            # Direct fallback
             from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
             def import_moviepy_safely():
                 return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
         
-        # Calculate scaling based on mode
+        # Calculate aspect ratios
+        clip_aspect = clip.w / clip.h
+        target_aspect = target_width / target_height
+        
+        print(f"   Scaling analysis:")
+        print(f"   - Source: {clip.w}x{clip.h} (aspect: {clip_aspect:.3f})")
+        print(f"   - Target: {target_width}x{target_height} (aspect: {target_aspect:.3f})")
+        
+        # Calculate scaling to maximize video size while preserving all content
+        # Always use "fit" scaling to preserve all video content (no cropping)
         width_scale = target_width / clip.w
         height_scale = target_height / clip.h
         
-        if scaling_mode == "fill":
-            scale = max(width_scale, height_scale)  # Fill mode: maximize screen usage
-            print(f"   LEGACY FALLBACK: Using fill scaling (max) for maximum screen utilization")
-        else:  # "fit" mode (default fallback)
-            scale = min(width_scale, height_scale)  # Fit mode: preserve all content
-            print(f"   LEGACY FALLBACK: Using fit scaling (min) to preserve all content")
-            
-        print(f"   Scale factors - width: {width_scale:.3f}, height: {height_scale:.3f}, selected: {scale:.3f} ({scaling_mode} mode)")
+        # Use the smaller scale to ensure all content fits (fit mode)
+        scale = min(width_scale, height_scale)
+        
+        print(f"   - Scale factors: width={width_scale:.3f}, height={height_scale:.3f}")
+        print(f"   - Selected scale: {scale:.3f} (fit mode - preserve all content)")
 
         # Calculate new dimensions (maintain aspect ratio)
         new_width = int(clip.w * scale)
         new_height = int(clip.h * scale)
         
-        # Use robust MoviePy compatibility with enhanced fallbacks
+        print(f"   - Scaled dimensions: {new_width}x{new_height}")
+        
+        # Resize the video using MoviePy
         try:
-            # Use the existing import_moviepy_safely function
             VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
-            
-            # Import ColorClip using same pattern as other parts of codebase
             from moviepy.editor import ColorClip
             
             # Try modern MoviePy 2.x resize with effects first
             try:
                 from moviepy.video.fx.Resize import Resize
                 resized_clip = clip.with_effects([Resize((new_width, new_height))])
-                print(f"   Used modern MoviePy 2.x effects: {clip.w}x{clip.h} → {new_width}x{new_height}")
+                print(f"   ✅ Resized using modern MoviePy 2.x effects")
             except (ImportError, AttributeError):
-                # Fallback to legacy resize method
                 resized_clip = clip.resized((new_width, new_height))
-                print(f"   Used legacy resize method: {clip.w}x{clip.h} → {new_width}x{new_height}")
+                print(f"   ✅ Resized using legacy MoviePy method")
             
         except ImportError as e:
             try:
-                # Direct fallback import (matches other parts of codebase)
                 from moviepy.editor import ColorClip, CompositeVideoClip
                 resized_clip = clip.resized((new_width, new_height))
-                print(f"   Used direct import fallback: {clip.w}x{clip.h} → {new_width}x{new_height}")
+                print(f"   ✅ Resized using direct import fallback")
             except Exception as fallback_error:
                 print(f"Warning: All resize methods failed ({str(fallback_error)}), returning original clip")
                 return clip
@@ -163,60 +175,68 @@ class VideoNormalizationPipeline:
             print(f"Warning: Could not import MoviePy components ({str(e)}), returning original clip")
             return clip
         
-        # Check if letterboxing/pillarboxing is needed
+        # Check if letterboxing is needed
         if new_width == target_width and new_height == target_height:
-            # Perfect fit, no letterboxing needed
-            print(f"   Perfect fit: no letterboxing needed for {new_width}x{new_height}")
+            print(f"   🎯 Perfect fit - no letterboxing needed")
             return resized_clip
         
-        # CRITICAL FIX: For fill mode, return resized clip directly without letterboxing
-        # This eliminates aggressive letterboxing that was causing black bars on all sides
-        if scaling_mode == "fill":
-            print(f"   Fill mode: Returning resized clip without letterboxing to maximize screen utilization")
-            print(f"   Dimensions: {new_width}x{new_height} (target: {target_width}x{target_height})")
-            
-            # Calculate and log screen utilization for fill mode
-            video_area = new_width * new_height
-            target_area = target_width * target_height
-            utilization = (video_area / target_area) * 100
-            print(f"   Screen utilization (fill mode): {utilization:.1f}% - no letterboxing applied")
-            
+        # Calculate letterboxing needed
+        width_difference = target_width - new_width
+        height_difference = target_height - new_height
+        
+        # Determine letterboxing type and amount
+        if abs(width_difference) < 10 and abs(height_difference) < 10:
+            # Minimal difference - consider it a perfect fit
+            print(f"   🎯 Near-perfect fit (diff: {width_difference}x{height_difference}) - no letterboxing")
             return resized_clip
             
-        # Create black background for letterboxing/pillarboxing (fit mode only)
+        # Apply intelligent letterboxing
         try:
+            # Create black background canvas
             background = ColorClip(
                 size=(target_width, target_height),
-                color=(0, 0, 0),  # Black letterbox bars
+                color=(0, 0, 0),
                 duration=resized_clip.duration
             )
             
-            # Calculate centering position for perfect centering
+            # Calculate centering position
             x_pos = (target_width - new_width) // 2
             y_pos = (target_height - new_height) // 2
             
-            # Create composite with centered resized clip
+            # Create composite with centered video
             letterboxed_clip = CompositeVideoClip([
                 background,
                 resized_clip.with_position((x_pos, y_pos))
             ])
             
-            # Ensure the composite has the correct duration and properties
             letterboxed_clip = letterboxed_clip.with_duration(resized_clip.duration)
             
-            # Log the letterboxing operation for debugging
-            if new_width < target_width:
-                letterbox_type = "pillarbox" if new_height == target_height else "letterbox+pillarbox"
-                bar_width = (target_width - new_width) // 2
-                print(f"   Applied {letterbox_type}: {bar_width}px bars on sides")
+            # Calculate screen utilization
+            video_area = new_width * new_height
+            canvas_area = target_width * target_height
+            utilization = (video_area / canvas_area) * 100
+            
+            # Log letterboxing details
+            if width_difference > height_difference:
+                # More width padding needed (pillarbox)
+                bar_width = width_difference // 2
+                print(f"   📱 Pillarbox applied: {bar_width}px bars on left/right")
             else:
-                bar_height = (target_height - new_height) // 2  
-                print(f"   Applied letterbox: {bar_height}px bars on top/bottom")
+                # More height padding needed (letterbox)
+                bar_height = height_difference // 2  
+                print(f"   📺 Letterbox applied: {bar_height}px bars on top/bottom")
+                
+            print(f"   📊 Screen utilization: {utilization:.1f}%")
+            
+            # Warn if utilization is very low
+            if utilization < 50:
+                print(f"   ⚠️  Low screen utilization - consider checking aspect ratio compatibility")
+            elif utilization > 80:
+                print(f"   ✅ Good screen utilization")
                 
             return letterboxed_clip
             
         except Exception as e:
-            # Fallback: return resized clip without letterboxing if composition fails
             print(f"Warning: Letterboxing failed ({str(e)}), returning resized clip without black bars")
             print(f"   Resized to: {new_width}x{new_height} (target: {target_width}x{target_height})")
             return resized_clip

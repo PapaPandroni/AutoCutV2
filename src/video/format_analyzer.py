@@ -108,58 +108,53 @@ class VideoFormatAnalyzer:
         }
 
     def determine_optimal_canvas(self, video_clips: List[Any]) -> Dict[str, Any]:
-        """Determine optimal 4:3 canvas size that preserves quality for all content.
+        """Determine intelligent canvas size that maximizes video content with minimal black bars.
         
-        UPDATED APPROACH: Always outputs 4:3 aspect ratio (width:height = 4:3) while 
-        preserving maximum quality. All content gets appropriately letterboxed/pillarboxed 
-        within the 4:3 frame.
+        NEW APPROACH: Intelligently selects canvas based on content analysis:
+        - Single aspect ratio: Optimize canvas for that aspect ratio (minimal bars)
+        - Mixed aspect ratios: Use smart default (landscape 16:9) to avoid tiny videos
         
         Key features:
-        - Always 4:3 output (1.333 aspect ratio)
-        - Preserves 4K quality (no forced downscaling)
-        - Landscape videos get letterboxed (black bars top/bottom)
-        - Portrait/square videos get pillarboxed (black bars left/right)
-        - Maximizes space usage without distortion
+        - Analyzes aspect ratio distribution of input content
+        - Optimizes for single aspect ratio scenarios  
+        - Uses intelligent defaults for mixed content
+        - Maximizes video scaling without cropping or distortion
+        - Eliminates hardcoded 4:3 canvas constraint
         
         Args:
             video_clips: List of VideoFileClip instances
 
         Returns:
-            Target 4:3 canvas specification optimized for quality preservation
+            Intelligent canvas specification optimized for minimal letterboxing
         """
         if not video_clips:
             return {
-                "target_width": 1440,
+                "target_width": 1920,
                 "target_height": 1080,
                 "target_fps": 24.0,
-                "target_aspect_ratio": 4 / 3,
+                "target_aspect_ratio": 16 / 9,
                 "requires_normalization": False,
-                "canvas_type": "default_4_3",
+                "canvas_type": "default_16_9",
             }
 
-        # Analyze all content to find optimal 4:3 canvas
+        # Analyze all content for intelligent canvas selection
         formats = []
-        max_dimension = 0  # Track the largest dimension for quality preservation
+        max_dimension = 0
         fps_counts = {}
-        content_types = []
+        aspect_ratios = []
+        resolutions = []
 
         for clip in video_clips:
             format_info = self.analyze_video_format(clip)
             formats.append(format_info)
             
             width, height = format_info['width'], format_info['height']
-            
-            # Track the largest dimension across ALL clips for quality preservation
-            max_dimension = max(max_dimension, width, height)
-            
-            # Track content type for logging
             aspect_ratio = width / height
-            if aspect_ratio > 1.3:  # Landscape
-                content_types.append('landscape')
-            elif aspect_ratio < 0.8:  # Portrait  
-                content_types.append('portrait')
-            else:  # Square-ish
-                content_types.append('square')
+            
+            # Collect data for analysis
+            max_dimension = max(max_dimension, width, height)
+            aspect_ratios.append(aspect_ratio)
+            resolutions.append((width, height))
             
             # FPS analysis
             fps_key = format_info["fps_category"]
@@ -169,68 +164,147 @@ class VideoFormatAnalyzer:
         dominant_fps_category = max(fps_counts, key=fps_counts.get)
         target_fps = self._fps_category_to_value(dominant_fps_category)
 
-        # ALWAYS CREATE 4:3 CANVAS - preserving maximum quality
-        # Target aspect ratio: 4:3 (1.333)
-        target_aspect_ratio = 4.0 / 3.0
+        # INTELLIGENT ASPECT RATIO ANALYSIS
+        # Classify videos by aspect ratio with tolerance
+        landscape_count = 0  # > 1.3 (wider than 4:3)
+        portrait_count = 0   # < 0.8 (taller than 4:3)
+        square_count = 0     # 0.8 to 1.3 (square-ish)
         
-        # Determine optimal dimensions for 4:3 while preserving quality
-        # Use the largest dimension as a starting point for quality preservation
-        if max_dimension >= 3840:  # 4K content
-            # For 4K, use 2880x2160 (4:3 aspect ratio, high quality)
-            target_width = 2880
-            target_height = 2160
-        elif max_dimension >= 1920:  # HD content
-            # For HD, use 1440x1080 (4:3 aspect ratio, good quality)
-            target_width = 1440 
-            target_height = 1080
-        else:  # SD content
-            # For SD, use 960x720 (4:3 aspect ratio, standard quality)
-            target_width = 960
-            target_height = 720
+        for ar in aspect_ratios:
+            if ar > 1.3:
+                landscape_count += 1
+            elif ar < 0.8:
+                portrait_count += 1
+            else:
+                square_count += 1
         
-        # Verify aspect ratio is exactly 4:3
+        total_videos = len(aspect_ratios)
+        landscape_ratio = landscape_count / total_videos
+        portrait_ratio = portrait_count / total_videos
+        square_ratio = square_count / total_videos
+        
+        print(f"Aspect Ratio Analysis:")
+        print(f"   - Landscape (>1.3): {landscape_count}/{total_videos} ({landscape_ratio:.1%})")
+        print(f"   - Portrait (<0.8): {portrait_count}/{total_videos} ({portrait_ratio:.1%})")
+        print(f"   - Square (0.8-1.3): {square_count}/{total_videos} ({square_ratio:.1%})")
+
+        # INTELLIGENT CANVAS SELECTION LOGIC
+        canvas_decision_threshold = 0.8  # 80% of videos must be same orientation for optimization
+        
+        if landscape_ratio >= canvas_decision_threshold:
+            # Predominantly landscape content - optimize for landscape
+            target_aspect_ratio = 16.0 / 9.0  # Standard 16:9
+            canvas_type = "landscape_optimized"
+            description = "Predominantly landscape content - 16:9 canvas for minimal letterboxing"
+            
+            # Find optimal landscape dimensions based on content
+            landscape_widths = [w for w, h in resolutions if w/h > 1.3]
+            if landscape_widths:
+                max_landscape_width = max(landscape_widths)
+                if max_landscape_width >= 3840:  # 4K
+                    target_width, target_height = 3840, 2160
+                elif max_landscape_width >= 1920:  # HD
+                    target_width, target_height = 1920, 1080
+                else:  # SD
+                    target_width, target_height = 1280, 720
+            else:
+                target_width, target_height = 1920, 1080  # Safe default
+                
+        elif portrait_ratio >= canvas_decision_threshold:
+            # Predominantly portrait content - optimize for portrait
+            target_aspect_ratio = 9.0 / 16.0  # Portrait 9:16
+            canvas_type = "portrait_optimized"
+            description = "Predominantly portrait content - 9:16 canvas for minimal letterboxing"
+            
+            # Find optimal portrait dimensions based on content
+            portrait_heights = [h for w, h in resolutions if w/h < 0.8]
+            if portrait_heights:
+                max_portrait_height = max(portrait_heights)
+                if max_portrait_height >= 3840:  # 4K portrait
+                    target_width, target_height = 2160, 3840
+                elif max_portrait_height >= 1920:  # HD portrait
+                    target_width, target_height = 1080, 1920
+                else:  # SD portrait
+                    target_width, target_height = 720, 1280
+            else:
+                target_width, target_height = 1080, 1920  # Safe default
+                
+        elif square_ratio >= canvas_decision_threshold:
+            # Predominantly square content - optimize for square
+            target_aspect_ratio = 1.0  # Square 1:1
+            canvas_type = "square_optimized"
+            description = "Predominantly square content - 1:1 canvas for minimal letterboxing"
+            
+            # Find optimal square dimensions based on content
+            if max_dimension >= 3840:
+                target_width, target_height = 2160, 2160  # Square 4K
+            elif max_dimension >= 1920:
+                target_width, target_height = 1080, 1080  # Square HD
+            else:
+                target_width, target_height = 720, 720    # Square SD
+                
+        else:
+            # Mixed aspect ratios - use intelligent default (landscape)
+            # Landscape is chosen because:
+            # 1. Most playback devices are landscape oriented
+            # 2. Avoids making landscape videos tiny in portrait canvas
+            # 3. Portrait videos letterbox better in landscape than vice versa
+            target_aspect_ratio = 16.0 / 9.0
+            canvas_type = "mixed_content_default"
+            description = "Mixed aspect ratios - 16:9 default canvas to avoid tiny videos"
+            
+            # Use high quality landscape dimensions
+            if max_dimension >= 3840:
+                target_width, target_height = 3840, 2160
+            elif max_dimension >= 1920:
+                target_width, target_height = 1920, 1080
+            else:
+                target_width, target_height = 1280, 720
+
+        # Ensure aspect ratio precision
         calculated_aspect = target_width / target_height
         if abs(calculated_aspect - target_aspect_ratio) > 0.01:
-            # Adjust width to ensure perfect 4:3 ratio
+            # Adjust width to ensure perfect aspect ratio
             target_width = int(target_height * target_aspect_ratio)
 
-        # Determine canvas characteristics for logging
-        unique_content_types = set(content_types)
+        # Determine if normalization is needed
+        resolution_diversity = len(set(resolutions))
+        fps_diversity = len(set(fps_counts.keys()))
         
-        # Canvas type based on content mix
-        if len(unique_content_types) == 1:
-            if 'landscape' in unique_content_types:
-                canvas_type = "4_3_landscape_optimized"
-                description = "Landscape content - 4:3 canvas with letterboxing"
-            elif 'portrait' in unique_content_types:
-                canvas_type = "4_3_portrait_optimized" 
-                description = "Portrait content - 4:3 canvas with pillarboxing"
-            else:
-                canvas_type = "4_3_square_optimized"
-                description = "Square content - 4:3 canvas with minimal bars"
-        else:
-            canvas_type = "4_3_mixed_content"
-            description = "Mixed content types - 4:3 canvas with adaptive boxing"
-
-        # Check if normalization is needed 
-        resolution_diversity = len(set(f"{fmt['width']}x{fmt['height']}" for fmt in formats))
         requires_normalization = (
             resolution_diversity > 1 or 
-            len(set(fps_counts.keys())) > 1 or
-            len(unique_content_types) > 1 or
-            True  # Always normalize for 4:3 output since most content isn't 4:3
+            fps_diversity > 1 or
+            not all(abs(ar - target_aspect_ratio) < 0.1 for ar in aspect_ratios)
         )
 
-        # Quality preservation logging
-        quality_info = f"4K" if max_dimension >= 3840 else f"HD" if max_dimension >= 1920 else "SD"
-        print(f"Canvas Analysis: {description}")
-        print(f"   - Content types: {', '.join(unique_content_types)}")
+        # Quality level assessment
+        quality_info = "4K" if max_dimension >= 3840 else "HD" if max_dimension >= 1920 else "SD"
+        
+        # Enhanced logging
+        print(f"Canvas Decision: {description}")
+        print(f"Canvas Selection:")
+        print(f"   - Resolution: {target_width}x{target_height}")
+        print(f"   - Aspect ratio: {target_aspect_ratio:.3f} ({target_width}:{target_height})")
         print(f"   - Quality level: {quality_info} (max dimension: {max_dimension}px)")
-        aspect_ratio_str = "16:9" if target_aspect_ratio > 1.6 else "4:3"
-        print(f"Canvas Decision: {target_width}x{target_height} @ {target_fps}fps ({aspect_ratio_str} aspect ratio)")
+        print(f"   - FPS: {target_fps}fps")
         print(f"Canvas Type: {canvas_type}")
-        output_type = "16:9" if target_aspect_ratio > 1.6 else "4:3"
-        print(f"Quality Preservation: ✅ Optimal quality for {output_type} output")
+        
+        # Calculate expected letterboxing
+        letterboxing_info = []
+        for i, (w, h) in enumerate(resolutions):
+            video_ar = w / h
+            if abs(video_ar - target_aspect_ratio) > 0.05:  # Significant difference
+                if video_ar > target_aspect_ratio:
+                    letterboxing_info.append(f"Video {i+1}: letterbox (top/bottom bars)")
+                else:
+                    letterboxing_info.append(f"Video {i+1}: pillarbox (side bars)")
+        
+        if letterboxing_info:
+            print(f"Expected letterboxing:")
+            for info in letterboxing_info:
+                print(f"   - {info}")
+        else:
+            print(f"✅ Minimal letterboxing expected - optimal aspect ratio match")
 
         return {
             "target_width": target_width,
@@ -241,15 +315,23 @@ class VideoFormatAnalyzer:
             "canvas_type": canvas_type,
             "quality_level": quality_info,
             "max_dimension_preserved": max_dimension,
+            "aspect_ratio_analysis": {
+                "landscape_count": landscape_count,
+                "portrait_count": portrait_count,
+                "square_count": square_count,
+                "dominant_orientation": "landscape" if landscape_ratio >= canvas_decision_threshold 
+                                       else "portrait" if portrait_ratio >= canvas_decision_threshold
+                                       else "square" if square_ratio >= canvas_decision_threshold
+                                       else "mixed",
+                "decision_rationale": description
+            },
             "content_analysis": {
-                "content_types": content_types,
-                "unique_content_types": list(unique_content_types),
-                "mixed_content": len(unique_content_types) > 1,
+                "aspect_ratios": aspect_ratios,
+                "resolutions": resolutions,
+                "resolution_diversity": resolution_diversity,
+                "fps_diversity": fps_diversity,
             },
-            "format_diversity": {
-                "resolutions": resolution_diversity,
-                "frame_rates": len(fps_counts),
-            },
+            "letterboxing_analysis": letterboxing_info
         }
 
     def _fps_category_to_value(self, fps_category: str) -> float:
