@@ -102,9 +102,9 @@ class VideoNormalizationPipeline:
         except ImportError:
             # Fallback to local implementation if compatibility module not available
             print(f"   Using local fallback resize: {clip.w}x{clip.h} → {target_width}x{target_height}")
-            return self._resize_with_local_fallback(clip, target_width, target_height)
+            return self._resize_with_local_fallback(clip, target_width, target_height, scaling_mode="fill")
     
-    def _resize_with_local_fallback(self, clip, target_width: int, target_height: int):
+    def _resize_with_local_fallback(self, clip, target_width: int, target_height: int, scaling_mode: str = "fill"):
         """Local fallback resize implementation for when compatibility module is not available."""
         # Import the import_moviepy_safely function (this will need to be handled during import updates)
         try:
@@ -115,12 +115,18 @@ class VideoNormalizationPipeline:
             def import_moviepy_safely():
                 return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
         
-        # Calculate scaling to fit within target dimensions
+        # Calculate scaling based on mode
         width_scale = target_width / clip.w
         height_scale = target_height / clip.h
-        scale = max(width_scale, height_scale)  # FIXED: Use max() for fill scaling instead of min() for fit scaling
-        print(f"   LEGACY FALLBACK: Using fill scaling (max) for maximum screen utilization")
-        print(f"   Scale factors - width: {width_scale:.3f}, height: {height_scale:.3f}, selected: {scale:.3f} (fill mode)")
+        
+        if scaling_mode == "fill":
+            scale = max(width_scale, height_scale)  # Fill mode: maximize screen usage
+            print(f"   LEGACY FALLBACK: Using fill scaling (max) for maximum screen utilization")
+        else:  # "fit" mode (default fallback)
+            scale = min(width_scale, height_scale)  # Fit mode: preserve all content
+            print(f"   LEGACY FALLBACK: Using fit scaling (min) to preserve all content")
+            
+        print(f"   Scale factors - width: {width_scale:.3f}, height: {height_scale:.3f}, selected: {scale:.3f} ({scaling_mode} mode)")
 
         # Calculate new dimensions (maintain aspect ratio)
         new_width = int(clip.w * scale)
@@ -162,8 +168,22 @@ class VideoNormalizationPipeline:
             # Perfect fit, no letterboxing needed
             print(f"   Perfect fit: no letterboxing needed for {new_width}x{new_height}")
             return resized_clip
+        
+        # CRITICAL FIX: For fill mode, return resized clip directly without letterboxing
+        # This eliminates aggressive letterboxing that was causing black bars on all sides
+        if scaling_mode == "fill":
+            print(f"   Fill mode: Returning resized clip without letterboxing to maximize screen utilization")
+            print(f"   Dimensions: {new_width}x{new_height} (target: {target_width}x{target_height})")
             
-        # Create black background for letterboxing/pillarboxing
+            # Calculate and log screen utilization for fill mode
+            video_area = new_width * new_height
+            target_area = target_width * target_height
+            utilization = (video_area / target_area) * 100
+            print(f"   Screen utilization (fill mode): {utilization:.1f}% - no letterboxing applied")
+            
+            return resized_clip
+            
+        # Create black background for letterboxing/pillarboxing (fit mode only)
         try:
             background = ColorClip(
                 size=(target_width, target_height),

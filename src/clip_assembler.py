@@ -2906,9 +2906,9 @@ def render_video(
                 
                 # Try modern MoviePy 2.x effects system first
                 try:
-                    from moviepy.audio.fx.Fadeout import Fadeout
-                    from moviepy.audio.fx.Fadein import Fadein
-                    audio_clip = audio_clip.with_effects([Fadein(0.1), Fadeout(fade_duration)])
+                    from moviepy.audio.fx.audio_fadeout import audio_fadeout
+                    from moviepy.audio.fx.audio_fadein import audio_fadein
+                    audio_clip = audio_clip.with_effects([audio_fadein(0.1), audio_fadeout(fade_duration)])
                     print("DEBUG: Used modern MoviePy 2.x effects for audio fades")
                 except ImportError:
                     # Fallback to legacy methods if available
