@@ -7,7 +7,7 @@ All AutoCut-specific errors inherit from AutoCutError for consistent
 error handling and logging.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 
 class AutoCutError(Exception):
@@ -53,7 +53,6 @@ class VideoProcessingError(AutoCutError):
     Common causes include codec issues, corrupted files, or unsupported formats.
     """
 
-    pass
 
 
 class iPhoneCompatibilityError(VideoProcessingError):
@@ -87,7 +86,7 @@ class iPhoneCompatibilityError(VideoProcessingError):
             details["platform"] = platform
 
         super().__init__(
-            message, error_code="IPHONE_COMPATIBILITY_ERROR", details=details
+            message, error_code="IPHONE_COMPATIBILITY_ERROR", details=details,
         )
 
 
@@ -122,7 +121,7 @@ class HardwareAccelerationError(AutoCutError):
             details["hardware_info"] = hardware_info
 
         super().__init__(
-            message, error_code="HARDWARE_ACCELERATION_ERROR", details=details
+            message, error_code="HARDWARE_ACCELERATION_ERROR", details=details,
         )
 
 
@@ -204,7 +203,6 @@ class ConfigurationError(AutoCutError):
     or configuration values are out of valid ranges.
     """
 
-    pass
 
 
 class AudioProcessingError(AutoCutError):
@@ -304,7 +302,7 @@ def raise_iphone_error(
     details = additional_context or {}
 
     raise iPhoneCompatibilityError(
-        message=message, file_path=file_path, platform=platform, details=details
+        message=message, file_path=file_path, platform=platform, details=details,
     )
 
 
@@ -320,22 +318,22 @@ def raise_transcoding_error(
         details["error_output"] = error_output
 
     raise TranscodingError(
-        message=message, ffmpeg_command=ffmpeg_command, details=details
+        message=message, ffmpeg_command=ffmpeg_command, details=details,
     )
 
 
 # Export all exception classes
 __all__ = [
+    "AudioProcessingError",
     "AutoCutError",
+    "ConfigurationError",
+    "HardwareAccelerationError",
+    "RenderingError",
+    "TranscodingError",
+    "ValidationError",
     "VideoProcessingError",
     "iPhoneCompatibilityError",
-    "HardwareAccelerationError",
-    "ValidationError",
-    "TranscodingError",
-    "ConfigurationError",
-    "AudioProcessingError",
-    "RenderingError",
-    "raise_validation_error",
     "raise_iphone_error",
     "raise_transcoding_error",
+    "raise_validation_error",
 ]

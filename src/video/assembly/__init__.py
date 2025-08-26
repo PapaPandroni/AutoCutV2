@@ -22,11 +22,6 @@ Usage:
     >>> assembled_clips = engine.assemble_clips(clips, beats, pattern="balanced")
 """
 
-from .timeline import (
-    ClipTimeline,
-    TimelineEntry,
-    TimelinePosition,
-)
 from .beat_matcher import (
     BeatMatcher,
     BeatMatchResult,
@@ -45,6 +40,11 @@ from .engine import (
     AssemblySettings,
     VideoChunk,
 )
+from .timeline import (
+    ClipTimeline,
+    TimelineEntry,
+    TimelinePosition,
+)
 
 # Main interface
 ClipAssembler = AssemblyEngine
@@ -52,24 +52,21 @@ ClipAssembler = AssemblyEngine
 __all__ = [
     # Main interface
     "AssemblyEngine",
-    "ClipAssembler",
-    "AssemblyResult", 
+    "AssemblyResult",
     "AssemblySettings",
-    "VideoChunk",
-    
-    # Timeline management
-    "ClipTimeline",
-    "TimelineEntry",
-    "TimelinePosition",
-    
+    "BeatMatchResult",
     # Beat matching
     "BeatMatcher",
-    "BeatMatchResult",
     "BeatSyncSettings",
-    "VarietyPattern",
-    
+    "ClipAssembler",
     # Clip selection
     "ClipSelector",
-    "SelectionCriteria", 
+    # Timeline management
+    "ClipTimeline",
+    "SelectionCriteria",
     "SelectionStrategy",
+    "TimelineEntry",
+    "TimelinePosition",
+    "VarietyPattern",
+    "VideoChunk",
 ]

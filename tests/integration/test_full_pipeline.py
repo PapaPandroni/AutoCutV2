@@ -5,19 +5,20 @@ Tests end-to-end video processing from input files to final output,
 including all major components working together.
 """
 
-import pytest
-from pathlib import Path
-import tempfile
 import time
+from pathlib import Path
+
+import pytest
+
+from src.audio_analyzer import analyze_audio
+from src.clip_assembler import assemble_clips
+from src.hardware.detection import HardwareDetector
+from src.video.codec_detection import CodecDetector
+from src.video.transcoding import TranscodingService
 
 # Import all major components
 from src.video.validation import VideoValidator
-from src.video.codec_detection import CodecDetector
-from src.video.transcoding import TranscodingService
-from src.hardware.detection import HardwareDetector
-from src.audio_analyzer import analyze_audio_file
 from src.video_analyzer import analyze_video_file
-from src.clip_assembler import assemble_clips
 
 
 @pytest.mark.integration
@@ -27,7 +28,7 @@ class TestFullPipeline:
     """Test complete AutoCut pipeline integration."""
 
     def test_complete_autocut_pipeline(
-        self, sample_video_files, sample_audio_files, temp_dir
+        self, sample_video_files, sample_audio_files, temp_dir,
     ):
         """Test the complete AutoCut pipeline from start to finish."""
         if not sample_video_files or not sample_audio_files:
@@ -60,7 +61,7 @@ class TestFullPipeline:
 
         for video_file in video_files:
             preprocessed_path = transcoding_service.preprocess_video_if_needed(
-                video_file
+                video_file,
             )
             preprocessed_videos.append(preprocessed_path)
             assert Path(preprocessed_path).exists(), (
@@ -69,7 +70,7 @@ class TestFullPipeline:
 
         # Step 3: Audio analysis
         print("Analyzing audio...")
-        audio_analysis = analyze_audio_file(audio_file)
+        audio_analysis = analyze_audio(audio_file)
 
         assert "beats" in audio_analysis, "Audio analysis missing beats"
         assert "bpm" in audio_analysis, "Audio analysis missing BPM"
@@ -96,7 +97,7 @@ class TestFullPipeline:
                 )
 
             except Exception as e:
-                pytest.fail(f"Video analysis failed for {video_file}: {str(e)}")
+                pytest.fail(f"Video analysis failed for {video_file}: {e!s}")
 
         # Step 5: Clip assembly
         print("Assembling clips...")
@@ -126,12 +127,12 @@ class TestFullPipeline:
             )
 
         except Exception as e:
-            pytest.fail(f"Clip assembly failed: {str(e)}")
+            pytest.fail(f"Clip assembly failed: {e!s}")
 
         print(f"Full pipeline test completed successfully. Output: {output_path}")
 
     def test_pipeline_with_hardware_acceleration(
-        self, sample_video_files, sample_audio_files, temp_dir
+        self, sample_video_files, sample_audio_files, temp_dir,
     ):
         """Test pipeline with hardware acceleration when available."""
         if not sample_video_files or not sample_audio_files:
@@ -156,7 +157,7 @@ class TestFullPipeline:
 
         for video_file in video_files:
             preprocessed_path = transcoding_service.preprocess_video_if_needed(
-                video_file
+                video_file,
             )
             preprocessed_videos.append(preprocessed_path)
 
@@ -174,11 +175,11 @@ class TestFullPipeline:
         assert Path(output_path).exists(), "Hardware-accelerated output not created"
 
         print(
-            f"Hardware-accelerated processing completed in {processing_time:.2f}s using {capabilities.best_encoder}"
+            f"Hardware-accelerated processing completed in {processing_time:.2f}s using {capabilities.best_encoder}",
         )
 
     def test_pipeline_error_recovery(
-        self, sample_video_files, sample_audio_files, temp_dir, test_helpers
+        self, sample_video_files, sample_audio_files, temp_dir, test_helpers,
     ):
         """Test pipeline behavior with problematic input files."""
         if not sample_audio_files:
@@ -189,10 +190,10 @@ class TestFullPipeline:
             [str(f) for f in sample_video_files[:1]] if sample_video_files else []
         )
         bad_video = str(
-            test_helpers.create_mock_video_file(temp_dir, "corrupted.mp4", 0.1)
+            test_helpers.create_mock_video_file(temp_dir, "corrupted.mp4", 0.1),
         )
 
-        video_files = good_videos + [bad_video]
+        video_files = [*good_videos, bad_video]
         audio_file = str(sample_audio_files[0])
         output_path = str(temp_dir / "error_recovery_output.mp4")
 
@@ -217,11 +218,11 @@ class TestFullPipeline:
         except Exception as e:
             # Should not raise unhandled exceptions
             pytest.fail(
-                f"Pipeline crashed instead of handling error gracefully: {str(e)}"
+                f"Pipeline crashed instead of handling error gracefully: {e!s}",
             )
 
     def test_pipeline_performance_benchmarks(
-        self, sample_video_files, sample_audio_files, temp_dir
+        self, sample_video_files, sample_audio_files, temp_dir,
     ):
         """Test pipeline performance benchmarks."""
         if not sample_video_files or not sample_audio_files:
@@ -273,7 +274,7 @@ class TestFullPipeline:
                 }
 
                 print(
-                    f"{config_name}: {processing_time:.2f}s for {total_input_size_mb:.1f}MB ({total_input_size_mb / processing_time:.1f} MB/s)"
+                    f"{config_name}: {processing_time:.2f}s for {total_input_size_mb:.1f}MB ({total_input_size_mb / processing_time:.1f} MB/s)",
                 )
 
             except Exception as e:
@@ -292,7 +293,7 @@ class TestFullPipeline:
         )
 
     def test_pipeline_with_different_patterns(
-        self, sample_video_files, sample_audio_files, temp_dir
+        self, sample_video_files, sample_audio_files, temp_dir,
     ):
         """Test pipeline with different editing patterns."""
         if not sample_video_files or not sample_audio_files:
@@ -359,7 +360,7 @@ class TestPipelineComponentIntegration:
                 # Step 3: iPhone compatibility if H.265
                 if codec_info.is_hevc:
                     iphone_validation = validator.validate_iphone_compatibility(
-                        str(video_file)
+                        str(video_file),
                     )
 
                     # Step 4: Transcoding if needed
@@ -372,7 +373,7 @@ class TestPipelineComponentIntegration:
                         )
 
                         transcoding_result = transcoding_service.transcode_h265_to_h264(
-                            str(video_file), str(output_path)
+                            str(video_file), str(output_path),
                         )
 
                         if transcoding_result.success:
@@ -413,7 +414,7 @@ class TestPipelineComponentIntegration:
         assert True  # Integration test completed
 
     def test_hardware_detection_to_transcoding_integration(
-        self, sample_video_files, temp_dir
+        self, sample_video_files, temp_dir,
     ):
         """Test integration between hardware detection and transcoding."""
         if not sample_video_files:
@@ -427,11 +428,11 @@ class TestPipelineComponentIntegration:
 
         # Find an H.265 file or use any file for testing
         test_file = sample_video_files[0]
-        output_path = temp_dir / f"hw_integration_output.mp4"
+        output_path = temp_dir / "hw_integration_output.mp4"
 
         # Test transcoding with detected hardware
         result = transcoding_service.transcode_h265_to_h264(
-            str(test_file), str(output_path)
+            str(test_file), str(output_path),
         )
 
         # Verify the encoder used matches hardware capabilities
@@ -450,12 +451,8 @@ class TestPipelineComponentIntegration:
 class TestPipelineStressTests:
     """Stress tests for the pipeline."""
 
-    @pytest.mark.skipif(
-        not pytest.config.getoption("--runslow", default=False),
-        reason="Stress tests only run with --runslow",
-    )
     def test_pipeline_with_many_files(
-        self, sample_video_files, sample_audio_files, temp_dir
+        self, sample_video_files, sample_audio_files, temp_dir,
     ):
         """Test pipeline with many input files."""
         if len(sample_video_files) < 5:
@@ -485,7 +482,7 @@ class TestPipelineStressTests:
 
             if Path(output_path).exists():
                 print(
-                    f"Stress test completed: {len(video_files)} files in {processing_time:.2f}s"
+                    f"Stress test completed: {len(video_files)} files in {processing_time:.2f}s",
                 )
             else:
                 print(f"Stress test failed after {processing_time:.2f}s")
@@ -496,17 +493,18 @@ class TestPipelineStressTests:
             )
 
         except Exception as e:
-            pytest.fail(f"Stress test failed: {str(e)}")
+            pytest.fail(f"Stress test failed: {e!s}")
 
     def test_pipeline_memory_usage(
-        self, sample_video_files, sample_audio_files, temp_dir
+        self, sample_video_files, sample_audio_files, temp_dir,
     ):
         """Test pipeline memory usage doesn't grow excessively."""
         if not sample_video_files or not sample_audio_files:
             pytest.skip("Sample media files required")
 
-        import psutil
         import os
+
+        import psutil
 
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
@@ -527,7 +525,7 @@ class TestPipelineStressTests:
             memory_increase = final_memory - initial_memory
 
             print(
-                f"Memory usage: {initial_memory:.1f}MB → {final_memory:.1f}MB (+{memory_increase:.1f}MB)"
+                f"Memory usage: {initial_memory:.1f}MB → {final_memory:.1f}MB (+{memory_increase:.1f}MB)",
             )
 
             # Memory increase should be reasonable (adjust threshold as needed)
@@ -536,4 +534,4 @@ class TestPipelineStressTests:
             )
 
         except Exception as e:
-            pytest.fail(f"Memory test failed: {str(e)}")
+            pytest.fail(f"Memory test failed: {e!s}")

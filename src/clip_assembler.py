@@ -5,17 +5,21 @@ Handles the core logic of matching video clips to musical beats,
 applying variety patterns, and rendering the final video.
 """
 
-from typing import Dict, List, Tuple, Optional, Any
+import builtins
+import contextlib
 import json
 import os
 import threading
-import psutil
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional, Tuple
+
+import psutil
+
 try:
-    from system_profiler import SystemProfiler
     from adaptive_monitor import AdaptiveWorkerMonitor
     from memory.monitor import get_memory_info
+    from system_profiler import SystemProfiler
 except ImportError:
     # Fallback if modules not available
     class SystemProfiler:
@@ -36,11 +40,11 @@ except ImportError:
             return {"total_gb": 0, "available_gb": 0, "used_gb": 0, "percent": 0}
 
 try:
-    from moviepy.editor import VideoFileClip, CompositeVideoClip, concatenate_videoclips
+    from moviepy.editor import CompositeVideoClip, VideoFileClip, concatenate_videoclips
 except ImportError:
     try:
         # Fallback for MoviePy 2.x direct imports
-        from moviepy import VideoFileClip, CompositeVideoClip, concatenate_videoclips
+        from moviepy import CompositeVideoClip, VideoFileClip, concatenate_videoclips
     except ImportError:
         # Final fallback for testing without moviepy installation
         VideoFileClip = CompositeVideoClip = concatenate_videoclips = None
@@ -56,14 +60,15 @@ except ImportError:
 
 # Import extracted classes from new modular structure
 try:
+    from video.encoder import (
+        VideoEncoder,
+        detect_optimal_codec_settings,
+        detect_optimal_codec_settings_with_diagnostics,
+    )
     from video.format_analyzer import VideoFormatAnalyzer
-    from video.normalization import VideoNormalizationPipeline 
+    from video.normalization import VideoNormalizationPipeline
     from video.timeline_renderer import ClipTimeline, TimelineRenderer
-    from video.encoder import VideoEncoder, detect_optimal_codec_settings, detect_optimal_codec_settings_with_diagnostics
-    print("✅ Successfully imported extracted video processing classes")
 except ImportError as e:
-    print(f"⚠️  Could not import extracted classes: {e}")
-    print("   Falling back to legacy inline class definitions")
     # Classes will be defined inline below for backward compatibility
     try:
         from video_analyzer import VideoChunk
@@ -91,47 +96,42 @@ except ImportError:
             return robust_loader(audio_file)
         except ImportError:
             # If audio_loader module not available, try alternative robust approach
-            print("Warning: audio_loader module not found, using alternative robust loading...")
-            
+
             # Import moviepy safely with compatibility layer
             from moviepy.editor import AudioFileClip
-            
+
             try:
                 # First try standard MoviePy loading
-                audio_clip = AudioFileClip(audio_file)
-                return audio_clip
+                return AudioFileClip(audio_file)
             except (AttributeError, RuntimeError, OSError) as e:
                 if "proc" in str(e).lower() or "ffmpeg" in str(e).lower():
-                    print(f"MoviePy audio loading failed ({e}), trying FFmpeg subprocess fallback...")
-                    
+
                     # Fallback to FFmpeg subprocess for problematic files
                     try:
                         import subprocess
+
                         import numpy as np
                         from moviepy.audio.AudioClip import AudioArrayClip
-                        
+
                         # Use FFmpeg subprocess to bypass MoviePy's FFMPEG_AudioReader
                         cmd = [
                             "ffmpeg", "-i", audio_file,
-                            "-f", "s16le", "-acodec", "pcm_s16le", 
-                            "-ac", "2", "-ar", "44100", "-v", "quiet", "-"
+                            "-f", "s16le", "-acodec", "pcm_s16le",
+                            "-ac", "2", "-ar", "44100", "-v", "quiet", "-",
                         ]
-                        
+
                         process = subprocess.run(cmd, capture_output=True, check=True, timeout=60)
                         audio_data = np.frombuffer(process.stdout, dtype=np.int16)
-                        
+
                         if len(audio_data) == 0:
                             raise RuntimeError("No audio data extracted from file")
-                        
+
                         # Convert to stereo float32 format
                         audio_data = audio_data.reshape(-1, 2).astype(np.float32) / 32768.0
-                        audio_clip = AudioArrayClip(audio_data, fps=44100)
-                        
-                        print(f"✅ FFmpeg subprocess fallback successful for {audio_file}")
-                        return audio_clip
-                        
+                        return AudioArrayClip(audio_data, fps=44100)
+
+
                     except Exception as fallback_error:
-                        print(f"❌ All audio loading strategies failed: {fallback_error}")
                         raise RuntimeError(f"Could not load audio file {audio_file}: {fallback_error}")
                 else:
                     # Re-raise non-audio-specific errors
@@ -180,7 +180,7 @@ class VideoCache:
                     video_clip = VideoFileClip(video_path)
                     self._cache[video_path] = video_clip
                 except Exception as e:
-                    raise RuntimeError(f"Failed to load video {video_path}: {str(e)}")
+                    raise RuntimeError(f"Failed to load video {video_path}: {e!s}")
 
             # Increment reference count
             self._ref_counts[video_path] += 1
@@ -234,7 +234,7 @@ class VideoCache:
 
 
 def load_video_segment(
-    clip_data: Dict[str, Any], video_cache: VideoCache
+    clip_data: Dict[str, Any], video_cache: VideoCache,
 ) -> Optional[Tuple[Dict[str, Any], Any]]:
     """Load a single video segment in parallel processing.
 
@@ -255,7 +255,6 @@ def load_video_segment(
         return (clip_data, segment)
 
     except Exception as e:
-        print(f"Warning: Failed to load clip {clip_data['video_file']}: {str(e)}")
         return None
 
 
@@ -269,7 +268,7 @@ class MemoryMonitor:
     """Real-time memory monitoring with emergency cleanup capabilities."""
 
     def __init__(
-        self, warning_threshold_gb: float = 4.0, emergency_threshold_gb: float = 6.0
+        self, warning_threshold_gb: float = 4.0, emergency_threshold_gb: float = 6.0,
     ):
         import psutil
 
@@ -294,7 +293,7 @@ class MemoryMonitor:
         """Log current memory usage with context."""
         usage_gb = self.get_current_usage_gb()
         if usage_gb > 2.0:  # Only log if significant memory usage
-            print(f"   💾 Memory: +{usage_gb:.1f}GB ({context})")
+            pass
 
 
 class VideoResourceManager:
@@ -310,8 +309,8 @@ class VideoResourceManager:
 
     def load_video_safely(self, video_path: str):
         """Context manager for safe video loading with guaranteed cleanup."""
-        from contextlib import contextmanager
         import gc
+        from contextlib import contextmanager
 
         @contextmanager
         def _video_context():
@@ -319,14 +318,14 @@ class VideoResourceManager:
             try:
                 if VideoFileClip is None:
                     raise RuntimeError(
-                        "MoviePy not available. Please install moviepy>=1.0.3"
+                        "MoviePy not available. Please install moviepy>=1.0.3",
                     )
 
                 video = VideoFileClip(video_path)
                 self.active_videos.add(id(video))
                 yield video
             except Exception as e:
-                raise RuntimeError(f"Failed to load video {video_path}: {str(e)}")
+                raise RuntimeError(f"Failed to load video {video_path}: {e!s}")
             finally:
                 if video is not None:
                     try:
@@ -349,7 +348,7 @@ class VideoResourceManager:
         try:
             if VideoFileClip is None:
                 raise RuntimeError(
-                    "MoviePy not available. Please install moviepy>=1.0.3"
+                    "MoviePy not available. Please install moviepy>=1.0.3",
                 )
 
             # Check if we already have this video loaded for delayed cleanup
@@ -361,13 +360,10 @@ class VideoResourceManager:
             self.delayed_cleanup_videos[video_path] = video
             self.active_videos.add(id(video))
 
-            print(
-                f"   📹 Loaded video with delayed cleanup: {os.path.basename(video_path)}"
-            )
             return video
 
         except Exception as e:
-            raise RuntimeError(f"Failed to load video {video_path}: {str(e)}")
+            raise RuntimeError(f"Failed to load video {video_path}: {e!s}")
 
     def cleanup_delayed_videos(self) -> None:
         """Clean up all videos that were loaded with delayed cleanup.
@@ -379,29 +375,21 @@ class VideoResourceManager:
 
         cleanup_count = len(self.delayed_cleanup_videos)
         if cleanup_count > 0:
-            print(
-                f"   🧹 Cleaning up {cleanup_count} delayed videos after concatenation"
-            )
 
-            for video_path, video in self.delayed_cleanup_videos.items():
+            for video in self.delayed_cleanup_videos.values():
                 try:
                     self.active_videos.discard(id(video))
                     video.close()
-                    print(f"      ✅ Closed {os.path.basename(video_path)}")
                 except Exception as e:
-                    print(
-                        f"      ⚠️ Warning: Failed to close {os.path.basename(video_path)}: {e}"
-                    )
+                    pass
 
             self.delayed_cleanup_videos.clear()
             gc.collect()  # Force garbage collection
-            print(f"   🧹 Delayed cleanup complete")
 
     def emergency_cleanup(self) -> None:
         """Force cleanup of any remaining video resources."""
         import gc
 
-        print("   🚨 Emergency cleanup: forcing garbage collection")
 
         # Clean up delayed videos first
         self.cleanup_delayed_videos()
@@ -453,11 +441,8 @@ def load_video_clips_sequential(
     resource_manager = VideoResourceManager()  # This will now support delayed cleanup
 
     # PHASE 2 INTEGRATION: Smart preprocessing for format compatibility
-    print(
-        f"   🔍 PHASE 2: Smart preprocessing analysis for {len(video_files)} video files"
-    )
     video_path_map = preprocess_videos_smart(
-        video_files, progress_callback=progress_callback
+        video_files, progress_callback=progress_callback,
     )
 
     # Update clip data to use preprocessed video paths
@@ -466,9 +451,6 @@ def load_video_clips_sequential(
         if original_path in video_path_map:
             optimized_path = video_path_map[original_path]
             if optimized_path != original_path:
-                print(
-                    f"   🔄 Using preprocessed version: {os.path.basename(optimized_path)}"
-                )
                 clip_data["video_file"] = optimized_path
                 clip_data["original_video_file"] = (
                     original_path  # Keep reference to original
@@ -476,9 +458,6 @@ def load_video_clips_sequential(
 
     # Memory monitoring at start
     initial_memory = get_memory_info()
-    print(
-        f"   🧠 Starting sequential loading: {initial_memory['used_gb']:.1f}GB used ({initial_memory['percent']:.1f}%)"
-    )
 
     # Use a results dictionary to maintain perfect index alignment
     clip_results = {}  # Maps original_index -> video clip (or None for failed)
@@ -487,22 +466,12 @@ def load_video_clips_sequential(
     # Group clips by video file to minimize loading
     grouped_clips = _group_clips_by_file(sorted_clips)
 
-    print(
-        f"   🎬 Processing {len(sorted_clips)} clips from {len(grouped_clips)} files sequentially"
-    )
-    print(
-        f"   🔧 CRITICAL FIX: Using delayed cleanup to prevent NoneType get_frame errors"
-    )
 
     processed_files = 0
     total_clips_processed = 0
 
     for video_file, file_clips in grouped_clips.items():
         processed_files += 1
-        print(
-            f"\n   [{processed_files}/{len(grouped_clips)}] Processing {os.path.basename(video_file)}"
-        )
-        print(f"   🎯 Extracting {len(file_clips)} clips")
 
         # Check memory before loading each video file
         if memory_monitor.should_emergency_cleanup():
@@ -519,12 +488,12 @@ def load_video_clips_sequential(
             for clip_data in file_clips:
                 try:
                     memory_monitor.log_memory_status(
-                        f"clip {total_clips_processed + 1}"
+                        f"clip {total_clips_processed + 1}",
                     )
 
                     # Extract segment - parent video stays alive via delayed cleanup
                     segment = source_video.subclipped(
-                        clip_data["start"], clip_data["end"]
+                        clip_data["start"], clip_data["end"],
                     )
 
                     # Validation: Test the clip while parent video is available
@@ -534,33 +503,27 @@ def load_video_clips_sequential(
                         test_frame = segment.get_frame(test_time)
                         if test_frame is None:
                             raise RuntimeError(
-                                "get_frame returned None during validation"
+                                "get_frame returned None during validation",
                             )
                     except Exception as e:
                         raise RuntimeError(f"Clip validation failed: {e}")
 
                     original_index = clip_data.get(
-                        "original_index", total_clips_processed
+                        "original_index", total_clips_processed,
                     )
                     clip_results[original_index] = segment
                     file_clips_loaded += 1
 
                 except Exception as e:
-                    print(
-                        f"   ⚠️  Failed to extract clip {clip_data['start']:.1f}-{clip_data['end']:.1f}s: {e}"
-                    )
                     # Use original_index from grouped clips to maintain timeline alignment
                     original_index = clip_data.get(
-                        "original_index", total_clips_processed
+                        "original_index", total_clips_processed,
                     )
                     clip_results[original_index] = None
                     failed_indices.append(original_index)
 
                 total_clips_processed += 1
 
-            print(
-                f"   ✅ Extracted {file_clips_loaded}/{len(file_clips)} clips successfully"
-            )
 
             # NOTE: We do NOT close the source_video here - it will be cleaned up later
             # This is the key fix: parent videos stay alive until after concatenation
@@ -568,11 +531,10 @@ def load_video_clips_sequential(
             # Update progress
             progress = 0.1 + (0.6 * total_clips_processed / len(sorted_clips))
             report_progress(
-                f"Loaded {total_clips_processed}/{len(sorted_clips)} clips", progress
+                f"Loaded {total_clips_processed}/{len(sorted_clips)} clips", progress,
             )
 
         except Exception as e:
-            print(f"   ❌ Failed to load video file {video_file}: {e}")
             # Mark all clips from this file as failed using original indices
             for clip_data in file_clips:
                 original_index = clip_data.get("original_index", total_clips_processed)
@@ -584,7 +546,7 @@ def load_video_clips_sequential(
     # Reconstruct video_clips list in original order, with None for failed clips
     video_clips = []
     for i in range(len(sorted_clips)):
-        clip = clip_results.get(i, None)
+        clip = clip_results.get(i)
         video_clips.append(clip)
 
     # Count successful clips (non-None)
@@ -599,27 +561,16 @@ def load_video_clips_sequential(
     success_rate = success_count / total_count
 
     if failed_indices:
-        print(
-            f"   ⚠️  {len(failed_indices)} clips failed to load ({100 - success_rate * 100:.1f}% success rate)"
-        )
+        pass
 
     # Memory monitoring at completion
     final_memory = get_memory_info()
     memory_increase = final_memory["used_gb"] - initial_memory["used_gb"]
-    print(
-        f"   🧠 Sequential loading complete: {final_memory['used_gb']:.1f}GB used (+{memory_increase:.1f}GB)"
-    )
 
     # Memory usage warning
     if final_memory["percent"] > 85:
-        print(
-            f"   ⚠️  HIGH MEMORY USAGE: {final_memory['percent']:.1f}% - Consider reducing video count"
-        )
+        pass
 
-    print(f"   🎬 CRITICAL SUCCESS: All parent videos kept alive for concatenation")
-    print(
-        f"   🔧 Delayed cleanup will occur after concatenation to prevent NoneType errors"
-    )
 
     report_progress(f"Successfully loaded {success_count} clips", 0.7)
 
@@ -750,9 +701,6 @@ class VideoPreprocessor:
             }
 
         except Exception as e:
-            print(
-                f"Warning: Could not analyze video {os.path.basename(video_path)}: {e}"
-            )
             return {
                 "needs_preprocessing": False,
                 "reason": "analysis_failed",
@@ -762,7 +710,6 @@ class VideoPreprocessor:
     def _detect_video_properties_ffprobe(self, video_path: str) -> Dict[str, Any]:
         """Use ffprobe to detect video properties without loading full video."""
         import subprocess
-        import json
 
         try:
             # Run ffprobe to get video stream information
@@ -778,7 +725,7 @@ class VideoPreprocessor:
                 video_path,
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=10)
 
             if result.returncode == 0:
                 data = json.loads(result.stdout)
@@ -804,7 +751,6 @@ class VideoPreprocessor:
             }
 
         except Exception as e:
-            print(f"Warning: ffprobe analysis failed: {e}")
             return {
                 "codec_name": "unknown",
                 "width": 1920,
@@ -819,12 +765,11 @@ class VideoPreprocessor:
         bytes_per_pixel = 3  # RGB
 
         memory_bytes = width * height * bytes_per_pixel * fps * typical_buffer_seconds
-        memory_mb = memory_bytes / (1024 * 1024)
+        return memory_bytes / (1024 * 1024)
 
-        return memory_mb
 
     def preprocess_video_if_needed(
-        self, video_path: str, output_dir: str = None
+        self, video_path: str, output_dir: Optional[str] = None,
     ) -> str:
         """Preprocess video if needed and return path to processed version.
 
@@ -836,13 +781,11 @@ class VideoPreprocessor:
             Path to video file to use (original or preprocessed)
         """
         import os
-        import tempfile
 
         # Check if preprocessing is needed
         analysis = self.should_preprocess_video(video_path)
 
         if not analysis["needs_preprocessing"]:
-            print(f"   📹 {os.path.basename(video_path)}: No preprocessing needed")
             return video_path
 
         # Check cache first
@@ -850,17 +793,8 @@ class VideoPreprocessor:
         if cache_key in self.preprocessing_cache:
             cached_path = self.preprocessing_cache[cache_key]
             if os.path.exists(cached_path):
-                print(
-                    f"   📹 {os.path.basename(video_path)}: Using cached preprocessed version"
-                )
                 return cached_path
 
-        print(f"   📹 {os.path.basename(video_path)}: Preprocessing needed")
-        print(f"       Reasons: {', '.join(analysis['reasons'])}")
-        print(
-            f"       Original: {analysis['codec']} {analysis['resolution']} @ {analysis['fps']:.1f}fps"
-        )
-        print(f"       Est. memory: {analysis['estimated_memory_mb']:.0f}MB")
 
         # Determine output path
         if output_dir is None:
@@ -872,38 +806,32 @@ class VideoPreprocessor:
 
         # If processed version already exists and is newer, use it
         if os.path.exists(processed_path) and os.path.getmtime(
-            processed_path
+            processed_path,
         ) > os.path.getmtime(video_path):
-            print(f"   📹 Using existing processed version: {processed_name}")
             self.preprocessing_cache[cache_key] = processed_path
             return processed_path
 
         # Perform preprocessing
         try:
-            success = self._preprocess_with_ffmpeg_modern(video_path, processed_path, analysis, getattr(self, '_target_format', None))
+            success = self._preprocess_with_ffmpeg_modern(video_path, processed_path, analysis, getattr(self, "_target_format", None))
 
             if success and os.path.exists(processed_path):
-                print(f"   ✅ Preprocessing complete: {processed_name}")
                 self.preprocessing_cache[cache_key] = processed_path
                 return processed_path
-            else:
-                print(f"   ⚠️  Preprocessing failed, using original")
-                return video_path
+            return video_path
 
         except Exception as e:
-            print(f"   ❌ Preprocessing error: {e}")
             return video_path
 
     def _preprocess_with_ffmpeg_modern(
-        self, input_path: str, output_path: str, analysis: Dict, target_format: Dict = None
+        self, input_path: str, output_path: str, analysis: Dict, target_format: Optional[Dict] = None,
     ) -> bool:
         """Modern FFmpeg preprocessing with intelligent aspect ratio preservation.
-        
+
         This replaces the old hard-coded 1920x1080 scaling that stretched portrait videos.
         Uses dynamic canvas dimensions and proper letterboxing with pad filter.
         """
         import subprocess
-        import os
 
         try:
             # Build FFmpeg command based on preprocessing needs
@@ -922,38 +850,32 @@ class VideoPreprocessor:
 
             # ASPECT RATIO PRESERVATION - Modern approach using target format
             if any("resolution" in reason for reason in analysis["reasons"]) and target_format:
-                target_w = target_format.get('target_width', 1920)
-                target_h = target_format.get('target_height', 1080)
-                canvas_type = target_format.get('canvas_type', 'default_landscape')
-                
+                target_w = target_format.get("target_width", 1920)
+                target_h = target_format.get("target_height", 1080)
+                canvas_type = target_format.get("canvas_type", "default_landscape")
+
                 # Use modern FFmpeg scaling with aspect ratio preservation + letterboxing
                 # Step 1: Scale down if needed, maintaining aspect ratio
                 scale_filter = f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease"
-                
+
                 # Step 2: Add letterboxing with pad filter (black bars)
                 pad_filter = f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
-                
+
                 # Combine both filters for perfect aspect ratio preservation
                 combined_filter = f"{scale_filter},{pad_filter}"
                 cmd.extend(["-vf", combined_filter])
-                
-                print(f"   🎬 Aspect-aware preprocessing for {canvas_type}")
-                print(f"       Target canvas: {target_w}x{target_h}")
-                print(f"       Filter chain: {combined_filter}")
-                
+
+
             elif any("resolution" in reason for reason in analysis["reasons"]):
                 # Fallback: use safe 1920x1080 with letterboxing (backward compatibility)
                 fallback_filter = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black"
                 cmd.extend(["-vf", fallback_filter])
-                print(f"   🎬 Fallback preprocessing with letterboxing")
-                print(f"       Filter: {fallback_filter}")
 
             # Frame rate optimization
             if any("framerate" in reason for reason in analysis["reasons"]):
                 # Use target FPS if available, otherwise limit to 30fps
-                target_fps = target_format.get('target_fps', 30) if target_format else 30
+                target_fps = target_format.get("target_fps", 30) if target_format else 30
                 cmd.extend(["-r", str(target_fps)])
-                print(f"   🎞️  Frame rate optimization: {target_fps}fps")
 
             # Audio handling
             cmd.extend(["-c:a", "aac"])  # Standard audio codec
@@ -965,13 +887,11 @@ class VideoPreprocessor:
 
             cmd.append(output_path)
 
-            print(f"   🔄 Running modern FFmpeg preprocessing...")
-            print(f"       Command: {' '.join(cmd[0:3] + ['...'] + cmd[-1:])}")
 
             # Run with timeout to prevent hanging
             result = subprocess.run(
                 cmd,
-                capture_output=True,
+                check=False, capture_output=True,
                 text=True,
                 timeout=300,  # 5 minute timeout
             )
@@ -979,24 +899,18 @@ class VideoPreprocessor:
             if result.returncode == 0:
                 # Verify output dimensions match target
                 if target_format:
-                    expected_w = target_format.get('target_width', 1920)
-                    expected_h = target_format.get('target_height', 1080)
-                    print(f"   ✅ FFmpeg preprocessing successful")
-                    print(f"       Output should be: {expected_w}x{expected_h} with proper letterboxing")
+                    expected_w = target_format.get("target_width", 1920)
+                    expected_h = target_format.get("target_height", 1080)
                 else:
-                    print(f"   ✅ FFmpeg preprocessing successful")
+                    pass
                 return True
-            else:
-                print(f"   ❌ FFmpeg failed with return code {result.returncode}")
-                if result.stderr:
-                    print(f"       Error: {result.stderr[:200]}...")  # First 200 chars
-                return False
+            if result.stderr:
+                pass  # First 200 chars
+            return False
 
         except subprocess.TimeoutExpired:
-            print(f"   ❌ FFmpeg preprocessing timed out (5+ minutes)")
             return False
         except Exception as e:
-            print(f"   ❌ FFmpeg preprocessing error: {e}")
             return False
 
     def cleanup_preprocessed_files(self, max_age_hours: int = 24) -> None:
@@ -1014,9 +928,6 @@ class VideoPreprocessor:
                     try:
                         os.remove(cached_path)
                         cleaned_count += 1
-                        print(
-                            f"   🧹 Cleaned up old preprocessed file: {os.path.basename(cached_path)}"
-                        )
                     except Exception:
                         pass  # Ignore cleanup errors
 
@@ -1026,13 +937,13 @@ class VideoPreprocessor:
         }
 
         if cleaned_count > 0:
-            print(f"   🧹 Cleaned up {cleaned_count} old preprocessed files")
+            pass
 
 
 def preprocess_videos_smart(
     video_files: List[str],
     canvas_format: Optional[dict] = None,  # NEW: Intelligent canvas format
-    output_dir: str = None,
+    output_dir: Optional[str] = None,
     progress_callback: Optional[callable] = None,
 ) -> Dict[str, str]:
     """Smart preprocessing of video files for optimal processing with intelligent canvas sizing.
@@ -1046,28 +957,21 @@ def preprocess_videos_smart(
     Returns:
         Dictionary mapping original paths to optimized paths (original or preprocessed)
     """
-    import os
     import tempfile
 
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix="autocut_preprocessed_")
 
     preprocessor = VideoPreprocessor()
-    
+
     # CRITICAL FIX: Pass canvas format to preprocessor for intelligent scaling
     if canvas_format:
         preprocessor._target_format = canvas_format
-        print(f"   🎯 Preprocessor configured with intelligent canvas: {canvas_format['canvas_type']}")
-        print(f"      Target dimensions: {canvas_format['target_width']}x{canvas_format['target_height']}")
     else:
-        print(f"   ⚠️  No canvas format provided to preprocessor, using defaults")
-    
+        pass
+
     video_map = {}
 
-    print(f"\n🔍 PHASE 2: Smart Video Preprocessing with Intelligent Canvas Sizing")
-    print(
-        f"   Analyzing {len(video_files)} video files for optimization opportunities..."
-    )
 
     preprocessing_needed = 0
     total_estimated_memory = 0
@@ -1088,15 +992,10 @@ def preprocess_videos_smart(
         video_map[video_path] = optimized_path
 
     # Summary
-    print(f"\n📊 Preprocessing Summary:")
-    print(f"   - Files analyzed: {len(video_files)}")
-    print(f"   - Files needing preprocessing: {preprocessing_needed}")
-    print(f"   - Estimated memory savings: {total_estimated_memory:.0f}MB")
-    print(f"   - Output directory: {output_dir}")
-    
+
     # NEW: Canvas format summary
     if canvas_format:
-        print(f"   - Canvas format applied: {canvas_format['canvas_type']} ({canvas_format['target_width']}x{canvas_format['target_height']})")
+        pass
 
     if progress_callback:
         progress_callback("Smart preprocessing complete", 1.0)
@@ -1164,15 +1063,11 @@ class AdvancedMemoryManager:
             status["is_emergency"] and self.memory_warnings > 3
         ):
             if self.processing_mode != "emergency":
-                print(f"   🚨 SWITCHING TO EMERGENCY MEMORY MODE")
-                print(f"      Current usage: {status['current_usage_gb']:.1f}GB")
-                print(f"      System available: {status['system_available_gb']:.1f}GB")
                 self.processing_mode = "emergency"
             return True
 
-        elif status["is_warning"]:
+        if status["is_warning"]:
             if self.processing_mode == "normal":
-                print(f"   ⚠️  Switching to conservative memory mode")
                 self.processing_mode = "conservative"
             self.memory_warnings += 1
             return False
@@ -1182,9 +1077,8 @@ class AdvancedMemoryManager:
     def perform_emergency_cleanup(self, context: str = "unknown") -> Dict[str, Any]:
         """Perform aggressive memory cleanup and return results."""
         import gc
-        import psutil
 
-        print(f"   🚨 EMERGENCY MEMORY CLEANUP ({context})")
+
 
         before_status = self.get_memory_status()
 
@@ -1219,11 +1113,9 @@ class AdvancedMemoryManager:
 
         self.emergency_cleanup_count += 1
 
-        print(f"      Objects collected: {cleanup_result['objects_collected']}")
-        print(f"      Memory freed: {cleanup_result['memory_freed_gb']:.2f}GB")
 
         if not cleanup_result["cleanup_effective"]:
-            print(f"      ⚠️  Cleanup was not effective - consider reducing batch size")
+            pass
 
         return cleanup_result
 
@@ -1231,28 +1123,19 @@ class AdvancedMemoryManager:
         """Determine optimal batch size based on current memory mode."""
         if self.processing_mode == "emergency":
             return min(2, total_items)  # Process 2 at a time maximum
-        elif self.processing_mode == "conservative":
+        if self.processing_mode == "conservative":
             return min(5, total_items)  # Process 5 at a time
-        else:
-            return min(10, total_items)  # Normal batch size
+        return min(10, total_items)  # Normal batch size
 
     def log_memory_summary(self, context: str) -> None:
         """Log comprehensive memory summary."""
         status = self.get_memory_status()
 
-        print(f"   💾 Memory Summary ({context}):")
-        print(
-            f"      Current usage: {status['current_usage_gb']:.1f}GB (+{status['baseline_increase_gb']:.1f}GB from start)"
-        )
-        print(
-            f"      System: {status['system_available_gb']:.1f}GB available ({100 - status['system_percent']:.1f}% free)"
-        )
-        print(f"      Mode: {status['processing_mode'].upper()}")
 
         if self.emergency_cleanup_count > 0:
-            print(f"      Emergency cleanups: {self.emergency_cleanup_count}")
+            pass
         if self.memory_warnings > 0:
-            print(f"      Memory warnings: {self.memory_warnings}")
+            pass
 
 
 def load_video_clips_with_advanced_memory_management(
@@ -1286,17 +1169,13 @@ def load_video_clips_with_advanced_memory_management(
     memory_manager.log_memory_summary("initialization")
 
     # Smart preprocessing with memory considerations
-    print(f"   🧠 Advanced memory-aware preprocessing")
 
     # Check memory before preprocessing
     if memory_manager.should_switch_to_emergency_mode():
-        print(
-            f"   🚨 Already in emergency mode - skipping preprocessing to save memory"
-        )
         video_path_map = {path: path for path in video_files}  # No preprocessing
     else:
         video_path_map = preprocess_videos_smart(
-            video_files, progress_callback=progress_callback
+            video_files, progress_callback=progress_callback,
         )
 
     # Update clip paths
@@ -1313,11 +1192,6 @@ def load_video_clips_with_advanced_memory_management(
     processed_files = 0
     total_clips_processed = 0
 
-    print(f"   🎬 Processing {len(sorted_clips)} clips from {len(grouped_clips)} files")
-    print(
-        f"   🔧 CRITICAL FIX: Using delayed cleanup to prevent NoneType get_frame errors"
-    )
-    print(f"      Initial processing mode: {memory_manager.processing_mode}")
 
     for video_file, file_clips in grouped_clips.items():
         processed_files += 1
@@ -1325,24 +1199,19 @@ def load_video_clips_with_advanced_memory_management(
         # Check memory status before each file
         if memory_manager.should_switch_to_emergency_mode():
             cleanup_result = memory_manager.perform_emergency_cleanup(
-                f"before file {processed_files}"
+                f"before file {processed_files}",
             )
 
             # If cleanup didn't help much, switch to single-clip processing
             if not cleanup_result["cleanup_effective"]:
-                print(f"   🚨 Switching to single-clip emergency processing")
                 optimal_batch_size = 1
             else:
                 optimal_batch_size = memory_manager.get_optimal_batch_size(
-                    len(file_clips)
+                    len(file_clips),
                 )
         else:
             optimal_batch_size = memory_manager.get_optimal_batch_size(len(file_clips))
 
-        print(
-            f"\n   [{processed_files}/{len(grouped_clips)}] Processing {os.path.basename(video_file)}"
-        )
-        print(f"   🎯 {len(file_clips)} clips, batch size: {optimal_batch_size}")
 
         # Process clips in batches to manage memory
         file_clips_loaded = 0
@@ -1357,9 +1226,6 @@ def load_video_clips_with_advanced_memory_management(
                 batch_end = min(batch_start + optimal_batch_size, len(file_clips))
                 batch_clips = file_clips[batch_start:batch_end]
 
-                print(
-                    f"      Processing batch {batch_start // optimal_batch_size + 1}: clips {batch_start + 1}-{batch_end}"
-                )
 
                 for clip_data in batch_clips:
                     try:
@@ -1367,14 +1233,11 @@ def load_video_clips_with_advanced_memory_management(
                         if memory_manager.processing_mode == "emergency":
                             status = memory_manager.get_memory_status()
                             if status["is_critical"]:
-                                print(
-                                    f"      🚨 Memory critical, skipping remaining clips"
-                                )
                                 break
 
                         # Extract segment - parent video stays alive via delayed cleanup
                         segment = subclip_safely(
-                            source_video, clip_data["start"], clip_data["end"]
+                            source_video, clip_data["start"], clip_data["end"],
                         )
 
                         # Validation: Test the clip while parent video is available
@@ -1384,7 +1247,7 @@ def load_video_clips_with_advanced_memory_management(
                             test_frame = segment.get_frame(test_time)
                             if test_frame is None:
                                 raise RuntimeError(
-                                    "get_frame returned None during validation"
+                                    "get_frame returned None during validation",
                                 )
                         except Exception as e:
                             raise RuntimeError(f"Clip validation failed: {e}")
@@ -1393,10 +1256,9 @@ def load_video_clips_with_advanced_memory_management(
                         file_clips_loaded += 1
 
                     except Exception as e:
-                        print(f"      ⚠️  Failed clip {total_clips_processed + 1}: {e}")
                         # Use original_index from grouped clips to maintain timeline alignment
                         original_index = clip_data.get(
-                            "original_index", total_clips_processed
+                            "original_index", total_clips_processed,
                         )
                         failed_indices.append(original_index)
 
@@ -1404,7 +1266,7 @@ def load_video_clips_with_advanced_memory_management(
 
                 # Memory check after batch
                 if memory_manager.processing_mode != "normal":
-                    memory_manager.log_memory_summary(f"after batch")
+                    memory_manager.log_memory_summary("after batch")
 
                     # Force garbage collection between batches in conservative/emergency mode
                     import gc
@@ -1415,7 +1277,6 @@ def load_video_clips_with_advanced_memory_management(
             # This is the key fix: parent videos stay alive until after concatenation
 
         except Exception as e:
-            print(f"   ❌ Failed to load video file {video_file}: {e}")
             # Mark all clips from this file as failed using original indices
             for clip_data in file_clips:
                 original_index = clip_data.get("original_index", total_clips_processed)
@@ -1423,9 +1284,6 @@ def load_video_clips_with_advanced_memory_management(
                 total_clips_processed += 1
             continue
 
-        print(
-            f"   ✅ File complete: {file_clips_loaded}/{len(file_clips)} clips loaded"
-        )
 
         # Update progress
         progress = 0.1 + (0.6 * total_clips_processed / len(sorted_clips))
@@ -1443,20 +1301,10 @@ def load_video_clips_with_advanced_memory_management(
     success_count = len(video_clips)
     success_rate = success_count / len(sorted_clips)
 
-    print(f"\n   📊 Advanced Memory Processing Results:")
-    print(
-        f"      Clips loaded: {success_count}/{len(sorted_clips)} ({success_rate * 100:.1f}%)"
-    )
-    print(f"      Emergency cleanups: {memory_manager.emergency_cleanup_count}")
-    print(f"      Processing mode: {memory_manager.processing_mode}")
 
     if failed_indices:
-        print(f"      Failed clips: {len(failed_indices)}")
+        pass
 
-    print(f"   🎬 CRITICAL SUCCESS: All parent videos kept alive for concatenation")
-    print(
-        f"   🔧 Delayed cleanup will occur after concatenation to prevent NoneType errors"
-    )
 
     report_progress(f"Advanced loading complete: {success_count} clips", 0.7)
 
@@ -1494,8 +1342,8 @@ class RobustVideoLoader:
         self._loaded_videos = {}
 
     def load_clip_with_fallbacks(
-        self, 
-        clip_data: Dict[str, Any], 
+        self,
+        clip_data: Dict[str, Any],
         resource_manager: VideoResourceManager,
         canvas_format: Optional[dict] = None,  # NEW: Intelligent canvas format
     ) -> Optional[Any]:
@@ -1516,7 +1364,7 @@ class RobustVideoLoader:
 
         # NEW: Log canvas format usage for this clip
         if canvas_format:
-            print(f"         🎯 Using {canvas_format['canvas_type']} ({canvas_format['target_width']}x{canvas_format['target_height']})")
+            pass
 
         strategies = [
             ("direct_loading", self._load_direct_moviepy),
@@ -1536,9 +1384,9 @@ class RobustVideoLoader:
                     self.error_statistics["fallback_usage"][strategy_name] += 1
 
                     if strategy_name != "direct_loading":
-                        print(f"      ✅ Fallback success: {strategy_name} with intelligent canvas")
+                        pass
                     else:
-                        print(f"      ✅ Direct loading success with intelligent canvas")
+                        pass
 
                     return result
 
@@ -1549,16 +1397,14 @@ class RobustVideoLoader:
                     self.error_statistics["error_types"].get(error_type, 0) + 1
                 )
 
-                print(f"      🔄 Strategy '{strategy_name}' failed: {str(e)[:100]}...")
                 continue
 
         # All strategies failed
         self.error_statistics["failed_loads"] += 1
-        print(f"      ❌ All fallback strategies failed. Last error: {last_error}")
         return None
 
     def _get_or_load_video(
-        self, video_file: str, resource_manager: VideoResourceManager
+        self, video_file: str, resource_manager: VideoResourceManager,
     ):
         """Get or load a video with delayed cleanup.
 
@@ -1572,8 +1418,8 @@ class RobustVideoLoader:
         return self._loaded_videos[video_file]
 
     def _load_direct_moviepy(
-        self, 
-        clip_data: Dict[str, Any], 
+        self,
+        clip_data: Dict[str, Any],
         resource_manager: VideoResourceManager,
         canvas_format: Optional[dict] = None,  # NEW: Canvas format for scaling
     ) -> Optional[Any]:
@@ -1591,20 +1437,19 @@ class RobustVideoLoader:
             segment = video_clip.subclipped(start_time, end_time)
         except AttributeError:
             segment = video_clip.subclip(start_time, end_time)
-        
+
         # NEW: Apply intelligent canvas scaling if provided
         if canvas_format and segment is not None:
             try:
                 from compatibility.moviepy import resize_with_aspect_preservation
                 segment = resize_with_aspect_preservation(
                     segment,
-                    target_width=canvas_format['target_width'],
-                    target_height=canvas_format['target_height'],
-                    scaling_mode="smart"  # Use smart scaling for optimal results
+                    target_width=canvas_format["target_width"],
+                    target_height=canvas_format["target_height"],
+                    scaling_mode="smart",  # Use smart scaling for optimal results
                 )
-                print(f"         ✅ Applied intelligent canvas scaling: {canvas_format['canvas_type']}")
             except Exception as scaling_error:
-                print(f"         ⚠️  Canvas scaling failed, using original: {scaling_error}")
+                pass
                 # Continue with unscaled segment rather than failing
 
         return segment
@@ -1616,9 +1461,9 @@ class RobustVideoLoader:
         canvas_format: Optional[dict] = None,  # NEW: Canvas format for scaling
     ) -> Optional[Any]:
         """Load with format conversion fallback and intelligent canvas scaling."""
-        import tempfile
-        import subprocess
         import os
+        import subprocess
+        import tempfile
 
         video_file = clip_data["video_file"]
         start_time = clip_data["start"]
@@ -1635,16 +1480,15 @@ class RobustVideoLoader:
 
             # NEW: Apply intelligent canvas scaling during conversion if provided
             if canvas_format:
-                target_w = canvas_format['target_width']
-                target_h = canvas_format['target_height']
+                target_w = canvas_format["target_width"]
+                target_h = canvas_format["target_height"]
                 # Use aspect-aware scaling with letterboxing
                 scale_filter = f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease"
                 pad_filter = f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
                 combined_filter = f"{scale_filter},{pad_filter}"
                 cmd.extend(["-vf", combined_filter])
-                print(f"         🎯 Format conversion with intelligent canvas: {canvas_format['canvas_type']}")
             else:
-                print(f"         🔄 Format conversion without canvas scaling")
+                pass
 
             # Standard conversion settings
             cmd.extend([
@@ -1652,11 +1496,11 @@ class RobustVideoLoader:
                 "-preset", "ultrafast",  # Speed over quality for fallback
                 "-c:a", "aac",
                 "-avoid_negative_ts", "make_zero",
-                converted_file
+                converted_file,
             ])
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=120
+                cmd, check=False, capture_output=True, text=True, timeout=120,
             )
 
             if result.returncode != 0:
@@ -1664,9 +1508,9 @@ class RobustVideoLoader:
 
             # Load converted clip
             from moviepy.editor import VideoFileClip
-            
+
             converted_clip = VideoFileClip(converted_file)
-            
+
             # If canvas scaling wasn't applied during conversion, apply it now
             if not canvas_format:
                 # Load and trim normally, then apply canvas scaling
@@ -1701,9 +1545,9 @@ class RobustVideoLoader:
         canvas_format: Optional[dict] = None,  # NEW: Canvas format for scaling
     ) -> Optional[Any]:
         """Load with quality reduction for memory-intensive videos and intelligent canvas scaling."""
-        import tempfile
-        import subprocess
         import os
+        import subprocess
+        import tempfile
 
         video_file = clip_data["video_file"]
         start_time = clip_data["start"]
@@ -1720,24 +1564,22 @@ class RobustVideoLoader:
 
             # NEW: Apply intelligent canvas scaling during quality reduction if provided
             if canvas_format:
-                target_w = canvas_format['target_width'] 
-                target_h = canvas_format['target_height']
-                target_fps = canvas_format.get('target_fps', 25)
-                
+                target_w = canvas_format["target_width"]
+                target_h = canvas_format["target_height"]
+                target_fps = canvas_format.get("target_fps", 25)
+
                 # Combine quality reduction with canvas scaling for maximum efficiency
                 scale_filter = f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease"
                 pad_filter = f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
                 fps_filter = f"fps={target_fps}"
                 combined_filter = f"{scale_filter},{pad_filter},{fps_filter}"
-                
+
                 cmd.extend(["-vf", combined_filter])
-                print(f"         🎯 Quality reduction with intelligent canvas: {canvas_format['canvas_type']} @ {target_fps}fps")
             else:
                 # Standard quality reduction without canvas scaling
                 cmd.extend([
                     "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=24",
                 ])
-                print(f"         📉 Quality reduction to 720p @ 24fps (no canvas scaling)")
 
             # Aggressive quality reduction settings
             cmd.extend([
@@ -1747,11 +1589,11 @@ class RobustVideoLoader:
                 "-c:a", "aac",
                 "-b:a", "96k",  # Reduced audio bitrate
                 "-avoid_negative_ts", "make_zero",
-                reduced_file
+                reduced_file,
             ])
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=180
+                cmd, check=False, capture_output=True, text=True, timeout=180,
             )
 
             if result.returncode != 0:
@@ -1759,7 +1601,7 @@ class RobustVideoLoader:
 
             # Load reduced quality clip
             from moviepy.editor import VideoFileClip
-            
+
             reduced_clip = VideoFileClip(reduced_file)
             segment = reduced_clip  # Already trimmed and scaled during FFmpeg processing
 
@@ -1767,7 +1609,6 @@ class RobustVideoLoader:
             resource_manager.register_temp_file(reduced_file)
             resource_manager.register_temp_file(temp_dir)
 
-            print(f"         ✅ Quality reduction successful with {'' if canvas_format else 'default '}canvas scaling")
             return segment
 
         except Exception as e:
@@ -1791,9 +1632,9 @@ class RobustVideoLoader:
         canvas_format: Optional[dict] = None,  # NEW: Canvas format for scaling
     ) -> Optional[Any]:
         """Emergency minimal loading with maximum compatibility and intelligent canvas scaling."""
-        import tempfile
-        import subprocess
         import os
+        import subprocess
+        import tempfile
 
         video_file = clip_data["video_file"]
         start_time = clip_data["start"]
@@ -1811,22 +1652,20 @@ class RobustVideoLoader:
             # NEW: Apply emergency canvas scaling if provided
             if canvas_format:
                 # Use smaller dimensions for emergency mode to reduce memory pressure
-                emergency_width = min(canvas_format['target_width'], 854)  # Max 854 wide for emergency
-                emergency_height = min(canvas_format['target_height'], 480)  # Max 480 high for emergency
-                
+                emergency_width = min(canvas_format["target_width"], 854)  # Max 854 wide for emergency
+                emergency_height = min(canvas_format["target_height"], 480)  # Max 480 high for emergency
+
                 scale_filter = f"scale={emergency_width}:{emergency_height}:force_original_aspect_ratio=decrease"
                 pad_filter = f"pad={emergency_width}:{emergency_height}:(ow-iw)/2:(oh-ih)/2:black"
                 fps_filter = "fps=15"  # Very low FPS for emergency
                 combined_filter = f"{scale_filter},{pad_filter},{fps_filter}"
-                
+
                 cmd.extend(["-vf", combined_filter])
-                print(f"         🚨 Emergency mode with reduced canvas: {emergency_width}x{emergency_height} @ 15fps")
             else:
                 # Standard emergency settings without canvas scaling
                 cmd.extend([
                     "-vf", "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2:black,fps=15",
                 ])
-                print(f"         🚨 Emergency mode: 640x360 @ 15fps (no canvas scaling)")
 
             # Minimal quality settings for maximum compatibility
             cmd.extend([
@@ -1841,11 +1680,11 @@ class RobustVideoLoader:
                 "-ar", "22050",  # Low sample rate
                 "-avoid_negative_ts", "make_zero",
                 "-movflags", "+faststart",
-                minimal_file
+                minimal_file,
             ])
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=240
+                cmd, check=False, capture_output=True, text=True, timeout=240,
             )
 
             if result.returncode != 0:
@@ -1853,7 +1692,7 @@ class RobustVideoLoader:
 
             # Load minimal clip
             from moviepy.editor import VideoFileClip
-            
+
             minimal_clip = VideoFileClip(minimal_file)
             segment = minimal_clip  # Already processed with emergency settings
 
@@ -1861,7 +1700,6 @@ class RobustVideoLoader:
             resource_manager.register_temp_file(minimal_file)
             resource_manager.register_temp_file(temp_dir)
 
-            print(f"         ✅ Emergency loading successful with {'intelligent' if canvas_format else 'standard'} canvas")
             return segment
 
         except Exception as e:
@@ -1901,22 +1739,15 @@ class RobustVideoLoader:
         """Print detailed error summary for debugging."""
         report = self.get_error_report()
 
-        print(f"\n   📊 Robust Loading Summary:")
-        print(f"      Success rate: {report['success_rate'] * 100:.1f}%")
-        print(f"      Total attempts: {report['total_attempts']}")
-        print(f"      Successful: {report['successful_loads']}")
-        print(f"      Failed: {report['failed_loads']}")
 
         if any(report["fallback_usage"].values()):
-            print(f"      Fallback usage:")
-            for strategy, count in report["fallback_usage"].items():
+            for count in report["fallback_usage"].values():
                 if count > 0:
-                    print(f"        - {strategy}: {count} clips")
+                    pass
 
         if report["error_types"]:
-            print(f"      Error types encountered:")
-            for error_type, count in report["error_types"].items():
-                print(f"        - {error_type}: {count} occurrences")
+            for count in report["error_types"].values():
+                pass
 
 
 def load_video_clips_with_robust_error_handling(
@@ -1929,7 +1760,7 @@ def load_video_clips_with_robust_error_handling(
 
     CRITICAL FIX: This version now uses delayed cleanup to prevent NoneType get_frame errors.
     Parent videos are kept alive until after concatenation, ensuring subclips remain valid.
-    
+
     NEW: Integrates intelligent canvas format for optimal preprocessing and scaling.
 
     This is the most robust version that tries multiple approaches for each failed clip.
@@ -1950,31 +1781,22 @@ def load_video_clips_with_robust_error_handling(
     resource_manager = VideoResourceManager()  # Will support delayed cleanup
     robust_loader = RobustVideoLoader()
 
-    print(f"   🛡️  PHASE 4: Robust error handling and recovery")
-    print(
-        f"   🔧 CRITICAL FIX: Using delayed cleanup to prevent NoneType get_frame errors"
-    )
-    print(f"      Total clips to process: {len(sorted_clips)}")
-    
+
     # NEW: Log canvas format usage
     if canvas_format:
-        print(f"   🎯 INTELLIGENT CANVAS: {canvas_format['canvas_type']}")
-        print(f"      Target dimensions: {canvas_format['target_width']}x{canvas_format['target_height']}")
-        print(f"      Strategy: {canvas_format['description']}")
+        pass
     else:
-        print(f"   ⚠️  No canvas format provided, using preprocessing defaults")
+        pass
 
     # Smart preprocessing with error recovery and intelligent canvas format
     try:
         # CRITICAL FIX: Pass canvas_format to preprocessing
         video_path_map = preprocess_videos_smart(
-            video_files, 
+            video_files,
             canvas_format=canvas_format,  # NEW: Pass canvas format for intelligent preprocessing
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
         )
     except Exception as e:
-        print(f"      ⚠️  Preprocessing failed: {e}")
-        print(f"      Continuing with original video files")
         video_path_map = {path: path for path in video_files}
 
     # Update clip paths
@@ -1993,12 +1815,8 @@ def load_video_clips_with_robust_error_handling(
 
     memory_manager.log_memory_summary("robust loading start")
 
-    for video_file, file_clips in grouped_clips.items():
+    for file_clips in grouped_clips.values():
         processed_files += 1
-        print(
-            f"\n   [{processed_files}/{len(grouped_clips)}] Robust processing: {os.path.basename(video_file)}"
-        )
-        print(f"   🎯 {len(file_clips)} clips with fallback strategies")
 
         file_clips_loaded = 0
 
@@ -2011,31 +1829,25 @@ def load_video_clips_with_robust_error_handling(
 
         # Process clips with robust error handling
         for i, clip_data in enumerate(file_clips):
-            print(
-                f"      Clip {i + 1}/{len(file_clips)}: {clip_data['start']:.1f}-{clip_data['end']:.1f}s"
-            )
 
             try:
                 # Use robust loader with multiple fallback strategies and delayed cleanup
                 # NEW: Pass canvas_format to the loader for intelligent scaling
                 segment = robust_loader.load_clip_with_fallbacks(
-                    clip_data, resource_manager, canvas_format=canvas_format
+                    clip_data, resource_manager, canvas_format=canvas_format,
                 )
 
                 if segment is not None:
                     video_clips.append(segment)
                     file_clips_loaded += 1
-                    print(f"      ✅ Success")
                 else:
                     # Use original_index from grouped clips to maintain timeline alignment
                     original_index = clip_data.get(
-                        "original_index", total_clips_processed
+                        "original_index", total_clips_processed,
                     )
                     failed_indices.append(original_index)
-                    print(f"      ❌ All strategies failed")
 
             except Exception as e:
-                print(f"      ❌ Unexpected error: {e}")
                 # Use original_index from grouped clips to maintain timeline alignment
                 original_index = clip_data.get("original_index", total_clips_processed)
                 failed_indices.append(original_index)
@@ -2044,15 +1856,14 @@ def load_video_clips_with_robust_error_handling(
 
             # Memory check between clips if in conservative mode
             if memory_manager.processing_mode != "normal" and i % 5 == 0:
-                memory_manager.log_memory_summary(f"progress check")
+                memory_manager.log_memory_summary("progress check")
 
             # Update progress
             progress = 0.1 + (0.6 * total_clips_processed / len(sorted_clips))
             report_progress(
-                f"Robust loading: {total_clips_processed}/{len(sorted_clips)}", progress
+                f"Robust loading: {total_clips_processed}/{len(sorted_clips)}", progress,
             )
 
-        print(f"   📊 File result: {file_clips_loaded}/{len(file_clips)} clips loaded")
 
     # Generate comprehensive error report
     error_report = robust_loader.get_error_report()
@@ -2061,35 +1872,23 @@ def load_video_clips_with_robust_error_handling(
     memory_manager.log_memory_summary("robust loading complete")
 
     if not video_clips:
-        print(f"\n   ❌ CRITICAL: No clips could be loaded with any strategy")
-        print(f"      This indicates a fundamental compatibility issue")
         raise RuntimeError(
-            "No video clips could be loaded successfully with any fallback strategy"
+            "No video clips could be loaded successfully with any fallback strategy",
         )
 
     success_count = len(video_clips)
     success_rate = success_count / len(sorted_clips)
 
-    print(f"\n   🎉 ROBUST LOADING COMPLETE")
-    print(
-        f"      Final success rate: {success_rate * 100:.1f}% ({success_count}/{len(sorted_clips)} clips)"
-    )
-    
+
     # NEW: Log canvas format success
     if canvas_format:
-        print(f"      🎬 Canvas format applied: {canvas_format['canvas_type']} ({canvas_format['target_width']}x{canvas_format['target_height']})")
+        pass
 
-    if success_rate < 0.5:
-        print(f"      ⚠️  LOW SUCCESS RATE - Consider checking video file formats")
-    elif success_rate < 0.8:
-        print(f"      ⚠️  MODERATE SUCCESS RATE - Some clips had issues")
+    if success_rate < 0.5 or success_rate < 0.8:
+        pass
     else:
-        print(f"      ✅ EXCELLENT SUCCESS RATE")
+        pass
 
-    print(f"   🎬 CRITICAL SUCCESS: All parent videos kept alive for concatenation")
-    print(
-        f"   🔧 Delayed cleanup will occur after concatenation to prevent NoneType errors"
-    )
 
     report_progress(f"Robust loading complete: {success_count} clips", 0.7)
 
@@ -2103,7 +1902,7 @@ def load_video_clips_parallel(
     sorted_clips: List[Dict[str, Any]],
     video_files: List[str],
     progress_callback: Optional[callable] = None,
-    max_workers: int = None,
+    max_workers: Optional[int] = None,
 ) -> Tuple[List[Any], VideoCache, List[int]]:
     """Load video clips in parallel with intelligent caching and memory monitoring.
 
@@ -2130,9 +1929,6 @@ def load_video_clips_parallel(
 
     # Memory monitoring at start
     initial_memory = get_memory_info()
-    print(
-        f"   🧠 Initial memory: {initial_memory['used_gb']:.1f}GB used ({initial_memory['percent']:.1f}%), {initial_memory['available_gb']:.1f}GB available"
-    )
 
     # Initialize cache and results
     video_cache = VideoCache()
@@ -2147,7 +1943,7 @@ def load_video_clips_parallel(
         capabilities = profiler.get_system_capabilities()
         video_profile = profiler.estimate_video_memory_usage(video_files)
         worker_analysis = profiler.calculate_optimal_workers(
-            capabilities, video_profile, len(sorted_clips)
+            capabilities, video_profile, len(sorted_clips),
         )
 
         optimal_workers = worker_analysis["optimal_workers"]
@@ -2158,10 +1954,9 @@ def load_video_clips_parallel(
     else:
         # Manual override provided
         optimal_workers = min(max_workers, len(sorted_clips))
-        print(f"   ⚙️  Manual worker override: {optimal_workers} workers")
 
     report_progress(
-        f"Loading {len(sorted_clips)} clips with {optimal_workers} workers", 0.1
+        f"Loading {len(sorted_clips)} clips with {optimal_workers} workers", 0.1,
     )
 
     # Start adaptive monitoring for safety
@@ -2191,19 +1986,18 @@ def load_video_clips_parallel(
                         failed_indices.append(index)
 
                 except Exception as e:
-                    print(f"Warning: Future failed for clip {index}: {str(e)}")
                     failed_indices.append(index)
 
                 # Update progress
                 progress = 0.1 + (0.6 * completed_count / len(sorted_clips))
                 report_progress(
-                    f"Loaded {completed_count}/{len(sorted_clips)} clips", progress
+                    f"Loaded {completed_count}/{len(sorted_clips)} clips", progress,
                 )
 
     except Exception as e:
         # Clean up cache on error
         video_cache.clear()
-        raise RuntimeError(f"Parallel video loading failed: {str(e)}")
+        raise RuntimeError(f"Parallel video loading failed: {e!s}")
 
     finally:
         # Always stop monitoring when done
@@ -2220,28 +2014,20 @@ def load_video_clips_parallel(
 
     # Report failed clips
     if failed_indices:
-        print(
-            f"Warning: {len(failed_indices)} clips failed to load (indices: {failed_indices})"
-        )
+        pass
 
     report_progress(f"Successfully loaded {len(video_clips)} clips", 0.7)
 
     # Memory monitoring at completion
     final_memory = get_memory_info()
     memory_increase = final_memory["used_gb"] - initial_memory["used_gb"]
-    print(
-        f"   🧠 Final memory: {final_memory['used_gb']:.1f}GB used (+{memory_increase:.1f}GB), {final_memory['available_gb']:.1f}GB available"
-    )
 
     # Memory usage warning
     if final_memory["percent"] > 85:
-        print(
-            f"   ⚠️  HIGH MEMORY USAGE: {final_memory['percent']:.1f}% - Consider reducing video count"
-        )
+        pass
 
     # Log cache statistics
     cached_files = video_cache.get_cached_paths()
-    print(f"   📦 Video cache: {len(cached_files)} unique files loaded")
 
     return video_clips, video_cache, failed_indices
 
@@ -2257,15 +2043,15 @@ def check_moviepy_api_compatibility():
     # Handle import structure changes in MoviePy 2.1.2
     try:
         # Try new import structure first (MoviePy 2.1.2+)
-        from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips
+        from moviepy import AudioFileClip, VideoFileClip, concatenate_videoclips
 
         import_pattern = "new"  # from moviepy import ...
     except ImportError:
         try:
             # Fallback to legacy import structure (MoviePy < 2.1.2)
             from moviepy.editor import (
-                VideoFileClip,
                 AudioFileClip,
+                VideoFileClip,
                 concatenate_videoclips,
             )
 
@@ -2347,23 +2133,16 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
 
                 # CRITICAL: Ensure we never return None
                 if result is None:
-                    print(
-                        f"Warning: {method_name}() returned None, trying next method..."
-                    )
                     continue
 
-                print(f"Debug: Successfully attached audio using {method_name}")
                 return result
 
             except Exception as e:
-                print(
-                    f"Warning: {method_name}() failed with error: {e}, trying next method..."
-                )
                 continue
 
     # If all methods fail, this is a critical error
     raise RuntimeError(
-        f"Could not attach audio using any method (tried: with_audio, set_audio) on {type(video_clip)}"
+        f"Could not attach audio using any method (tried: with_audio, set_audio) on {type(video_clip)}",
     )
 
 
@@ -2394,22 +2173,21 @@ def subclip_safely(clip, start_time, end_time=None, compatibility_info=None):
                 try:
                     if end_time is not None:
                         return method(start_time, end_time)
-                    else:
-                        return method(start_time)
+                    return method(start_time)
                 except Exception:
                     # If this method fails, try the next one
                     continue
 
         # If neither method works, raise an error
         raise AttributeError(
-            f"Neither 'subclipped' nor 'subclip' methods work on {type(clip)}"
+            f"Neither 'subclipped' nor 'subclip' methods work on {type(clip)}",
         )
 
     except AttributeError:
         raise RuntimeError(f"Could not find subclip method on clip type {type(clip)}")
 
 
-def test_independent_subclip_creation(video_path: str = None) -> bool:
+def test_independent_subclip_creation(video_path: Optional[str] = None) -> bool:
     """Test function to verify independent subclip creation works correctly.
 
     This test validates that the fix for the NoneType get_frame error is working
@@ -2431,10 +2209,8 @@ def test_independent_subclip_creation(video_path: str = None) -> bool:
                 break
 
         if not video_path:
-            print("Warning: No test video found - skipping independent subclip test")
             return True  # Skip test if no video available
 
-    print(f"Testing independent subclip creation with: {video_path}")
 
     try:
         # Create resource manager and load video
@@ -2450,35 +2226,21 @@ def test_independent_subclip_creation(video_path: str = None) -> bool:
             # Create subclip using new method (should work after parent closes)
             new_subclip = source_video.subclipped(0.5, min(2.0, duration - 0.5))
 
-            print(
-                f"  Created subclips: old={type(old_subclip)}, new={type(new_subclip)}"
-            )
 
         # Parent video is now closed - test if subclips still work
-        print("  Parent video closed, testing subclip functionality...")
 
         # Test old subclip (should fail)
-        try:
+        with contextlib.suppress(Exception):
             old_frame = old_subclip.get_frame(0.1)
-            print("  WARNING: Old subclip still works - this is unexpected")
-        except Exception as e:
-            print(f"  Expected: Old subclip failed as expected: {str(e)[:50]}...")
 
         # Test new subclip (should work)
         try:
             new_frame = new_subclip.get_frame(0.1)
-            if new_frame is not None:
-                print("  SUCCESS: New independent subclip works after parent closed!")
-                return True
-            else:
-                print("  FAILURE: New subclip returns None frame")
-                return False
+            return new_frame is not None
         except Exception as e:
-            print(f"  FAILURE: New independent subclip failed: {str(e)}")
             return False
 
     except Exception as e:
-        print(f"Test failed with exception: {str(e)}")
         return False
 
     finally:
@@ -2500,7 +2262,7 @@ def import_moviepy_safely():
     """
     try:
         # Try new import structure first (MoviePy 2.1.2+)
-        from moviepy import VideoFileClip, AudioFileClip, concatenate_videoclips
+        from moviepy import AudioFileClip, VideoFileClip, concatenate_videoclips
 
         try:
             from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
@@ -2511,10 +2273,10 @@ def import_moviepy_safely():
         try:
             # Fallback to legacy import structure (MoviePy < 2.1.2)
             from moviepy.editor import (
-                VideoFileClip,
                 AudioFileClip,
-                concatenate_videoclips,
                 CompositeVideoClip,
+                VideoFileClip,
+                concatenate_videoclips,
             )
 
             return (
@@ -2525,7 +2287,7 @@ def import_moviepy_safely():
             )
         except ImportError:
             raise RuntimeError(
-                "Could not import MoviePy with either import pattern. Please check MoviePy installation."
+                "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
             )
 
 
@@ -2552,14 +2314,12 @@ def write_videofile_safely(video_clip, output_path, compatibility_info=None, **k
         if key in available_params:
             safe_kwargs[key] = value
         else:
-            print(
-                f"Warning: Parameter '{key}' not supported in this MoviePy version, skipping"
-            )
+            pass
 
     try:
         video_clip.write_videofile(output_path, **safe_kwargs)
     except Exception as e:
-        raise RuntimeError(f"Failed to write video file: {str(e)}")
+        raise RuntimeError(f"Failed to write video file: {e!s}")
 
 
 # ClipTimeline class extracted to src/video/timeline_renderer.py
@@ -2649,7 +2409,7 @@ def match_clips_to_beats(
             # 3. Whether clip can be trimmed to fit exactly
 
             duration_fit = _calculate_duration_fit(
-                clip.duration, target_duration, allowed_durations
+                clip.duration, target_duration, allowed_durations,
             )
             if duration_fit < 0:  # Clip can't be used for this duration
                 continue
@@ -2672,7 +2432,7 @@ def match_clips_to_beats(
         # Determine actual clip timing
         beat_position = effective_beats[current_beat_index]
         clip_start, clip_end, clip_duration = _fit_clip_to_duration(
-            best_clip, target_duration, allowed_durations
+            best_clip, target_duration, allowed_durations,
         )
 
         # Add to timeline
@@ -2691,7 +2451,7 @@ def match_clips_to_beats(
 
 
 def _calculate_duration_fit(
-    clip_duration: float, target_duration: float, allowed_durations: List[float]
+    clip_duration: float, target_duration: float, allowed_durations: List[float],
 ) -> float:
     """Calculate how well a clip duration fits the target duration.
 
@@ -2723,20 +2483,17 @@ def _calculate_duration_fit(
         excess = clip_duration - target_duration
         if excess <= 2.0:  # Can trim up to 2 seconds
             return 1.0 - (excess / 4.0)  # Gentle penalty for trimming
-        else:
-            return 0.3  # Heavy penalty for lots of trimming
+        return 0.3  # Heavy penalty for lots of trimming
 
     # Clip is shorter than target
-    else:
-        shortage = target_duration - clip_duration
-        if shortage <= 0.5:  # Small shortage is acceptable
-            return 0.8 - (shortage / 1.0)
-        else:
-            return -1  # Too short, can't use
+    shortage = target_duration - clip_duration
+    if shortage <= 0.5:  # Small shortage is acceptable
+        return 0.8 - (shortage / 1.0)
+    return -1  # Too short, can't use
 
 
 def _fit_clip_to_duration(
-    clip: VideoChunk, target_duration: float, allowed_durations: List[float]
+    clip: VideoChunk, target_duration: float, allowed_durations: List[float],
 ) -> Tuple[float, float, float]:
     """Fit a clip to the target duration by trimming if necessary.
 
@@ -2763,7 +2520,7 @@ def _fit_clip_to_duration(
 
 
 def select_best_clips(
-    video_chunks: List[VideoChunk], target_count: int, variety_factor: float = 0.3
+    video_chunks: List[VideoChunk], target_count: int, variety_factor: float = 0.3,
 ) -> List[VideoChunk]:
     """Select best clips ensuring variety in source videos.
 
@@ -2809,7 +2566,7 @@ def select_best_clips(
             available_clips = clips_by_video[video_path]
             for clip in available_clips:
                 if clip not in selected_clips and not _clips_overlap(
-                    clip, selected_clips
+                    clip, selected_clips,
                 ):
                     selected_clips.append(clip)
                     break
@@ -2866,7 +2623,7 @@ def select_best_clips(
 
 
 def _clips_overlap(
-    clip: VideoChunk, existing_clips: List[VideoChunk], min_gap: float = 1.0
+    clip: VideoChunk, existing_clips: List[VideoChunk], min_gap: float = 1.0,
 ) -> bool:
     """Check if a clip overlaps with any existing clips from the same video.
 
@@ -2931,7 +2688,7 @@ def render_video(
     canvas_format: Optional[dict] = None,  # NEW: Canvas format from intelligent analysis
 ) -> str:
     """Render final video with music synchronization and intelligent canvas sizing.
-    
+
     Args:
         timeline: ClipTimeline with all clips and timing
         audio_file: Path to music file
@@ -2941,99 +2698,88 @@ def render_video(
         bpm: Beats per minute for musical fade calculations
         avg_beat_interval: Average time between beats in seconds
         canvas_format: Intelligent canvas format from VideoFormatAnalyzer
-        
+
     Returns:
         Path to rendered video file
-        
+
     Raises:
         RuntimeError: If rendering fails
     """
     try:
         import os
-        from typing import List
-        
+
         # Import MoviePy components safely
-        print("DEBUG: Importing MoviePy components...")
         VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
-        print(f"DEBUG: MoviePy imports successful - VideoFileClip: {VideoFileClip is not None}")
-        
+
         if VideoFileClip is None:
             raise RuntimeError("MoviePy VideoFileClip is not available - check MoviePy installation")
-        
+
         # Import robust audio loading system to prevent proc errors
-        print("DEBUG: Importing robust audio loading system...")
         try:
             # Try to import from audio_loader module first
             from audio_loader import load_audio_robust
-            print("DEBUG: load_audio_robust imported from audio_loader module")
         except ImportError:
             try:
                 # Fallback: try local definition in this file
-                load_audio_robust = locals().get('load_audio_robust')
+                load_audio_robust = locals().get("load_audio_robust")
                 if load_audio_robust is None:
                     raise ImportError("load_audio_robust not found in local scope")
-                print("DEBUG: load_audio_robust found in local scope")
             except Exception:
                 # Final fallback: define a minimal robust audio loader
                 def load_audio_robust(audio_file):
                     """Minimal robust audio loader as final fallback."""
-                    print(f"WARNING: Using minimal fallback audio loader for {audio_file}")
                     return AudioFileClip(audio_file)
-                print("DEBUG: Using minimal fallback audio loader")
-        
+
         # Validate audio file before processing
         if not os.path.exists(audio_file):
             raise RuntimeError(f"Audio file not found: {audio_file}")
-        print(f"DEBUG: Audio file validation passed: {audio_file}")
-        
+
         # Check audio file size for potential issues
         try:
             audio_size = os.path.getsize(audio_file)
-            print(f"DEBUG: Audio file size: {audio_size / (1024*1024):.2f} MB")
             if audio_size == 0:
                 raise RuntimeError(f"Audio file is empty: {audio_file}")
         except Exception as size_error:
-            print(f"WARNING: Could not check audio file size: {size_error}")
-        
+            pass
+
         # Get MoviePy compatibility info for safe subclip operations
         try:
-            from compatibility.moviepy import check_moviepy_api_compatibility, subclip_safely, attach_audio_safely
+            from compatibility.moviepy import (
+                attach_audio_safely,
+                check_moviepy_api_compatibility,
+                subclip_safely,
+            )
             compatibility_info = check_moviepy_api_compatibility()
-            print(f"DEBUG: MoviePy compatibility: {compatibility_info.get('version_detected', 'unknown')}")
         except ImportError:
-            print("WARNING: Compatibility module not available, using fallback methods")
             compatibility_info = None
             subclip_safely = None
             attach_audio_safely = None
-        
+
         # CRITICAL FIX: Log canvas format usage
         if canvas_format:
-            print(f"DEBUG: Using intelligent canvas format: {canvas_format['canvas_type']}")
-            print(f"DEBUG: Target dimensions: {canvas_format['target_width']}x{canvas_format['target_height']}")
+            pass
         else:
-            print("DEBUG: No canvas format provided, using defaults")
-        
+            pass
+
         if progress_callback:
             progress_callback("Loading video clips", 0.1)
-        
+
         # Convert timeline to format expected by robust loading system
-        print(f"DEBUG: Timeline has {len(timeline.clips)} clips to load")
-        
+
         # Prepare clip data for robust loading system
-        video_files = list(set(clip_info["video_file"] for clip_info in timeline.clips))
+        video_files = list({clip_info["video_file"] for clip_info in timeline.clips})
         sorted_clips = []
-        
+
         for i, clip_info in enumerate(timeline.clips):
             sorted_clips.append({
                 "video_file": clip_info["video_file"],
-                "start": clip_info["start"], 
+                "start": clip_info["start"],
                 "end": clip_info["end"],
                 "score": clip_info.get("score", 50.0),
-                "index": i
+                "index": i,
             })
-        
-        print(f"DEBUG: Using robust loading system for {len(sorted_clips)} clips from {len(video_files)} files")
-        
+
+
         # Use existing robust loading system that handles proc errors properly
         try:
             # CRITICAL FIX: Pass canvas_format to the loading system
@@ -3041,44 +2787,39 @@ def render_video(
                 sorted_clips=sorted_clips,
                 video_files=video_files,
                 canvas_format=canvas_format,  # NEW: Pass canvas format for preprocessing
-                progress_callback=lambda step, prog: progress_callback(f"Loading: {step}", 0.1 + 0.4 * prog) if progress_callback else None
+                progress_callback=lambda step, prog: progress_callback(f"Loading: {step}", 0.1 + 0.4 * prog) if progress_callback else None,
             )
-            
-            print(f"DEBUG: Robust loading completed - {len(video_clips)} clips loaded, {len(failed_indices)} failed")
+
             if error_report.get("total_errors", 0) > 0:
-                print(f"DEBUG: Error report: {error_report}")
-                
+                pass
+
         except Exception as e:
-            print(f"ERROR: Robust loading system failed: {e}")
             import traceback
             traceback.print_exc()
             raise RuntimeError(f"Failed to load video clips using robust loading system: {e}")
-        
+
         if not video_clips:
             raise RuntimeError(f"No video clips could be loaded from {len(timeline.clips)} timeline clips using robust loading system")
-        
+
         if progress_callback:
             progress_callback("Concatenating video clips", 0.5)
-        
+
         # Concatenate video clips
         final_video = concatenate_videoclips(video_clips, method="compose")
-        
+
         if progress_callback:
             progress_callback("Loading audio", 0.6)
-        
+
         # Load and attach audio using robust loading system
-        print(f"DEBUG: Loading audio using robust loader: {audio_file}")
         try:
             audio_clip = load_audio_robust(audio_file)
-            print("DEBUG: Robust audio loading successful")
         except Exception as audio_error:
-            print(f"ERROR: Robust audio loading failed: {audio_error}")
             raise RuntimeError(f"Failed to load audio file {audio_file}: {audio_error}")
-        
+
         # Trim audio to match video duration or vice versa
         video_duration = final_video.duration
         audio_duration = audio_clip.duration
-        
+
         if audio_duration > video_duration:
             # Trim audio to video length
             if subclip_safely:
@@ -3089,83 +2830,68 @@ def render_video(
                     audio_clip = audio_clip.subclipped(0, video_duration)
                 except AttributeError:
                     audio_clip = audio_clip.subclip(0, video_duration)
+        # Trim video to audio length
+        elif subclip_safely:
+            final_video = subclip_safely(final_video, 0, audio_duration, compatibility_info)
         else:
-            # Trim video to audio length  
-            if subclip_safely:
-                final_video = subclip_safely(final_video, 0, audio_duration, compatibility_info)
-            else:
-                # Fallback: try both modern and legacy API for video
-                try:
-                    final_video = final_video.subclipped(0, audio_duration)
-                except AttributeError:
-                    final_video = final_video.subclip(0, audio_duration)
-        
+            # Fallback: try both modern and legacy API for video
+            try:
+                final_video = final_video.subclipped(0, audio_duration)
+            except AttributeError:
+                final_video = final_video.subclip(0, audio_duration)
+
         # Apply musical fade-out if we have beat information with robust error handling
         if avg_beat_interval and audio_duration > video_duration:
             # Calculate fade duration (2-4 beats, max 3 seconds)
             fade_duration = min(avg_beat_interval * 3, 3.0)
-            print(f"Applying musical fade-out: {fade_duration:.2f}s")
             try:
                 # Apply fade operations with MoviePy API compatibility
-                print("DEBUG: Applying audio fade operations with compatibility handling...")
-                
+
                 # Try modern MoviePy 2.x effects system first
                 try:
                     from moviepy.audio.fx import AudioFadeIn, AudioFadeOut
                     # MoviePy 2.x: Apply effects using with_effects() method
                     audio_clip = audio_clip.with_effects([
                         AudioFadeIn(0.1),
-                        AudioFadeOut(fade_duration)
+                        AudioFadeOut(fade_duration),
                     ])
-                    print("DEBUG: Used modern MoviePy 2.x effects for audio fades")
                 except ImportError:
                     # Fallback to legacy methods if available
                     try:
-                        if hasattr(audio_clip, 'audio_fadein') and hasattr(audio_clip, 'audio_fadeout'):
+                        if hasattr(audio_clip, "audio_fadein") and hasattr(audio_clip, "audio_fadeout"):
                             audio_clip = audio_clip.audio_fadein(0.1).audio_fadeout(fade_duration)
-                            print("DEBUG: Used legacy audio_fadein/audio_fadeout methods")
                         else:
-                            print("DEBUG: Audio fade methods not available, skipping fades")
+                            pass
                     except Exception as legacy_error:
-                        print(f"DEBUG: Legacy fade methods failed: {legacy_error}")
-                        
-                print("DEBUG: Audio fade operations completed successfully")
+                        pass
+
             except Exception as fade_error:
-                print(f"WARNING: Audio fade operations failed: {fade_error}")
-                print("DEBUG: Continuing without audio fades to prevent proc errors")
+                pass
                 # Continue without fades rather than failing completely - this prevents
                 # the creation of new FFMPEG_AudioReader instances that could trigger proc errors
-        
+
         # Attach audio to video with MoviePy API compatibility
-        print("DEBUG: Attaching audio to video with compatibility handling...")
         try:
             if compatibility_info and attach_audio_safely:
                 # Use the compatibility layer if available
                 final_video = attach_audio_safely(final_video, audio_clip, compatibility_info)
-                print("DEBUG: Used attach_audio_safely compatibility function")
             else:
                 # Try multiple methods for audio attachment
                 try:
                     # Try modern MoviePy 2.x method first
                     final_video = final_video.with_audio(audio_clip)
-                    print("DEBUG: Used with_audio method")
                 except AttributeError:
                     try:
                         # Fallback to legacy set_audio method
                         final_video = final_video.set_audio(audio_clip)
-                        print("DEBUG: Used set_audio method")
                     except AttributeError:
-                        print("WARNING: Neither with_audio nor set_audio methods available")
-                        print(f"DEBUG: final_video type: {type(final_video)}")
-                        print(f"DEBUG: Available methods: {[m for m in dir(final_video) if 'audio' in m.lower()]}")
                         raise RuntimeError(f"Cannot attach audio to {type(final_video)} - no compatible method found")
         except Exception as audio_attach_error:
-            print(f"ERROR: Failed to attach audio: {audio_attach_error}")
             raise RuntimeError(f"Failed to attach audio to video: {audio_attach_error}")
-        
+
         if progress_callback:
             progress_callback("Encoding video", 0.7)
-        
+
         # Get optimal encoding settings
         try:
             encoder = VideoEncoder()
@@ -3174,7 +2900,7 @@ def render_video(
             # Fallback encoding settings
             moviepy_params = {"codec": "libx264", "bitrate": "5000k", "audio_codec": "aac"}
             ffmpeg_params = ["-preset", "medium", "-crf", "23"]
-        
+
         # Prepare encoding parameters
         encoding_params = {
             **moviepy_params,
@@ -3184,93 +2910,85 @@ def render_video(
             "verbose": False,
             "logger": None,
         }
-        
+
         # Create output directory
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
+
         # Encode video with compatibility layer
         try:
-            from compatibility.moviepy import write_videofile_safely, check_moviepy_api_compatibility
+            from compatibility.moviepy import (
+                check_moviepy_api_compatibility,
+                write_videofile_safely,
+            )
             compatibility_info = check_moviepy_api_compatibility()
-            
+
             write_videofile_safely(
                 final_video,
                 output_path,
                 compatibility_info,
-                **encoding_params
+                **encoding_params,
             )
         except ImportError:
             # Fallback if compatibility module not available
             final_video.write_videofile(output_path, **encoding_params)
-        
+
         if progress_callback:
             progress_callback("Video rendering complete", 1.0)
-        
+
         # Clean up clips and resource manager
-        print("DEBUG: Cleaning up video resources...")
-        
+
         # Clean up resource manager (prevents proc errors)
         try:
-            if 'resource_manager' in locals():
+            if "resource_manager" in locals():
                 resource_manager.cleanup_all()
-                print("DEBUG: Resource manager cleaned up successfully")
         except Exception as cleanup_error:
-            print(f"WARNING: Resource manager cleanup failed: {cleanup_error}")
-        
+            pass
+
         # Clean up individual clips
         for clip in video_clips:
-            try:
+            with contextlib.suppress(builtins.BaseException):
                 clip.close()
-            except:
-                pass
-                
+
         # Enhanced audio cleanup to prevent proc errors
-        print("DEBUG: Cleaning up audio resources...")
         try:
             # Close audio clip and any internal readers
-            if hasattr(audio_clip, 'close'):
+            if hasattr(audio_clip, "close"):
                 audio_clip.close()
-                print("DEBUG: Audio clip closed successfully")
-            
+
             # Additional cleanup for FFMPEG_AudioReader instances
-            if hasattr(audio_clip, 'reader') and hasattr(audio_clip.reader, 'proc'):
-                try:
+            if hasattr(audio_clip, "reader") and hasattr(audio_clip.reader, "proc"):
+                with contextlib.suppress(builtins.BaseException):
                     audio_clip.reader.proc.terminate()
-                    print("DEBUG: Audio reader process terminated")
-                except:
-                    pass
-                    
+
         except Exception as audio_cleanup_error:
-            print(f"WARNING: Audio cleanup failed: {audio_cleanup_error}")
-        
+            pass
+
         # Clean up final video
         try:
-            if hasattr(final_video, 'close'):
+            if hasattr(final_video, "close"):
                 final_video.close()
-                print("DEBUG: Final video closed successfully")
         except Exception as video_cleanup_error:
-            print(f"WARNING: Video cleanup failed: {video_cleanup_error}")
-        
-        print(f"✅ Video rendered successfully: {output_path}")
+            pass
+
         return output_path
-        
+
     except Exception as e:
-        raise RuntimeError(f"Failed to render video: {str(e)}")
+        raise RuntimeError(f"Failed to render video: {e!s}")
 
 
 def add_transitions(
-    clips: List[VideoFileClip], transition_duration: float = 0.5
+    clips: List[VideoFileClip], transition_duration: float = 0.5,
 ) -> VideoFileClip:
     """Add crossfade transitions between clips - REFACTORED.
-    
+
     This function now delegates to the new modular TransitionEngine
     extracted as part of Phase 3 refactoring while maintaining full
     backward compatibility with existing AutoCut code.
-    
+
     Args:
         clips: List of video clips
         transition_duration: Duration of crossfade in seconds
-        
+
     Returns:
         Composite video with transitions
     """
@@ -3280,15 +2998,15 @@ def add_transitions(
             from video.rendering import add_transitions as add_transitions_modular
         except ImportError:
             from .video.rendering import add_transitions as add_transitions_modular
-        
+
         # Delegate to the new modular system
         return add_transitions_modular(clips, transition_duration)
-        
+
     except ImportError:
         # Fallback to legacy implementation if modules not available
         raise RuntimeError("New transition system not available - refactoring incomplete")
     except Exception as e:
-        raise RuntimeError(f"Transition creation failed: {str(e)}")
+        raise RuntimeError(f"Transition creation failed: {e!s}")
 
 
 def assemble_clips(
@@ -3296,7 +3014,7 @@ def assemble_clips(
     audio_file: str,
     output_path: str,
     pattern: str = "balanced",
-    max_workers: int = None,
+    max_workers: Optional[int] = None,
     progress_callback: Optional[callable] = None,
 ) -> str:
     """Main function to assemble clips into final video.
@@ -3324,18 +3042,18 @@ def assemble_clips(
         ValueError: If no suitable clips found or invalid audio file
         RuntimeError: If rendering fails
     """
-    import os
     import logging
     import mimetypes
+    import os
     # Dual import pattern for package/direct execution compatibility
     try:
         from audio_analyzer import analyze_audio
-        from video_analyzer import analyze_video_file
         from video.format_analyzer import VideoFormatAnalyzer
+        from video_analyzer import analyze_video_file
     except ImportError:
         from .audio_analyzer import analyze_audio
-        from .video_analyzer import analyze_video_file
         from .video.format_analyzer import VideoFormatAnalyzer
+        from .video_analyzer import analyze_video_file
 
     def validate_audio_file_comprehensive(audio_path: str) -> tuple:
         """Comprehensive audio file validation before processing.
@@ -3412,17 +3130,17 @@ def assemble_clips(
                 # These are warnings, not fatal errors
                 logger = logging.getLogger("autocut.clip_assembler")
                 logger.warning(
-                    f"⚠️  Audio path has potential issues: {'; '.join(path_issues)}"
+                    f"⚠️  Audio path has potential issues: {'; '.join(path_issues)}",
                 )
                 logger.warning(f"   Path: {audio_path}")
                 logger.warning(
-                    f"   Will attempt to process but may encounter issues..."
+                    "   Will attempt to process but may encounter issues...",
                 )
 
             return True, None
 
         except Exception as e:
-            return False, f"Unexpected error validating audio file: {str(e)}"
+            return False, f"Unexpected error validating audio file: {e!s}"
 
     # Set up detailed logging for the main pipeline
     logger = logging.getLogger("autocut.clip_assembler")
@@ -3431,7 +3149,7 @@ def assemble_clips(
     if not logger.handlers:
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
@@ -3452,7 +3170,7 @@ def assemble_clips(
         "errors": [],
     }
 
-    logger.info(f"=== AutoCut Video Processing Started ===")
+    logger.info("=== AutoCut Video Processing Started ===")
     logger.info(f"Input videos: {len(video_files)} files")
     logger.info(f"Audio file: {os.path.basename(audio_file)}")
     logger.info(f"Output path: {output_path}")
@@ -3462,7 +3180,7 @@ def assemble_clips(
     logger.info("Validating input files...")
 
     # Validate audio file with comprehensive checks
-    logger.info(f"🔍 Comprehensive audio file validation...")
+    logger.info("🔍 Comprehensive audio file validation...")
     audio_valid, audio_error = validate_audio_file_comprehensive(audio_file)
     if not audio_valid:
         error_msg = f"Audio validation failed: {audio_error}"
@@ -3470,7 +3188,7 @@ def assemble_clips(
         processing_summary["errors"].append(error_msg)
         raise ValueError(error_msg)
 
-    logger.info(f"   ✅ Audio file validation passed")
+    logger.info("   ✅ Audio file validation passed")
     logger.info(f"   📁 File: {os.path.basename(audio_file)}")
     logger.info(f"   📊 Size: {os.path.getsize(audio_file) / (1024 * 1024):.2f}MB")
 
@@ -3498,21 +3216,21 @@ def assemble_clips(
         try:
             audio_data = analyze_audio(audio_file)
         except FileNotFoundError as e:
-            error_msg = f"Audio file access error during analysis: {str(e)}"
-            logger.error(error_msg)
+            error_msg = f"Audio file access error during analysis: {e!s}"
+            logger.exception(error_msg)
             processing_summary["errors"].append(error_msg)
             raise ValueError(error_msg)
         except Exception as e:
-            error_msg = f"Audio analysis failed: {str(e)}"
-            logger.error(error_msg)
+            error_msg = f"Audio analysis failed: {e!s}"
+            logger.exception(error_msg)
 
             # Provide more helpful error messages for common issues
             if "No such file" in str(e) or "cannot find" in str(e).lower():
-                error_msg += f" (Check if audio file path is correct and accessible)"
+                error_msg += " (Check if audio file path is correct and accessible)"
             elif "format" in str(e).lower() or "codec" in str(e).lower():
-                error_msg += f" (Audio file may be corrupted or in unsupported format)"
+                error_msg += " (Audio file may be corrupted or in unsupported format)"
             elif "permission" in str(e).lower() or "access" in str(e).lower():
-                error_msg += f" (Check file permissions)"
+                error_msg += " (Check file permissions)"
 
             processing_summary["errors"].append(error_msg)
             raise ValueError(error_msg)
@@ -3530,15 +3248,15 @@ def assemble_clips(
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        logger.info(f"✅ Audio analysis successful:")
+        logger.info("✅ Audio analysis successful:")
         logger.info(f"  - Beats detected: {len(beats)}")
         logger.info(f"  - Musical start: {musical_start_time:.2f}s")
         logger.info(f"  - Intro duration: {intro_duration:.2f}s")
         report_progress("Audio analysis complete", 0.2)
 
     except Exception as e:
-        error_msg = f"Failed to analyze audio file: {str(e)}"
-        logger.error(error_msg)
+        error_msg = f"Failed to analyze audio file: {e!s}"
+        logger.exception(error_msg)
         processing_summary["errors"].append(error_msg)
         raise RuntimeError(error_msg)
 
@@ -3580,14 +3298,14 @@ def assemble_clips(
                 processing_summary["total_chunks"] += len(video_chunks)
 
                 logger.info(
-                    f"✅ {filename}: {len(video_chunks)} chunks created ({processing_time:.2f}s)"
+                    f"✅ {filename}: {len(video_chunks)} chunks created ({processing_time:.2f}s)",
                 )
 
                 # Log chunk quality summary
                 if video_chunks:
                     scores = [chunk.score for chunk in video_chunks]
                     logger.info(
-                        f"   Chunk scores: {min(scores):.1f}-{max(scores):.1f} (avg: {sum(scores) / len(scores):.1f})"
+                        f"   Chunk scores: {min(scores):.1f}-{max(scores):.1f} (avg: {sum(scores) / len(scores):.1f})",
                     )
             else:
                 file_result["status"] = "failed"
@@ -3597,9 +3315,9 @@ def assemble_clips(
                 processing_summary["videos_failed"] += 1
 
                 logger.error(
-                    f"❌ {filename}: No chunks created ({processing_time:.2f}s)"
+                    f"❌ {filename}: No chunks created ({processing_time:.2f}s)",
                 )
-                logger.error(f"   → This video will be excluded from the final output")
+                logger.error("   → This video will be excluded from the final output")
 
         except Exception as e:
             processing_time = time.time() - start_time
@@ -3607,11 +3325,11 @@ def assemble_clips(
             file_result["status"] = "failed"
             file_result["error_message"] = str(e)
             processing_summary["videos_failed"] += 1
-            processing_summary["errors"].append(f"{filename}: {str(e)}")
+            processing_summary["errors"].append(f"{filename}: {e!s}")
 
-            logger.error(f"❌ {filename}: Processing failed ({processing_time:.2f}s)")
-            logger.error(f"   Error: {str(e)}")
-            logger.error(f"   → This video will be excluded from the final output")
+            logger.exception(f"❌ {filename}: Processing failed ({processing_time:.2f}s)")
+            logger.exception(f"   Error: {e!s}")
+            logger.exception("   → This video will be excluded from the final output")
 
         processing_summary["file_results"].append(file_result)
 
@@ -3632,7 +3350,7 @@ def assemble_clips(
         for file_result in processing_summary["file_results"]:
             if file_result["status"] == "failed":
                 logger.warning(
-                    f"  - {file_result['filename']}: {file_result['error_message']}"
+                    f"  - {file_result['filename']}: {file_result['error_message']}",
                 )
 
     # Check if we have any usable content
@@ -3645,7 +3363,7 @@ def assemble_clips(
             f"  - Total chunks created: {processing_summary['total_chunks']}\n"
             f"\nDetailed errors:\n"
             + "\n".join(
-                [f"  - {error}" for error in processing_summary["errors"][-10:]]
+                [f"  - {error}" for error in processing_summary["errors"][-10:]],
             )  # Last 10 errors
         )
         logger.error(error_msg)
@@ -3659,58 +3377,58 @@ def assemble_clips(
 
     if success_rate < 50:
         logger.warning(
-            f"⚠️  Low success rate ({success_rate:.1f}%) - check video format compatibility"
+            f"⚠️  Low success rate ({success_rate:.1f}%) - check video format compatibility",
         )
 
     report_progress(
-        f"Video analysis complete: {len(all_video_chunks)} clips found", 0.6
+        f"Video analysis complete: {len(all_video_chunks)} clips found", 0.6,
     )
 
     # Step 2.5: CANVAS ANALYSIS - CRITICAL FIX for letterboxing issue
     logger.info("=== Step 2.5: Canvas Format Analysis ===")
     report_progress("Analyzing optimal canvas format", 0.65)
-    
+
     try:
         # Initialize the VideoFormatAnalyzer
         format_analyzer = VideoFormatAnalyzer()
-        
+
         # Analyze all video chunks to determine optimal canvas
         logger.info(f"🎯 Analyzing {len(all_video_chunks)} video clips for optimal canvas...")
-        
+
         canvas_format = format_analyzer.determine_optimal_canvas(all_video_chunks)
-        
+
         # Log the canvas analysis results
-        logger.info(f"✅ Canvas analysis complete:")
+        logger.info("✅ Canvas analysis complete:")
         logger.info(f"   🎬 Canvas type: {canvas_format['canvas_type']}")
         logger.info(f"   📐 Target dimensions: {canvas_format['target_width']}x{canvas_format['target_height']}")
-        logger.info(f"   📊 Content breakdown:")
+        logger.info("   📊 Content breakdown:")
         logger.info(f"      - Landscape: {canvas_format['analysis']['landscape_count']} clips ({canvas_format['analysis']['landscape_ratio']*100:.1f}%)")
         logger.info(f"      - Portrait: {canvas_format['analysis']['portrait_count']} clips ({canvas_format['analysis']['portrait_ratio']*100:.1f}%)")
         logger.info(f"      - Square: {canvas_format['analysis']['square_count']} clips ({canvas_format['analysis']['square_ratio']*100:.1f}%)")
         logger.info(f"   💡 Strategy: {canvas_format['description']}")
-        
+
         # Log letterboxing expectations
-        if canvas_format.get('letterboxing_analysis'):
-            logger.info(f"   📺 Letterboxing analysis:")
-            for info in canvas_format['letterboxing_analysis']:
+        if canvas_format.get("letterboxing_analysis"):
+            logger.info("   📺 Letterboxing analysis:")
+            for info in canvas_format["letterboxing_analysis"]:
                 logger.info(f"      - {info}")
         else:
-            logger.info(f"   ✅ Minimal letterboxing expected - optimal aspect ratio match")
+            logger.info("   ✅ Minimal letterboxing expected - optimal aspect ratio match")
 
         report_progress("Canvas analysis complete", 0.7)
-        
+
     except Exception as e:
-        error_msg = f"Canvas analysis failed: {str(e)}"
-        logger.error(error_msg)
+        error_msg = f"Canvas analysis failed: {e!s}"
+        logger.exception(error_msg)
         logger.warning("Falling back to default 16:9 canvas (1920x1080)")
-        
+
         # Fallback canvas format
         canvas_format = {
             "target_width": 1920,
             "target_height": 1080,
             "canvas_type": "fallback_16_9",
             "description": "Fallback 16:9 canvas due to analysis failure",
-            "target_fps": 25
+            "target_fps": 25,
         }
 
     # Step 3: Match clips to beats
@@ -3731,26 +3449,26 @@ def assemble_clips(
             raise ValueError(error_msg)
 
         logger.info(
-            f"✅ Beat matching successful: {len(timeline.clips)} clips selected"
+            f"✅ Beat matching successful: {len(timeline.clips)} clips selected",
         )
 
         # Log timeline statistics
         timeline_stats = timeline.get_summary_stats()
-        logger.info(f"Timeline statistics:")
+        logger.info("Timeline statistics:")
         logger.info(f"  - Total duration: {timeline_stats['total_duration']:.2f}s")
         logger.info(f"  - Average score: {timeline_stats['avg_score']:.1f}")
         logger.info(
-            f"  - Score range: {timeline_stats['score_range'][0]:.1f}-{timeline_stats['score_range'][1]:.1f}"
+            f"  - Score range: {timeline_stats['score_range'][0]:.1f}-{timeline_stats['score_range'][1]:.1f}",
         )
         logger.info(f"  - Unique videos used: {timeline_stats['unique_videos']}")
 
         report_progress(
-            f"Beat matching complete: {len(timeline.clips)} clips selected", 0.8
+            f"Beat matching complete: {len(timeline.clips)} clips selected", 0.8,
         )
 
     except Exception as e:
-        error_msg = f"Failed to match clips to beats: {str(e)}"
-        logger.error(error_msg)
+        error_msg = f"Failed to match clips to beats: {e!s}"
+        logger.exception(error_msg)
         raise RuntimeError(error_msg)
 
     # Step 4: Render final video
@@ -3788,25 +3506,25 @@ def assemble_clips(
         # Final success summary
         logger.info("=== AutoCut Processing Complete ===")
         logger.info(
-            f"✅ Successfully created video: {os.path.basename(final_video_path)}"
+            f"✅ Successfully created video: {os.path.basename(final_video_path)}",
         )
-        logger.info(f"📊 Processing summary:")
+        logger.info("📊 Processing summary:")
         logger.info(
-            f"  - Videos processed: {processing_summary['videos_successful']}/{processing_summary['total_videos']}"
-        )
-        logger.info(
-            f"  - Clips used: {len(timeline.clips)}/{processing_summary['total_chunks']}"
+            f"  - Videos processed: {processing_summary['videos_successful']}/{processing_summary['total_videos']}",
         )
         logger.info(
-            f"  - Final video duration: {timeline_stats['total_duration']:.2f}s"
+            f"  - Clips used: {len(timeline.clips)}/{processing_summary['total_chunks']}",
+        )
+        logger.info(
+            f"  - Final video duration: {timeline_stats['total_duration']:.2f}s",
         )
         logger.info(f"  - Canvas format: {canvas_format['canvas_type']} ({canvas_format['target_width']}x{canvas_format['target_height']})")
 
         return final_video_path
 
     except Exception as e:
-        error_msg = f"Failed to render video: {str(e)}"
-        logger.error(error_msg)
+        error_msg = f"Failed to render video: {e!s}"
+        logger.exception(error_msg)
         raise RuntimeError(error_msg)
 
     # Export timeline JSON for debugging (optional)
@@ -3829,7 +3547,7 @@ def assemble_clips(
 
 def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
     """Detect optimal codec settings for video encoding.
-    
+
     Returns:
         Tuple containing:
         - Dictionary of MoviePy parameters for write_videofile()
@@ -3847,19 +3565,19 @@ def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
             "audio_codec": "aac",
             "audio_bitrate": "128k",
         }
-        
+
         ffmpeg_params = [
             "-preset", "medium",
             "-crf", "23",
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
         ]
-        
+
         return moviepy_params, ffmpeg_params
 
 
 def detect_optimal_codec_settings_with_diagnostics() -> Tuple[
-    Dict[str, Any], List[str], Dict[str, str]
+    Dict[str, Any], List[str], Dict[str, str],
 ]:
     """Enhanced codec settings detection with full diagnostic information.
 
@@ -3879,12 +3597,8 @@ def detect_optimal_codec_settings_with_diagnostics() -> Tuple[
         diagnostics = {
             "encoder_type": "FALLBACK",
             "hardware_acceleration": "false",
-            "platform": "unknown"
+            "platform": "unknown",
         }
         return moviepy_params, ffmpeg_params, diagnostics
 
 
-if __name__ == "__main__":
-    # Test script for clip assembly
-    print("AutoCut Clip Assembler - Test Mode")
-    print("TODO: Add test with sample files")

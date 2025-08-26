@@ -25,24 +25,28 @@ from .assembly.clip_selector import VideoChunk
 
 # Import extracted video processing classes
 try:
+    from .encoder import (
+        VideoEncoder,
+        detect_optimal_codec_settings,
+        detect_optimal_codec_settings_with_diagnostics,
+    )
     from .format_analyzer import VideoFormatAnalyzer
     from .normalization import VideoNormalizationPipeline
     from .timeline_renderer import ClipTimeline, TimelineRenderer
-    from .encoder import VideoEncoder, detect_optimal_codec_settings, detect_optimal_codec_settings_with_diagnostics
 except ImportError as e:
-    print(f"Warning: Could not import extracted video classes: {e}")
+    pass
 
 # Version information
 __version__ = "2.0.0"
 __author__ = "AutoCut Development Team"
 
 __all__ = [
-    'VideoChunk',
-    'VideoFormatAnalyzer', 
-    'VideoNormalizationPipeline',
-    'ClipTimeline',
-    'TimelineRenderer',
-    'VideoEncoder',
-    'detect_optimal_codec_settings',
-    'detect_optimal_codec_settings_with_diagnostics'
+    "ClipTimeline",
+    "TimelineRenderer",
+    "VideoChunk",
+    "VideoEncoder",
+    "VideoFormatAnalyzer",
+    "VideoNormalizationPipeline",
+    "detect_optimal_codec_settings",
+    "detect_optimal_codec_settings_with_diagnostics",
 ]

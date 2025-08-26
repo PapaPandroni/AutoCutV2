@@ -16,14 +16,13 @@ Original strategies consolidated:
 """
 
 import os
-import threading
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Union, Callable
+from typing import Any, Dict, List, Optional, Tuple
 
 from moviepy import VideoFileClip
 
@@ -40,12 +39,12 @@ except ImportError:
 
 try:
     from core.exceptions import (
+        TranscodingError,
         VideoProcessingError,
         iPhoneCompatibilityError,
-        TranscodingError,
         raise_validation_error,
     )
-    from core.logging_config import get_logger, log_performance, LoggingContext
+    from core.logging_config import LoggingContext, get_logger, log_performance
 except ImportError:
     # Fallback for testing without proper package structure
     import logging
@@ -57,7 +56,7 @@ except ImportError:
         def __init__(self, msg): pass
         def __enter__(self): return self
         def __exit__(self, *args): pass
-    
+
     class VideoProcessingError(Exception):
         pass
     class iPhoneCompatibilityError(Exception):
@@ -66,8 +65,8 @@ except ImportError:
         pass
     def raise_validation_error(msg):
         raise Exception(msg)
-from .resource_manager import VideoResourceManager, MemoryMonitor
 from .cache import VideoCache
+from .resource_manager import VideoResourceManager
 
 
 @dataclass
@@ -114,13 +113,13 @@ class ClipSpec:
 
     def get_video_resolution(self) -> Tuple[int, int]:
         """Get video resolution (width, height) with caching to avoid repeated detection.
-        
+
         Returns:
             Tuple of (width, height)
         """
         if self._resolution_cache is not None:
             return self._resolution_cache
-            
+
         try:
             # Quick resolution detection using MoviePy without loading full clip
             from moviepy import VideoFileClip
@@ -133,27 +132,27 @@ class ClipSpec:
             logger.warning(f"Failed to detect resolution for {self.file_path}: {e}, assuming HD")
             self._resolution_cache = (1920, 1080)
             return self._resolution_cache
-    
+
     def get_memory_complexity_factor(self) -> float:
         """Calculate memory complexity factor based on resolution.
-        
+
         Returns:
             Multiplier for memory estimation (1.0 = HD baseline, 4.0 = 4K, etc.)
         """
         width, height = self.get_video_resolution()
         pixels = width * height
-        
+
         # Define resolution tiers for memory estimation
         hd_pixels = 1920 * 1080  # ~2.1M pixels (baseline)
-        
+
         if pixels <= hd_pixels:
             return 1.0  # HD baseline
-        elif pixels <= hd_pixels * 2:  # ~4M pixels (2K range)
-            return 2.0  
-        elif pixels <= hd_pixels * 4:  # ~8M pixels (4K range) 
+        if pixels <= hd_pixels * 2:  # ~4M pixels (2K range)
+            return 2.0
+        if pixels <= hd_pixels * 4:  # ~8M pixels (4K range)
             return 4.0
-        else:  # 8K or higher
-            return 8.0
+        # 8K or higher
+        return 8.0
 
     def __str__(self) -> str:
         return f"ClipSpec({Path(self.file_path).name}, {self.start_time:.2f}-{self.end_time:.2f}s)"
@@ -185,20 +184,20 @@ class LoadingStrategyType(Enum):
 
 class VideoCache:
     """Cache for parent video objects to prevent reader corruption in MoviePy 2.x.
-    
+
     Maintains references to source VideoFileClip objects throughout the processing
     pipeline to prevent the 'NoneType' object has no attribute 'get_frame' error
     that occurs when subclipped videos lose their parent reader references.
     """
-    
+
     def __init__(self):
         self._cache = {}  # filepath -> VideoFileClip
         self._parent_videos = {}  # Cache for parent video objects to prevent reader corruption
         self.logger = get_logger(__name__)
-    
+
     def get_or_load_parent_video(self, filepath: str):
         """Get cached parent video or load new one if not cached.
-        
+
         This is the CRITICAL fix for MoviePy 2.x reader corruption - we maintain
         parent video references to prevent subclipped videos from losing their readers.
         """
@@ -209,61 +208,66 @@ class VideoCache:
             except ImportError:
                 # Fallback: create minimal function for basic MoviePy import
                 def import_moviepy_safely():
-                    from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                    from moviepy.editor import (
+                        AudioFileClip,
+                        CompositeVideoClip,
+                        VideoFileClip,
+                        concatenate_videoclips,
+                    )
                     return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
-            
+
             VideoFileClip, _, _, _ = import_moviepy_safely()
-            
+
             self.logger.debug(f"Loading parent video into cache: {filepath}")
             self._parent_videos[filepath] = VideoFileClip(filepath)
-        
+
         return self._parent_videos[filepath]
-    
+
     def get_or_load(self, filepath: str):
         """Legacy method for compatibility."""
         return self.get_or_load_parent_video(filepath)
-    
+
     def get(self, cache_key: str):
         """Get cached clip by cache key."""
         return self._cache.get(cache_key)
-    
+
     def put(self, cache_key: str, clip, estimated_size_mb: float):
         """Put clip in cache with estimated size."""
         self._cache[cache_key] = clip
         self.logger.debug(f"Cached clip: {cache_key} ({estimated_size_mb}MB)")
-    
+
     def get_stats(self):
         """Get cache statistics."""
         return {
-            'cached_clips': len(self._cache),
-            'parent_videos': len(self._parent_videos)
+            "cached_clips": len(self._cache),
+            "parent_videos": len(self._parent_videos),
         }
-    
+
     def clear(self):
         """Clear cache and close all video objects.
-        
+
         IMPORTANT: This should only be called when the entire processing pipeline
         is complete to avoid causing NoneType reader errors.
         """
         # First clear regular clip cache
         self._cache.clear()
-        
+
         # Then close parent videos (this is safe to do at the end)
         for filepath, clip in self._parent_videos.items():
             try:
-                if hasattr(clip, 'close'):
+                if hasattr(clip, "close"):
                     clip.close()
                 self.logger.debug(f"Closed parent video: {filepath}")
             except Exception as e:
                 self.logger.warning(f"Failed to close parent video {filepath}: {e}")
-        
+
         self._parent_videos.clear()
-    
+
     def clear_clips_only(self):
         """Clear only the clips cache, keeping parent videos alive."""
         self._cache.clear()
         self.logger.debug("Cleared clips cache, keeping parent videos alive")
-    
+
     def __len__(self):
         return len(self._cache) + len(self._parent_videos)
 
@@ -298,7 +302,6 @@ class VideoLoadingStrategy(ABC):
         Raises:
             VideoProcessingError: If loading fails
         """
-        pass
 
     def get_stats(self) -> Dict[str, Any]:
         """Get loading statistics for monitoring."""
@@ -307,22 +310,22 @@ class VideoLoadingStrategy(ABC):
 
     def _estimate_memory_requirements(self, spec: ClipSpec) -> float:
         """Estimate memory requirements for a clip with resolution awareness.
-        
+
         CRITICAL FIX: Now accounts for 4K vs HD content properly to prevent
         memory buildup that was causing 42% success rates.
-        
+
         Args:
             spec: Clip specification
-            
+
         Returns:
             Estimated memory requirement in MB
         """
         # Base memory for video loading overhead
         base_memory_mb = 20.0
-        
+
         # Estimate based on clip duration (most reliable indicator)
         duration = spec.duration
-        
+
         # Base duration patterns for HD content
         if duration <= 5.0:
             duration_factor = 30.0 + (duration * 4.0)  # 30-50 MB
@@ -330,7 +333,7 @@ class VideoLoadingStrategy(ABC):
             duration_factor = 50.0 + ((duration - 5.0) * 5.0)  # 50-100 MB
         else:
             duration_factor = 100.0 + min((duration - 15.0) * 3.0, 100.0)  # 100-200 MB max
-        
+
         # CRITICAL: Apply resolution complexity factor (4K = 4x memory)
         try:
             complexity_factor = spec.get_memory_complexity_factor()
@@ -341,22 +344,22 @@ class VideoLoadingStrategy(ABC):
             complexity_factor = 1.0
             width, height = (1920, 1080)
             resolution_adjusted_factor = duration_factor
-        
+
         # Quality score adjustment (higher quality = more memory)
         quality_factor = 1.0 + (spec.quality_score * 0.3)  # Up to 30% more for high quality
-        
+
         total_memory = base_memory_mb + (resolution_adjusted_factor * quality_factor)
-        
+
         # Clamp to reasonable bounds - higher ceiling for 4K content
         max_memory = 1000.0 if complexity_factor >= 4.0 else 500.0  # 4K gets higher limit
         total_memory = max(25.0, min(total_memory, max_memory))
-        
+
         self.logger.debug(
             f"Memory estimate for {spec}: {total_memory:.1f}MB "
             f"(duration: {duration:.1f}s, resolution: {width}x{height}, "
-            f"complexity: {complexity_factor:.1f}x, quality: {spec.quality_score:.2f})"
+            f"complexity: {complexity_factor:.1f}x, quality: {spec.quality_score:.2f})",
         )
-        
+
         return total_memory
 
     def _load_single_clip(self, spec: ClipSpec) -> LoadedClip:
@@ -388,11 +391,11 @@ class VideoLoadingStrategy(ABC):
                 # Validate clip after loading
                 if clip is None:
                     raise VideoProcessingError(f"Loaded clip is None for {spec}")
-                
+
                 # Test clip properties
                 try:
-                    duration = getattr(clip, 'duration', None)
-                    size = getattr(clip, 'size', None)
+                    duration = getattr(clip, "duration", None)
+                    size = getattr(clip, "size", None)
                     if duration is None or size is None:
                         raise VideoProcessingError(f"Loaded clip has invalid properties: duration={duration}, size={size}")
                     self.logger.debug(f"Loaded clip validated: {duration:.2f}s, {size}")
@@ -431,44 +434,44 @@ class VideoLoadingStrategy(ABC):
 
     def _aggressive_memory_cleanup(self, clip_spec: ClipSpec) -> None:
         """Perform aggressive memory cleanup after loading each clip.
-        
+
         CRITICAL FIX: Forces immediate memory release to prevent the buildup
         that was causing 42% success rates at 88% memory usage.
-        
+
         Args:
             clip_spec: The clip that was just loaded (for logging)
         """
         import gc
-        
+
         try:
             # Force multiple generations of garbage collection
             collected_objects = 0
             for generation in range(3):
                 collected = gc.collect(generation)
                 collected_objects += collected
-            
+
             # Clear any temporary MoviePy caches if accessible
             try:
                 # MoviePy sometimes keeps internal caches - try to clear them
                 import moviepy.editor
-                if hasattr(moviepy.editor, 'VideoFileClip'):
+                if hasattr(moviepy.editor, "VideoFileClip"):
                     # Clear any class-level caches if they exist
                     pass
             except:
                 pass  # Ignore cache clearing errors
-            
+
             # Log cleanup results
             if collected_objects > 0:
                 self.logger.debug(
-                    f"Aggressive cleanup after {clip_spec}: freed {collected_objects} objects"
+                    f"Aggressive cleanup after {clip_spec}: freed {collected_objects} objects",
                 )
-            
+
         except Exception as e:
             self.logger.warning(f"Aggressive cleanup failed for {clip_spec}: {e}")
-    
+
     def _check_system_memory_pressure(self) -> bool:
         """Check actual system memory pressure beyond our allocation tracking.
-        
+
         Returns:
             True if system memory pressure is critical (>88%)
         """
@@ -481,7 +484,7 @@ class VideoLoadingStrategy(ABC):
 
     def _load_clip_from_disk(self, spec: ClipSpec) -> VideoFileClip:
         """Load clip from disk with MoviePy 2.x reader corruption prevention.
-        
+
         CRITICAL FIX: Uses parent video cache to prevent the NoneType get_frame error
         that occurs when subclipped videos lose their parent reader references.
         """
@@ -502,9 +505,9 @@ class VideoLoadingStrategy(ABC):
                         clip = parent_video.subclip(spec.start_time, spec.end_time)
                         self.logger.debug(f"Subclip created using subclip() for {spec}")
                     except AttributeError:
-                        self.logger.error(f"Neither subclipped nor subclip available for {spec}")
+                        self.logger.exception(f"Neither subclipped nor subclip available for {spec}")
                         raise
-                
+
                 # Validate the subclip can access frames
                 try:
                     test_frame = clip.get_frame(0)
@@ -512,14 +515,14 @@ class VideoLoadingStrategy(ABC):
                         raise RuntimeError(f"Subclip get_frame returned None for {spec}")
                     self.logger.debug(f"Subclip validation successful for {spec}")
                 except Exception as e:
-                    self.logger.error(f"Subclip validation failed for {spec}: {e}")
+                    self.logger.exception(f"Subclip validation failed for {spec}: {e}")
                     raise
-                
+
                 # CRITICAL: DO NOT close or copy the clip - this breaks the reader reference
                 # The parent video must stay alive for the subclip to work
                 self.logger.debug(f"Keeping parent video alive for subclip: {spec}")
                 final_clip = clip
-                    
+
             else:
                 # Return full video without creating subclip
                 self.logger.debug(f"Using full video (no subclip needed) for {spec}")
@@ -529,11 +532,11 @@ class VideoLoadingStrategy(ABC):
             # Apply immediately during clip loading to prevent encoding issues
             # final_clip = self._standardize_clip_resolution(final_clip, spec)
             self.logger.debug(f"Resolution standardization temporarily disabled for {spec}")
-            
+
             return final_clip
 
         except Exception as e:
-            self.logger.error(f"Failed to load clip from disk for {spec}: {e}")
+            self.logger.exception(f"Failed to load clip from disk for {spec}: {e}")
             # Handle iPhone H.265 compatibility issues
             if "codec" in str(e).lower() or "h265" in str(e).lower():
                 raise iPhoneCompatibilityError(
@@ -541,42 +544,47 @@ class VideoLoadingStrategy(ABC):
                     file_path=spec.file_path,
                     details={"original_error": str(e)},
                 ) from e
-            else:
-                raise
+            raise
 
     def _standardize_clip_resolution(self, clip: VideoFileClip, spec: ClipSpec) -> VideoFileClip:
         """Standardize any input resolution to 1920x1080 with aspect ratio preservation.
-        
+
         Handles all input types:
         - Landscape videos: Scale to fit within 1920x1080, add black bars if needed
         - Portrait videos: Scale to full height (1080), add black bars on sides
         - Square videos: Center with black bars on all sides
-        
+
         Args:
             clip: The loaded video clip
             spec: ClipSpec for logging
-            
+
         Returns:
             Standardized clip at 1920x1080 resolution
         """
         TARGET_WIDTH = 1920
         TARGET_HEIGHT = 1080
         TARGET_FPS = 25
-        
+
         # Import required classes with proper error handling
         ColorClip_local = None
         CompositeVideoClip_local = None
-        
+
         try:
-            from moviepy.editor import ColorClip as ColorClip_local, CompositeVideoClip as CompositeVideoClip_local
+            from moviepy.editor import (
+                ColorClip as ColorClip_local,
+                CompositeVideoClip as CompositeVideoClip_local,
+            )
         except ImportError:
             try:
-                from moviepy import ColorClip as ColorClip_local, CompositeVideoClip as CompositeVideoClip_local
+                from moviepy import (
+                    ColorClip as ColorClip_local,
+                    CompositeVideoClip as CompositeVideoClip_local,
+                )
             except ImportError:
                 self.logger.warning(f"ColorClip/CompositeVideoClip not available - using basic scaling for {spec}")
                 ColorClip_local = None
                 CompositeVideoClip_local = None
-        
+
         # Import the correct MoviePy 2.x Resize effect
         try:
             from moviepy.video.fx.Resize import Resize
@@ -584,85 +592,83 @@ class VideoLoadingStrategy(ABC):
             try:
                 from moviepy.video.fx import Resize
             except ImportError:
-                self.logger.error(f"Cannot import Resize effect for MoviePy 2.x - falling back to original clip for {spec}")
+                self.logger.exception(f"Cannot import Resize effect for MoviePy 2.x - falling back to original clip for {spec}")
                 return clip
-        
+
         try:
             # Get current dimensions
             current_width, current_height = clip.size
             current_fps = clip.fps
-            
+
             self.logger.debug(f"Standardizing {spec}: {current_width}x{current_height} @ {current_fps}fps → {TARGET_WIDTH}x{TARGET_HEIGHT} @ {TARGET_FPS}fps")
-            
+
             # Calculate aspect ratios
             current_aspect = current_width / current_height
             target_aspect = TARGET_WIDTH / TARGET_HEIGHT  # 16:9 = 1.777...
-            
+
             if abs(current_aspect - target_aspect) < 0.01:
                 # Already 16:9 aspect ratio - just scale
                 self.logger.debug(f"Clip {spec} has 16:9 aspect ratio, scaling directly")
                 resized_clip = clip.with_effects([Resize((TARGET_WIDTH, TARGET_HEIGHT))])
-            
+
             elif current_aspect > target_aspect:
                 # Landscape video wider than 16:9 (e.g., ultrawide)
                 # Scale to fit width, add black bars top/bottom
                 new_height = int(TARGET_WIDTH / current_aspect)
                 self.logger.debug(f"Wide landscape {spec}: scaling to {TARGET_WIDTH}x{new_height}, adding top/bottom bars")
-                
+
                 scaled_clip = clip.with_effects([Resize((TARGET_WIDTH, new_height))])
-                
+
                 # Add black background if ColorClip is available
                 if ColorClip_local is not None and CompositeVideoClip_local is not None:
                     y_offset = (TARGET_HEIGHT - new_height) // 2
                     black_bg = ColorClip_local(size=(TARGET_WIDTH, TARGET_HEIGHT), color=(0, 0, 0), duration=scaled_clip.duration)
                     resized_clip = CompositeVideoClip_local([
-                        black_bg, 
-                        scaled_clip.with_position(('center', y_offset))
+                        black_bg,
+                        scaled_clip.with_position(("center", y_offset)),
                     ], size=(TARGET_WIDTH, TARGET_HEIGHT))
                 else:
                     # Fallback: Just scale and center without black bars
                     self.logger.warning(f"ColorClip unavailable - centering {spec} without black bars")
-                    resized_clip = scaled_clip.with_position('center').with_fps(TARGET_FPS)
+                    resized_clip = scaled_clip.with_position("center").with_fps(TARGET_FPS)
                     # Try to pad to target size using Resize effect
                     try:
                         resized_clip = resized_clip.with_effects([Resize((TARGET_WIDTH, TARGET_HEIGHT))])
                     except Exception as e:
                         self.logger.warning(f"Failed to resize to target dimensions for {spec}: {e}")
                         # If resize fails, keep the scaled clip as-is
-                        pass
-                
+
             else:
-                # Portrait or narrow video (current_aspect < target_aspect)  
+                # Portrait or narrow video (current_aspect < target_aspect)
                 # Scale to fit height, add black bars on sides
                 new_width = int(TARGET_HEIGHT * current_aspect)
                 self.logger.debug(f"Portrait/narrow {spec}: scaling to {new_width}x{TARGET_HEIGHT}, adding side bars")
-                
+
                 scaled_clip = clip.with_effects([Resize((new_width, TARGET_HEIGHT))])
-                
+
                 # Add black background if ColorClip is available
                 if ColorClip_local is not None and CompositeVideoClip_local is not None:
                     black_bg = ColorClip_local(size=(TARGET_WIDTH, TARGET_HEIGHT), color=(0, 0, 0), duration=scaled_clip.duration)
                     resized_clip = CompositeVideoClip_local([
-                        black_bg, 
-                        scaled_clip.with_position(('center', 'center'))
+                        black_bg,
+                        scaled_clip.with_position(("center", "center")),
                     ], size=(TARGET_WIDTH, TARGET_HEIGHT))
                 else:
                     # Fallback: Just scale and center without black bars
-                    self.logger.warning(f"ColorClip unavailable - centering {spec} without black bars")  
-                    resized_clip = scaled_clip.with_position('center').with_fps(TARGET_FPS)
+                    self.logger.warning(f"ColorClip unavailable - centering {spec} without black bars")
+                    resized_clip = scaled_clip.with_position("center").with_fps(TARGET_FPS)
                     # Try to pad to target size using Resize effect
                     try:
                         resized_clip = resized_clip.with_effects([Resize((TARGET_WIDTH, TARGET_HEIGHT))])
                     except Exception as e:
                         self.logger.warning(f"Failed to resize to target dimensions for {spec}: {e}")
                         # If resize fails, keep the scaled clip as-is
-                        pass
-            
+
             # Ensure target FPS
             if abs(current_fps - TARGET_FPS) > 0.1:
                 self.logger.debug(f"Adjusting FPS {spec}: {current_fps} → {TARGET_FPS}")
                 resized_clip = resized_clip.with_fps(TARGET_FPS)
-            
+
             # Verify final dimensions
             try:
                 final_width, final_height = resized_clip.size
@@ -673,13 +679,13 @@ class VideoLoadingStrategy(ABC):
             except:
                 # If size check fails, still return the clip
                 self.logger.warning(f"Could not verify final dimensions for {spec}")
-            
+
             return resized_clip
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to standardize resolution for {spec}: {e}")
+            self.logger.exception(f"Failed to standardize resolution for {spec}: {e}")
             import traceback
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            self.logger.exception(f"Traceback: {traceback.format_exc()}")
             # Return original clip if standardization fails
             self.logger.warning(f"Falling back to original resolution for {spec}")
             return clip
@@ -709,12 +715,12 @@ class SequentialLoader(VideoLoadingStrategy):
     @log_performance("sequential_clip_loading")
     def load_clips(self, clip_specs: List[ClipSpec]) -> List[LoadedClip]:
         """Load clips sequentially with batch processing and memory barriers.
-        
+
         CRITICAL FIX: Processes clips in batches with aggressive cleanup
         between batches to prevent memory buildup that caused 42% success rates.
         """
         loaded_clips = []
-        
+
         # Dynamic batch sizing based on system memory
         initial_batch_size = 5
         min_batch_size = 1
@@ -727,10 +733,10 @@ class SequentialLoader(VideoLoadingStrategy):
             for batch_start in range(0, len(clip_specs), current_batch_size):
                 batch_end = min(batch_start + current_batch_size, len(clip_specs))
                 batch_specs = clip_specs[batch_start:batch_end]
-                
+
                 ctx.log(f"Processing batch {batch_start//current_batch_size + 1}: "
                        f"clips {batch_start+1}-{batch_end} (batch size: {len(batch_specs)})")
-                
+
                 # Check system memory before starting batch
                 if self._check_system_memory_pressure():
                     ctx.log("System memory pressure detected before batch - performing emergency cleanup")
@@ -738,7 +744,7 @@ class SequentialLoader(VideoLoadingStrategy):
                     # Reduce batch size for memory-constrained processing
                     current_batch_size = max(min_batch_size, current_batch_size // 2)
                     ctx.log(f"Reduced batch size to {current_batch_size} due to memory pressure")
-                
+
                 # Process clips in current batch
                 batch_success_count = 0
                 for i, spec in enumerate(batch_specs):
@@ -763,11 +769,11 @@ class SequentialLoader(VideoLoadingStrategy):
                         )
                         # Add None placeholder to preserve index mapping
                         loaded_clips.append(None)
-                
+
                 # Memory barrier: Cleanup between batches
                 ctx.log(f"Batch completed: {batch_success_count}/{len(batch_specs)} clips loaded - performing batch cleanup")
                 self._perform_batch_cleanup()
-                
+
                 # Check if we should increase batch size (good memory situation)
                 if not self._check_system_memory_pressure() and current_batch_size < initial_batch_size:
                     current_batch_size = min(initial_batch_size, current_batch_size + 1)
@@ -776,7 +782,7 @@ class SequentialLoader(VideoLoadingStrategy):
             successful_count = sum(1 for clip in loaded_clips if clip is not None)
             ctx.log(
                 f"Sequential loading completed: {successful_count}/{len(clip_specs)} clips loaded "
-                f"({successful_count/len(clip_specs)*100:.1f}% success rate)"
+                f"({successful_count/len(clip_specs)*100:.1f}% success rate)",
             )
 
         return loaded_clips
@@ -784,40 +790,40 @@ class SequentialLoader(VideoLoadingStrategy):
     def _perform_batch_cleanup(self) -> None:
         """Perform cleanup between batches to prevent memory accumulation."""
         import gc
-        
+
         try:
             # Force garbage collection
             collected = gc.collect()
-            
+
             # Clear cache if it's getting large
             cache_stats = self.cache.get_stats()
-            if cache_stats.get('total_size_mb', 0) > 200:  # Clear cache if >200MB
+            if cache_stats.get("total_size_mb", 0) > 200:  # Clear cache if >200MB
                 self.cache.clear()
                 self.logger.debug("Cleared video cache due to size (>200MB)")
-            
+
             self.logger.debug(f"Batch cleanup: freed {collected} objects")
-            
+
         except Exception as e:
             self.logger.warning(f"Batch cleanup failed: {e}")
-    
+
     def _perform_emergency_cleanup(self) -> None:
         """Perform emergency cleanup when system memory pressure is critical."""
         import gc
-        
+
         try:
             # Aggressive cleanup
             self.cache.clear()  # Clear all cached clips
-            
+
             # Force multiple GC generations
             total_collected = 0
             for gen in range(3):
                 collected = gc.collect(gen)
                 total_collected += collected
-            
+
             self.logger.info(f"Emergency cleanup: cleared cache and freed {total_collected} objects")
-            
+
         except Exception as e:
-            self.logger.error(f"Emergency cleanup failed: {e}")
+            self.logger.exception(f"Emergency cleanup failed: {e}")
 
 
 class ParallelLoader(VideoLoadingStrategy):
@@ -851,7 +857,7 @@ class ParallelLoader(VideoLoadingStrategy):
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 # Submit all tasks with index tracking
                 future_to_index = {
-                    executor.submit(self._load_single_clip, spec): i 
+                    executor.submit(self._load_single_clip, spec): i
                     for i, spec in enumerate(clip_specs)
                 }
 
@@ -879,7 +885,7 @@ class ParallelLoader(VideoLoadingStrategy):
 
             successful_count = sum(1 for clip in loaded_clips if clip is not None)
             ctx.log(
-                f"Parallel loading completed: {successful_count}/{len(clip_specs)} clips loaded"
+                f"Parallel loading completed: {successful_count}/{len(clip_specs)} clips loaded",
             )
 
         return loaded_clips
@@ -972,7 +978,7 @@ class RobustLoader(VideoLoadingStrategy):
                         return self._load_with_transcoding(spec)
                     except Exception as transcoding_error:
                         self.logger.warning(
-                            f"Transcoding failed for {spec}: {transcoding_error}"
+                            f"Transcoding failed for {spec}: {transcoding_error}",
                         )
                         last_exception = e
                         continue
@@ -987,10 +993,9 @@ class RobustLoader(VideoLoadingStrategy):
         # All retries exhausted
         if last_exception:
             raise last_exception
-        else:
-            raise VideoProcessingError(
-                f"Failed to load {spec} after {self.max_retries + 1} attempts"
-            )
+        raise VideoProcessingError(
+            f"Failed to load {spec} after {self.max_retries + 1} attempts",
+        )
 
     def _load_with_transcoding(self, spec: ClipSpec) -> LoadedClip:
         """Attempt to load clip with transcoding fallback."""
@@ -1037,19 +1042,19 @@ class UnifiedVideoLoader:
         # Initialize strategy instances
         self._strategies = {
             LoadingStrategyType.SEQUENTIAL: SequentialLoader(
-                cache=self.cache, resource_manager=self.resource_manager
+                cache=self.cache, resource_manager=self.resource_manager,
             ),
             LoadingStrategyType.PARALLEL: ParallelLoader(
-                cache=self.cache, resource_manager=self.resource_manager
+                cache=self.cache, resource_manager=self.resource_manager,
             ),
             LoadingStrategyType.ROBUST: RobustLoader(
-                cache=self.cache, resource_manager=self.resource_manager
+                cache=self.cache, resource_manager=self.resource_manager,
             ),
         }
 
     @log_performance("unified_video_loading")
     def load_clips(
-        self, clip_specs: List[ClipSpec], strategy: Optional[LoadingStrategyType] = None
+        self, clip_specs: List[ClipSpec], strategy: Optional[LoadingStrategyType] = None,
     ) -> List[LoadedClip]:
         """Load video clips using optimal strategy.
 
@@ -1082,7 +1087,7 @@ class UnifiedVideoLoader:
             loaded_clips = loader.load_clips(clip_specs)
 
             ctx.log(
-                f"Loading completed successfully",
+                "Loading completed successfully",
                 extra={
                     "clips_loaded": len(loaded_clips),
                     "success_rate": f"{len(loaded_clips) / len(clip_specs) * 100:.1f}%",
@@ -1092,7 +1097,7 @@ class UnifiedVideoLoader:
             return loaded_clips
 
     def _select_optimal_strategy(
-        self, clip_specs: List[ClipSpec]
+        self, clip_specs: List[ClipSpec],
     ) -> LoadingStrategyType:
         """Select optimal loading strategy based on context."""
         if self.default_strategy != LoadingStrategyType.AUTO:
@@ -1127,7 +1132,7 @@ class UnifiedVideoLoader:
 
     def get_statistics(self) -> Dict[str, Any]:
         """Get comprehensive loading statistics."""
-        stats = {
+        return {
             "strategy_stats": {
                 name.value: strategy.get_stats()
                 for name, strategy in self._strategies.items()
@@ -1135,7 +1140,6 @@ class UnifiedVideoLoader:
             "cache_stats": self.cache.get_stats(),
             "resource_stats": self.resource_manager.get_stats(),
         }
-        return stats
 
     def clear_cache(self) -> None:
         """Clear video cache."""
@@ -1148,7 +1152,7 @@ class UnifiedVideoLoader:
             # This would update strategy configuration
             # Implementation depends on specific strategy parameters
             self.logger.info(
-                f"Configured strategy {strategy_type.value}", extra={"config": kwargs}
+                f"Configured strategy {strategy_type.value}", extra={"config": kwargs},
             )
         else:
             raise ValueError(f"Unknown strategy type: {strategy_type}")

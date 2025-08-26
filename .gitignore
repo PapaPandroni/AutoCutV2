@@ -231,20 +231,5 @@ temp/
 .DS_Store
 ._*
 
-# Test media files (keep directory structure but ignore content)
-test_media/*.mp4
-test_media/*.mov
-test_media/*.avi
-test_media/*.mkv
-test_media/*.wmv
-test_media/*.flv
-test_media/*.webm
-test_media/*.m4v
-test_media/*.mp3
-test_media/*.wav
-test_media/*.m4a
-test_media/*.flac
-test_media/*.aac
-test_media/*.ogg
-test_media/.DS_Store
-test_media/._*
+# Test media files - ignore entire directory
+test_media/

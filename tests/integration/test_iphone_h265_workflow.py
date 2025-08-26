@@ -5,15 +5,14 @@ Tests the complete pipeline from H.265 iPhone video to processed output,
 including codec detection, transcoding, and validation steps.
 """
 
-import pytest
 from pathlib import Path
-import tempfile
-import shutil
 
-from src.video.validation import VideoValidator
+import pytest
+
+from src.hardware.detection import HardwareDetector
 from src.video.codec_detection import CodecDetector
 from src.video.transcoding import TranscodingService
-from src.hardware.detection import HardwareDetector
+from src.video.validation import VideoValidator
 
 
 @pytest.mark.integration
@@ -44,7 +43,7 @@ class TestiPhoneH265Workflow:
 
         # Step 3: iPhone compatibility check
         iphone_validation = validator.validate_iphone_compatibility(
-            str(iphone_h265_file_path)
+            str(iphone_h265_file_path),
         )
         assert iphone_validation.validation_type == "iphone_compatibility"
 
@@ -56,20 +55,20 @@ class TestiPhoneH265Workflow:
         if codec_info.is_hevc:
             # Test MoviePy compatibility
             is_compatible = transcoding_service.test_moviepy_h265_compatibility(
-                str(iphone_h265_file_path)
+                str(iphone_h265_file_path),
             )
 
             if not is_compatible:
                 # Transcode the file
                 output_path = temp_dir / "transcoded_iphone.mp4"
                 transcoding_result = transcoding_service.transcode_h265_to_h264(
-                    str(iphone_h265_file_path), str(output_path)
+                    str(iphone_h265_file_path), str(output_path),
                 )
 
                 if transcoding_result.success:
                     # Validate transcoded output
                     transcoded_validation = validator.validate_transcoding_output(
-                        str(output_path)
+                        str(output_path),
                     )
                     assert transcoded_validation.validation_type == "transcoding_output"
 
@@ -79,7 +78,7 @@ class TestiPhoneH265Workflow:
                 else:
                     # If transcoding fails, capture the error for analysis
                     pytest.fail(
-                        f"Transcoding failed: {transcoding_result.error_message}"
+                        f"Transcoding failed: {transcoding_result.error_message}",
                     )
 
         # Step 6: Final validation for workflow completion
@@ -94,7 +93,7 @@ class TestiPhoneH265Workflow:
 
         # Test the preprocessing decision logic
         processed_path = transcoding_service.preprocess_video_if_needed(
-            str(iphone_h265_file_path)
+            str(iphone_h265_file_path),
         )
 
         # Should return either the original path (if compatible) or transcoded path
@@ -125,7 +124,7 @@ class TestiPhoneH265Workflow:
         output_path = temp_dir / f"transcoded_{capabilities.best_encoder}.mp4"
 
         result = transcoding_service.transcode_h265_to_h264(
-            str(iphone_h265_file_path), str(output_path)
+            str(iphone_h265_file_path), str(output_path),
         )
 
         if capabilities.has_gpu_acceleration:
@@ -163,7 +162,7 @@ class TestiPhoneH265Workflow:
 
         # iPhone compatibility check should handle gracefully
         iphone_validation = validator.validate_iphone_compatibility(
-            str(fake_iphone_file)
+            str(fake_iphone_file),
         )
         assert iphone_validation.validation_type == "iphone_compatibility"
         # Should not crash, but may report invalid
@@ -182,7 +181,7 @@ class TestiPhoneH265Workflow:
 
         # Run preprocessing
         processed_path = transcoding_service.preprocess_video_if_needed(
-            str(iphone_h265_file_path)
+            str(iphone_h265_file_path),
         )
 
         end_time = time.time()
@@ -203,7 +202,7 @@ class TestiPhoneH265Workflow:
 
         # Log performance for analysis
         print(
-            f"Processed {file_size_mb:.1f}MB in {processing_time:.2f}s ({file_size_mb / processing_time:.1f} MB/s)"
+            f"Processed {file_size_mb:.1f}MB in {processing_time:.2f}s ({file_size_mb / processing_time:.1f} MB/s)",
         )
 
 
@@ -215,7 +214,7 @@ class TestiPhoneH265ErrorScenarios:
         """Test transcoding behavior with insufficient disk space."""
         # Create a large mock file
         large_input = test_helpers.create_mock_video_file(
-            temp_dir, "large_input.mov", 100.0
+            temp_dir, "large_input.mov", 100.0,
         )
 
         transcoding_service = TranscodingService()
@@ -225,7 +224,7 @@ class TestiPhoneH265ErrorScenarios:
         output_path = temp_dir / "large_output.mp4"
 
         result = transcoding_service.transcode_h265_to_h264(
-            str(large_input), str(output_path)
+            str(large_input), str(output_path),
         )
 
         # Should handle the error gracefully
@@ -243,7 +242,7 @@ class TestiPhoneH265ErrorScenarios:
 
         transcoding_service = TranscodingService()
         result = transcoding_service.transcode_h265_to_h264(
-            str(input_file), restricted_output
+            str(input_file), restricted_output,
         )
 
         # Should handle permission errors gracefully
@@ -263,13 +262,13 @@ class TestiPhoneH265ErrorScenarios:
 
         # Mock FFmpeg not being available
         with pytest.mock.patch(
-            "src.video.transcoding.subprocess.run"
+            "src.video.transcoding.subprocess.run",
         ) as mock_subprocess:
             mock_subprocess.side_effect = FileNotFoundError("ffmpeg: command not found")
 
             output_path = temp_dir / "output.mp4"
             result = transcoding_service.transcode_h265_to_h264(
-                str(iphone_h265_file_path), str(output_path)
+                str(iphone_h265_file_path), str(output_path),
             )
 
             assert result.success is False
@@ -297,14 +296,14 @@ class TestiPhoneH265RealWorldScenarios:
 
         for video_file in iphone_files[:3]:  # Test first 3 files
             processed_path = transcoding_service.preprocess_video_if_needed(
-                str(video_file)
+                str(video_file),
             )
             results.append(
                 {
                     "original": str(video_file),
                     "processed": processed_path,
                     "success": processed_path is not None,
-                }
+                },
             )
 
         # All files should process successfully
@@ -346,7 +345,7 @@ class TestiPhoneH265RealWorldScenarios:
             print(f"{format_key}: {info}")
 
     def test_iphone_transcoding_quality_verification(
-        self, iphone_h265_file_path, temp_dir
+        self, iphone_h265_file_path, temp_dir,
     ):
         """Test that transcoded iPhone videos maintain acceptable quality."""
         if not iphone_h265_file_path.exists():
@@ -363,7 +362,7 @@ class TestiPhoneH265RealWorldScenarios:
             # Transcode the file
             output_path = temp_dir / "quality_test_output.mp4"
             result = transcoding_service.transcode_h265_to_h264(
-                str(iphone_h265_file_path), str(output_path)
+                str(iphone_h265_file_path), str(output_path),
             )
 
             if result.success:
@@ -387,7 +386,7 @@ class TestiPhoneH265RealWorldScenarios:
                     )
 
                 print(
-                    f"Transcoding quality check passed: {original_size_mb:.1f}MB → {transcoded_size_mb:.1f}MB (ratio: {size_ratio:.2f})"
+                    f"Transcoding quality check passed: {original_size_mb:.1f}MB → {transcoded_size_mb:.1f}MB (ratio: {size_ratio:.2f})",
                 )
             else:
                 pytest.fail(f"Transcoding failed: {result.error_message}")

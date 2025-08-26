@@ -10,7 +10,7 @@ Extracted from clip_assembler.py as part of system consolidation.
 """
 
 import json
-from typing import Dict, Any, List, Optional, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 
 class ClipTimeline:
@@ -36,7 +36,7 @@ class ClipTimeline:
                 "beat_position": beat_position,
                 "score": score,
                 "duration": end - start,
-            }
+            },
         )
 
     def export_json(self, file_path: str):
@@ -54,7 +54,7 @@ class ClipTimeline:
 
     def get_unique_video_files(self) -> List[str]:
         """Get list of unique video files used in timeline."""
-        unique_files = list(set(clip["video_file"] for clip in self.clips))
+        unique_files = list({clip["video_file"] for clip in self.clips})
         return sorted(unique_files)  # Sort for consistent ordering
 
     def get_summary_stats(self) -> Dict[str, Any]:
@@ -69,7 +69,7 @@ class ClipTimeline:
             }
 
         scores = [clip["score"] for clip in self.clips]
-        unique_videos = len(set(clip["video_file"] for clip in self.clips))
+        unique_videos = len({clip["video_file"] for clip in self.clips})
 
         return {
             "total_clips": len(self.clips),
@@ -83,7 +83,7 @@ class ClipTimeline:
             ),
         }
 
-    def validate_timeline(self, song_duration: float = None) -> Dict[str, Any]:
+    def validate_timeline(self, song_duration: Optional[float] = None) -> Dict[str, Any]:
         """Validate timeline for common issues.
 
         Args:
@@ -119,7 +119,7 @@ class ClipTimeline:
             warnings.append(f"Average clip quality is low: {avg_score:.1f}")
 
         # Check video variety
-        unique_videos = len(set(clip["video_file"] for clip in self.clips))
+        unique_videos = len({clip["video_file"] for clip in self.clips})
         if len(self.clips) > 5 and unique_videos == 1:
             warnings.append("All clips are from the same video - low variety")
 
@@ -142,10 +142,10 @@ class ClipTimeline:
 
 class TimelineRenderer:
     """Orchestrates the rendering of video timelines with beat synchronization."""
-    
+
     def __init__(self):
         self.timeline = None
-        
+
     def render_video(
         self,
         timeline: ClipTimeline,
@@ -157,11 +157,11 @@ class TimelineRenderer:
         avg_beat_interval: Optional[float] = None,
     ) -> str:
         """Render final video with music synchronization.
-        
+
         This is the legacy function maintained for backward compatibility.
         It attempts to delegate to the new modular rendering system
         but will fall back to raise an appropriate error if not available.
-        
+
         Args:
             timeline: ClipTimeline with all clips and timing
             audio_file: Path to music file
@@ -170,10 +170,10 @@ class TimelineRenderer:
             progress_callback: Optional callback for progress updates
             bpm: Beats per minute for musical fade calculations
             avg_beat_interval: Average time between beats in seconds
-            
+
         Returns:
             Path to rendered video file
-            
+
         Raises:
             RuntimeError: If rendering fails (for backward compatibility)
         """
@@ -181,11 +181,15 @@ class TimelineRenderer:
             # Import the new modular rendering system with dual import pattern
             try:
                 # Try absolute import first for autocut.py context
-                from video.rendering.renderer import render_video as render_video_modular
+                from video.rendering.renderer import (
+                    render_video as render_video_modular,
+                )
             except ImportError:
                 # Fallback for package execution context
-                from .video.rendering.renderer import render_video as render_video_modular
-            
+                from .video.rendering.renderer import (
+                    render_video as render_video_modular,
+                )
+
             # Delegate to the new modular system
             return render_video_modular(
                 timeline=timeline,
@@ -196,10 +200,10 @@ class TimelineRenderer:
                 bpm=bpm,
                 avg_beat_interval=avg_beat_interval,
             )
-            
+
         except ImportError as import_err:
             # Log the import issue for debugging
             raise RuntimeError(f"New rendering system not available - import failed: {import_err}")
         except Exception as e:
             # Maintain backward compatibility with RuntimeError
-            raise RuntimeError(f"Video rendering failed: {str(e)}")
+            raise RuntimeError(f"Video rendering failed: {e!s}")

@@ -12,10 +12,10 @@ Usage:
   python3 test_autocut_demo.py --pattern dramatic # Use specific pattern
 """
 
+import argparse
+import glob
 import os
 import sys
-import glob
-import argparse
 import time
 from pathlib import Path
 
@@ -43,18 +43,17 @@ def find_all_video_files(directory: str) -> list:
         video_files.extend(found_files)
 
     # Remove duplicates and sort
-    video_files = sorted(list(set(video_files)))
+    return sorted(set(video_files))
 
-    return video_files
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="AutoCut Demo - Create beat-synced videos"
+        description="AutoCut Demo - Create beat-synced videos",
     )
     parser.add_argument("--audio", help="Specific audio file to use")
     parser.add_argument(
-        "--videos", type=int, help="Number of videos to use (default: all)"
+        "--videos", type=int, help="Number of videos to use (default: all)",
     )
     parser.add_argument(
         "--pattern",
@@ -66,26 +65,17 @@ def main():
 
     args = parser.parse_args()
 
-    print("🎬 AutoCut Demo Test")
-    print("=" * 50)
 
     # Find all video files using enhanced format support
-    print(f"🔍 Searching for video files in test_media/")
-    print(f"   Supported formats: {', '.join(sorted(SUPPORTED_VIDEO_FORMATS))}")
 
     video_files = find_all_video_files("test_media")
     if not video_files:
-        print("❌ No supported video files found in test_media/")
-        print(f"   Searched for: {len(SUPPORTED_VIDEO_FORMATS)} different formats")
-        print(f"   Including: .mp4, .mov, .avi, .mkv, .webm, .3gp, .mts, .m2ts, etc.")
-        print("   Make sure your video files are in the test_media/ directory")
         return False
 
     # Limit videos if requested
     if args.videos:
         video_files = video_files[: args.videos]
 
-    print(f"📁 Found {len(video_files)} video files:")
 
     # Group by file extension for better display
     format_counts = {}
@@ -93,17 +83,14 @@ def main():
         ext = Path(vf).suffix.lower()
         format_counts[ext] = format_counts.get(ext, 0) + 1
 
-    print(f"   Format breakdown: {dict(sorted(format_counts.items()))}")
 
-    for i, vf in enumerate(video_files, 1):
+    for _i, vf in enumerate(video_files, 1):
         name = Path(vf).name
         ext = Path(vf).suffix.upper()
-        print(f"   {i:2d}. {name} ({ext})")
 
     # Find audio file
     if args.audio:
         if not os.path.exists(args.audio):
-            print(f"❌ Audio file not found: {args.audio}")
             return False
         audio_file = args.audio
     else:
@@ -114,13 +101,9 @@ def main():
             audio_files.extend(glob.glob(f"test_media/{ext}"))
 
         if not audio_files:
-            print("❌ No audio files found in test_media/")
-            print("   Supported formats: MP3, WAV, M4A, FLAC, AAC, OGG")
             return False
         audio_file = audio_files[0]  # Use first one
 
-    print(f"🎵 Using audio: {Path(audio_file).name}")
-    print(f"🎯 Pattern: {args.pattern}")
 
     # Generate output filename
     if args.output:
@@ -129,7 +112,6 @@ def main():
         timestamp = int(time.time())
         output_file = f"output/autocut_demo_{args.pattern}_{timestamp}.mp4"
 
-    print(f"📄 Output: {output_file}")
 
     # Create output directory
     os.makedirs("output", exist_ok=True)
@@ -139,10 +121,7 @@ def main():
         bar_length = 30
         filled = int(bar_length * progress)
         bar = "█" * filled + "░" * (bar_length - filled)
-        print(f"\r  [{bar}] {progress * 100:5.1f}% {step}", end="", flush=True)
 
-    print(f"\n🚀 Creating AutoCut video...")
-    print("   This may take a few minutes for rendering...")
 
     try:
         start_time = time.time()
@@ -156,27 +135,20 @@ def main():
         )
 
         elapsed = time.time() - start_time
-        print(f"\n\n🎉 SUCCESS!")
-        print(f"   Time: {elapsed:.1f} seconds")
-        print(f"   Video: {result_path}")
 
         # Show file info
         if os.path.exists(result_path):
             file_size = os.path.getsize(result_path) / (1024 * 1024)  # MB
-            print(f"   Size: {file_size:.1f} MB")
 
             # Check for timeline JSON
             timeline_json = result_path.replace(".mp4", "_timeline.json")
             if os.path.exists(timeline_json):
-                print(f"   Debug: {timeline_json}")
+                pass
 
-        print(f"\n🎬 Open your video player and watch: {result_path}")
-        print("   You should see beat-synced cuts that match the music!")
 
         return True
 
     except Exception as e:
-        print(f"\n❌ Error: {e}")
         import traceback
 
         traceback.print_exc()

@@ -17,7 +17,7 @@ import logging.config
 import logging.handlers
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Callable, TypeVar, Union
+from typing import Any, Callable, Dict, Optional, TypeVar
 
 # Type variables for generic decorator
 F = TypeVar("F", bound=Callable[..., Any])
@@ -129,7 +129,7 @@ def setup_logging(
     valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     if log_level.upper() not in valid_levels:
         raise ValueError(
-            f"Invalid log level: {log_level}. Must be one of {valid_levels}"
+            f"Invalid log level: {log_level}. Must be one of {valid_levels}",
         )
 
     # Use custom config or default
@@ -148,10 +148,10 @@ def setup_logging(
         # Update related log files to same directory
         base_dir = log_path.parent
         logging_config["handlers"]["performance"]["filename"] = str(
-            base_dir / "autocut_performance.log"
+            base_dir / "autocut_performance.log",
         )
         logging_config["handlers"]["error"]["filename"] = str(
-            base_dir / "autocut_errors.log"
+            base_dir / "autocut_errors.log",
         )
 
     # Disable performance logging if requested
@@ -182,7 +182,7 @@ def setup_logging(
             level=getattr(logging, log_level.upper()),
             format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
         )
-        logging.error(f"Failed to configure logging: {e}")
+        logging.exception(f"Failed to configure logging: {e}")
         raise
 
 
@@ -290,7 +290,7 @@ def log_performance(
                         "status": "success",
                         "execution_time_s": round(execution_time, 3),
                         **memory_info,
-                    }
+                    },
                 )
 
                 perf_logger.info(f"{op_name} completed successfully", extra=log_context)
@@ -308,10 +308,10 @@ def log_performance(
                         "execution_time_s": round(execution_time, 3),
                         "error_type": type(e).__name__,
                         "error_message": str(e),
-                    }
+                    },
                 )
 
-                perf_logger.error(f"{op_name} failed", extra=log_context)
+                perf_logger.exception(f"{op_name} failed", extra=log_context)
 
                 # Re-raise the exception
                 raise
@@ -437,12 +437,11 @@ class LoggingContext:
                 {
                     "error_type": exc_type.__name__,
                     "error_message": str(exc_val),
-                }
+                },
             )
             self.logger.error(
                 f"Failed {self.operation}",
                 extra=context,
-                exc_info=True,
             )
 
     def log(self, message: str, level: str = "INFO", **extra: Any) -> None:

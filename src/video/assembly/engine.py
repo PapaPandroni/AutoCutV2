@@ -12,54 +12,57 @@ Features:
 
 Key Components:
 - AssemblyEngine: Main orchestration engine
-- AssemblySettings: Configuration for assembly behavior  
+- AssemblySettings: Configuration for assembly behavior
 - AssemblyResult: Comprehensive assembly results
 """
 
 import time
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # Dual import pattern for package/direct execution compatibility
 try:
     from ...core.exceptions import ValidationError, raise_validation_error
-    from ...core.logging_config import get_logger, log_performance, LoggingContext
+    from ...core.logging_config import LoggingContext, get_logger, log_performance
 except ImportError:
     # Fallback for direct execution
-    from core.exceptions import ValidationError, raise_validation_error
-    from core.logging_config import get_logger, log_performance, LoggingContext
-from .timeline import ClipTimeline, TimelineEntry, TimelinePosition
+    from core.exceptions import raise_validation_error
+    from core.logging_config import LoggingContext, get_logger, log_performance
 from .beat_matcher import BeatMatcher, BeatMatchResult, BeatSyncSettings, VarietyPattern
-from .clip_selector import ClipSelector, SelectionCriteria, SelectionStrategy
-
 
 # Import VideoChunk from canonical location (already available in clip_selector)
-from .clip_selector import VideoChunk
+from .clip_selector import (
+    ClipSelector,
+    SelectionCriteria,
+    SelectionStrategy,
+    VideoChunk,
+)
+from .timeline import ClipTimeline, TimelineEntry
 
 
 @dataclass
 class AssemblySettings:
     """Configuration for assembly engine behavior."""
-    
+
     # Selection strategy
     selection_strategy: SelectionStrategy = SelectionStrategy.BALANCED
     variety_factor: float = 0.3
     min_quality_score: float = 30.0
-    
+
     # Beat synchronization
     variety_pattern: VarietyPattern = VarietyPattern.BALANCED
     use_musical_start: bool = True
     beat_alignment_tolerance: float = 0.1
-    
+
     # Duration preferences
     min_clip_duration: float = 0.5
     max_clip_duration: float = 8.0
     preferred_durations: List[float] = field(default_factory=lambda: [0.5, 1.0, 2.0, 4.0])
-    
+
     # Quality settings
     quality_weight: float = 0.7
     enable_quality_boost: bool = True
-    
+
     # Timeline preferences
     timeline_name: str = "AutoCut Assembly"
     enable_overlap_detection: bool = True
@@ -69,39 +72,39 @@ class AssemblySettings:
 @dataclass
 class AssemblyResult:
     """Comprehensive result of assembly operation."""
-    
+
     # Core results
     timeline: ClipTimeline
     selected_clips: List[VideoChunk]
-    
+
     # Assembly statistics
     clips_processed: int
     clips_selected: int
     clips_rejected: int
-    
+
     # Quality metrics
     average_quality: float
     quality_range: Tuple[float, float]
     variety_score: float
-    
+
     # Beat matching results
     beat_match_result: BeatMatchResult
     musical_coverage: float
-    
+
     # Processing metadata
     processing_time: float
     settings_used: AssemblySettings
-    
+
     def get_success_rate(self) -> float:
         """Get assembly success rate."""
         if self.clips_processed == 0:
             return 0.0
         return self.clips_selected / self.clips_processed
-    
+
     def get_timeline_duration(self) -> float:
         """Get total timeline duration."""
         return self.timeline.get_total_duration()
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary for analysis."""
         return {
@@ -120,31 +123,31 @@ class AssemblyResult:
 
 class AssemblyEngine:
     """Main assembly engine for beat-synced video clip assembly.
-    
+
     Orchestrates the complete assembly process by coordinating timeline
     management, beat matching, and clip selection systems. Provides a
     clean interface that replaces the original god module functionality.
     """
-    
+
     def __init__(self, settings: Optional[AssemblySettings] = None):
         """Initialize assembly engine.
-        
+
         Args:
             settings: Assembly configuration settings
         """
         self.settings = settings or AssemblySettings()
         self.logger = get_logger("autocut.video.assembly.AssemblyEngine")
-        
+
         # Initialize subsystems
         self._init_subsystems()
-        
+
         # Statistics tracking
         self._stats = {
             "assemblies_performed": 0,
             "total_clips_processed": 0,
             "total_processing_time": 0.0,
         }
-    
+
     def _init_subsystems(self) -> None:
         """Initialize assembly subsystems."""
         # Beat matcher configuration
@@ -159,7 +162,7 @@ class AssemblyEngine:
             variety_pattern=self.settings.variety_pattern,
         )
         self.beat_matcher = BeatMatcher(beat_settings)
-        
+
         # Clip selector configuration
         selection_criteria = SelectionCriteria(
             strategy=self.settings.selection_strategy,
@@ -170,88 +173,88 @@ class AssemblyEngine:
             min_gap_between_clips=self.settings.min_gap_between_clips,
         )
         self.clip_selector = ClipSelector(selection_criteria)
-    
+
     @log_performance("clip_assembly")
     def assemble_clips(self,
                       video_chunks: List[VideoChunk],
                       beats: List[float],
                       timeline_name: Optional[str] = None) -> AssemblyResult:
         """Assemble video clips into beat-synced timeline.
-        
+
         This is the main assembly method that coordinates all subsystems
         to create a beat-synchronized timeline from input video chunks.
-        
+
         Args:
             video_chunks: Available video chunks for assembly
             beats: Beat timestamps for synchronization
             timeline_name: Optional name for the timeline
-            
+
         Returns:
             AssemblyResult with complete assembly information
-            
+
         Raises:
             ValidationError: If inputs are invalid
         """
         start_time = time.time()
-        
+
         # Validate inputs
         self._validate_assembly_inputs(video_chunks, beats)
-        
+
         timeline_name = timeline_name or self.settings.timeline_name
-        
+
         with LoggingContext("clip_assembly", self.logger) as ctx:
             ctx.log(f"Starting assembly: {len(video_chunks)} clips, {len(beats)} beats")
-            
+
             # Phase 1: Pre-select clips using clip selector
             estimated_clips_needed = min(len(beats) // 2, len(video_chunks))
             ctx.log(f"Pre-selecting approximately {estimated_clips_needed} clips")
-            
+
             selection_result = self.clip_selector.select_clips(
-                video_chunks, estimated_clips_needed
+                video_chunks, estimated_clips_needed,
             )
-            
+
             # Phase 2: Beat matching with selected clips
             ctx.log(f"Beat matching {len(selection_result.selected_clips)} selected clips")
-            
+
             beat_match_result = self.beat_matcher.match_clips_to_beats(
-                selection_result.selected_clips, beats, timeline_name
+                selection_result.selected_clips, beats, timeline_name,
             )
-            
+
             # Phase 3: Create comprehensive result
             processing_time = time.time() - start_time
             result = self._create_assembly_result(
-                video_chunks, selection_result, beat_match_result, processing_time
+                video_chunks, selection_result, beat_match_result, processing_time,
             )
-            
+
             ctx.log(
                 f"Assembly completed: {result.clips_selected} clips in timeline",
                 extra={
                     "success_rate": f"{result.get_success_rate() * 100:.1f}%",
                     "timeline_duration": f"{result.get_timeline_duration():.1f}s",
                     "processing_time": f"{processing_time:.2f}s",
-                }
+                },
             )
-            
+
             # Update statistics
             self._stats["assemblies_performed"] += 1
             self._stats["total_clips_processed"] += len(video_chunks)
             self._stats["total_processing_time"] += processing_time
-            
+
             return result
-    
+
     def assemble_clips_legacy(self,
                              video_chunks: List[VideoChunk],
                              beats: List[float],
                              variety_factor: float = 0.3,
                              pattern: str = "balanced") -> List[VideoChunk]:
         """Legacy interface for backward compatibility.
-        
+
         Args:
             video_chunks: Available video chunks
             beats: Beat timestamps
             variety_factor: Balance between quality and variety (0-1)
             pattern: Variety pattern name
-            
+
         Returns:
             List of assembled video chunks in timeline order
         """
@@ -260,19 +263,19 @@ class AssemblyEngine:
             variety_pattern = VarietyPattern(pattern)
         except ValueError:
             variety_pattern = VarietyPattern.BALANCED
-        
+
         # Create temporary settings
         legacy_settings = AssemblySettings(
             variety_factor=variety_factor,
             variety_pattern=variety_pattern,
-            timeline_name="Legacy Assembly"
+            timeline_name="Legacy Assembly",
         )
-        
+
         # Store original settings and use legacy settings
         original_settings = self.settings
         self.settings = legacy_settings
         self._init_subsystems()
-        
+
         try:
             result = self.assemble_clips(video_chunks, beats)
             # Return clips in timeline order
@@ -282,59 +285,59 @@ class AssemblyEngine:
             # Restore original settings
             self.settings = original_settings
             self._init_subsystems()
-    
+
     def create_clip_timeline(self,
                             video_chunks: List[VideoChunk],
                             beats: List[float],
                             timeline_name: str = "AutoCut Timeline") -> ClipTimeline:
         """Create timeline from video chunks and beats (legacy interface).
-        
+
         Args:
             video_chunks: Available video chunks
             beats: Beat timestamps
             timeline_name: Name for the timeline
-            
+
         Returns:
             ClipTimeline with assembled clips
         """
         result = self.assemble_clips(video_chunks, beats, timeline_name)
         return result.timeline
-    
+
     def _validate_assembly_inputs(self, video_chunks: List[VideoChunk], beats: List[float]) -> None:
         """Validate assembly inputs."""
         if not video_chunks:
             raise_validation_error(
                 "No video chunks provided for assembly",
-                validation_type="input_validation"
+                validation_type="input_validation",
             )
-        
+
         if not beats:
             raise_validation_error(
                 "No beats provided for assembly",
-                validation_type="input_validation"
+                validation_type="input_validation",
             )
-        
+
         if len(beats) < 2:
             raise_validation_error(
                 f"Need at least 2 beats for assembly, got {len(beats)}",
-                validation_type="input_validation"
+                validation_type="input_validation",
             )
-        
+
         # Validate video chunks
         for i, chunk in enumerate(video_chunks):
             if chunk.duration <= 0:
                 raise_validation_error(
                     f"Video chunk {i} has invalid duration: {chunk.duration}",
                     validation_type="chunk_validation",
-                    file_path=chunk.video_path
+                    file_path=chunk.video_path,
                 )
-            
+
             if not (0 <= chunk.score <= 100):
                 self.logger.warning(
                     f"Video chunk {i} has unusual score: {chunk.score}",
-                    extra={"video_path": chunk.video_path}
+                    extra={"video_path": chunk.video_path},
                 )
-    
+
     def _create_assembly_result(self,
                               original_chunks: List[VideoChunk],
                               selection_result,
@@ -350,17 +353,17 @@ class AssemblyEngine:
         else:
             average_quality = 0.0
             quality_range = (0.0, 0.0)
-        
+
         # Calculate musical coverage
         timeline_stats = beat_match_result.timeline.get_summary_stats()
         musical_coverage = beat_match_result.coverage_ratio
-        
+
         # Get selected clips from timeline
         selected_clips = [
-            self._timeline_entry_to_chunk(entry) 
+            self._timeline_entry_to_chunk(entry)
             for entry in timeline_entries
         ]
-        
+
         return AssemblyResult(
             timeline=beat_match_result.timeline,
             selected_clips=selected_clips,
@@ -375,7 +378,7 @@ class AssemblyEngine:
             processing_time=processing_time,
             settings_used=self.settings,
         )
-    
+
     def _timeline_entry_to_chunk(self, entry: TimelineEntry) -> VideoChunk:
         """Convert timeline entry back to video chunk for compatibility."""
         return VideoChunk(
@@ -384,15 +387,15 @@ class AssemblyEngine:
             end_time=entry.end_time,
             score=entry.quality_score,
         )
-    
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get assembly engine statistics."""
         stats = self._stats.copy()
-        
+
         # Add subsystem statistics
         stats["beat_matcher_stats"] = self.beat_matcher.get_statistics()
         stats["clip_selector_stats"] = self.clip_selector.get_statistics()
-        
+
         # Calculate derived statistics
         if stats["assemblies_performed"] > 0:
             stats["avg_clips_per_assembly"] = stats["total_clips_processed"] / stats["assemblies_performed"]
@@ -400,20 +403,20 @@ class AssemblyEngine:
         else:
             stats["avg_clips_per_assembly"] = 0.0
             stats["avg_processing_time"] = 0.0
-        
+
         return stats
-    
+
     def reset_statistics(self) -> None:
         """Reset all statistics counters."""
         for key in self._stats:
             self._stats[key] = 0
-        
+
         self.beat_matcher.reset_statistics()
         self.clip_selector.reset_statistics()
-    
+
     def update_settings(self, new_settings: AssemblySettings) -> None:
         """Update assembly settings and reinitialize subsystems.
-        
+
         Args:
             new_settings: New settings to apply
         """
@@ -430,7 +433,7 @@ def assemble_clips_simple(clips: List[VideoChunk], beats: List[float]) -> ClipTi
     return result.timeline
 
 
-def assemble_clips_with_pattern(clips: List[VideoChunk], 
+def assemble_clips_with_pattern(clips: List[VideoChunk],
                                beats: List[float],
                                pattern: str = "balanced") -> List[VideoChunk]:
     """Assemble clips with specified variety pattern."""
@@ -438,11 +441,11 @@ def assemble_clips_with_pattern(clips: List[VideoChunk],
         variety_pattern = VarietyPattern(pattern)
     except ValueError:
         variety_pattern = VarietyPattern.BALANCED
-    
+
     settings = AssemblySettings(variety_pattern=variety_pattern)
     engine = AssemblyEngine(settings)
     result = engine.assemble_clips(clips, beats)
-    
+
     return result.selected_clips
 
 
@@ -450,7 +453,7 @@ def create_balanced_timeline(clips: List[VideoChunk], beats: List[float]) -> Cli
     """Create timeline with balanced quality/variety selection."""
     settings = AssemblySettings(
         selection_strategy=SelectionStrategy.BALANCED,
-        variety_pattern=VarietyPattern.BALANCED
+        variety_pattern=VarietyPattern.BALANCED,
     )
     engine = AssemblyEngine(settings)
     result = engine.assemble_clips(clips, beats)

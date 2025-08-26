@@ -5,19 +5,17 @@ Provides a clean, well-documented API for AutoCut functionality.
 This module serves as the primary interface for all AutoCut operations.
 """
 
-import os
-import sys
-import time
 import glob
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+import os
+import time
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 # Import core AutoCut modules (src is in path, so no relative imports needed)
 from clip_assembler import assemble_clips
-from video.validation import VideoValidator, ValidationResult
 from hardware.detection import HardwareDetector
 from utils import SUPPORTED_VIDEO_FORMATS, find_all_video_files
+from video.validation import ValidationResult, VideoValidator
 
 
 @dataclass
@@ -94,7 +92,7 @@ class AutoCutAPI:
             RuntimeError: If processing fails
         """
         if verbose:
-            print(f"🎬 Processing {len(video_files)} videos with {pattern} pattern")
+            pass
 
         # Validate inputs
         for video_file in video_files:
@@ -117,7 +115,6 @@ class AutoCutAPI:
                 bar_length = 30
                 filled = int(bar_length * progress)
                 bar = "█" * filled + "░" * (bar_length - filled)
-                print(f"\\r  [{bar}] {progress * 100:5.1f}% {step}", end="", flush=True)
 
         try:
             # Call core assembler function with dynamic or memory-optimized workers
@@ -138,15 +135,15 @@ class AutoCutAPI:
             )
 
             if verbose:
-                print(f"\\n✅ Successfully created: {result_path}")
+                pass
 
             return result_path
 
         except Exception as e:
-            raise RuntimeError(f"Video processing failed: {str(e)}")
+            raise RuntimeError(f"Video processing failed: {e!s}")
 
     def validate_video(
-        self, video_path: str, detailed: bool = False
+        self, video_path: str, detailed: bool = False,
     ) -> ValidationResult:
         """
         Check video compatibility and quality
@@ -210,7 +207,7 @@ class AutoCutAPI:
             import subprocess
 
             result = subprocess.run(
-                ["ffmpeg", "-version"], capture_output=True, text=True, timeout=5
+                ["ffmpeg", "-version"], check=False, capture_output=True, text=True, timeout=5,
             )
             ffmpeg_available = result.returncode == 0
         except:
@@ -236,8 +233,8 @@ class AutoCutAPI:
         Returns:
             DiagnosticReport with detailed system analysis
         """
-        import subprocess
         import platform
+        import subprocess
 
         issues = []
         recommendations = []
@@ -247,7 +244,7 @@ class AutoCutAPI:
         ffmpeg_version = "Not available"
         try:
             result = subprocess.run(
-                ["ffmpeg", "-version"], capture_output=True, text=True, timeout=5
+                ["ffmpeg", "-version"], check=False, capture_output=True, text=True, timeout=5,
             )
             if result.returncode == 0:
                 # Extract version from first line
@@ -261,9 +258,9 @@ class AutoCutAPI:
                 issues.append("FFmpeg not available or not working")
                 recommendations.append("Install FFmpeg for video processing support")
         except Exception as e:
-            issues.append(f"FFmpeg check failed: {str(e)}")
+            issues.append(f"FFmpeg check failed: {e!s}")
             recommendations.append(
-                "Install FFmpeg: apt install ffmpeg (Ubuntu) or brew install ffmpeg (macOS)"
+                "Install FFmpeg: apt install ffmpeg (Ubuntu) or brew install ffmpeg (macOS)",
             )
 
         # Get MoviePy version
@@ -282,7 +279,7 @@ class AutoCutAPI:
         system_info = self.get_system_info()
         if not system_info.has_hardware_acceleration:
             recommendations.append(
-                "Consider enabling hardware acceleration for faster processing"
+                "Consider enabling hardware acceleration for faster processing",
             )
 
         performance_metrics.update(
@@ -290,14 +287,14 @@ class AutoCutAPI:
                 "CPU Cores": system_info.cpu_cores,
                 "Hardware Acceleration": system_info.has_hardware_acceleration,
                 "Available Encoders": len(system_info.available_encoders),
-            }
+            },
         )
 
         # Test media directory check
         if not os.path.exists("test_media"):
             issues.append("test_media directory not found")
             recommendations.append(
-                "Create test_media/ directory with sample video/audio files for testing"
+                "Create test_media/ directory with sample video/audio files for testing",
             )
 
         return DiagnosticReport(

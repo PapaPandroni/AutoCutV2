@@ -30,28 +30,20 @@ setup: ## Set up complete development environment
 	@echo "$(YELLOW)Setting up development environment...$(NC)"
 	python3 -m venv env
 	$(VENV_ACTIVATE) && pip install --upgrade pip
+	$(VENV_ACTIVATE) && pip install -e .
 	$(VENV_ACTIVATE) && pip install -e ".[dev]"
 	@$(MAKE) setup-hooks
 	@echo "$(GREEN)$(BOLD)Development environment ready!$(NC)"
 	@echo "$(YELLOW)Activate with: source env/bin/activate$(NC)"
 	@echo "$(BLUE)Run 'make validate' to check everything is working$(NC)"
 
-install: deps ## Install dependencies (alias for deps)
 
 deps: ## Install production dependencies only
 	@echo "$(YELLOW)Installing production dependencies...$(NC)"
 	$(VENV_ACTIVATE) && pip install -e .
 	@echo "$(GREEN)Production dependencies installed!$(NC)"
 
-deps-dev: ## Install development dependencies
-	@echo "$(YELLOW)Installing development dependencies...$(NC)"
-	$(VENV_ACTIVATE) && pip install -e ".[dev]"
-	@echo "$(GREEN)Development dependencies installed!$(NC)"
 
-deps-test: ## Install test dependencies only
-	@echo "$(YELLOW)Installing test dependencies...$(NC)"
-	$(VENV_ACTIVATE) && pip install -e ".[test]"
-	@echo "$(GREEN)Test dependencies installed!$(NC)"
 
 upgrade-deps: ## Upgrade all development dependencies
 	@echo "$(YELLOW)Upgrading development dependencies...$(NC)"
@@ -104,20 +96,14 @@ demo-quick: ## Run quick AutoCut demo with new CLI
 	@echo "$(YELLOW)Running quick AutoCut demo with new CLI...$(NC)"
 	$(VENV_ACTIVATE) && $(PYTHON) autocut.py demo --quick --pattern balanced
 
-demo-dramatic: ## Run AutoCut demo with dramatic pattern
-	@echo "$(YELLOW)Running AutoCut demo with dramatic pattern...$(NC)"
-	$(VENV_ACTIVATE) && $(PYTHON) autocut.py demo --pattern dramatic
 
-demo-energetic: ## Run AutoCut demo with energetic pattern
-	@echo "$(YELLOW)Running AutoCut demo with energetic pattern...$(NC)"
-	$(VENV_ACTIVATE) && $(PYTHON) autocut.py demo --pattern energetic
 
-validate: ## Validate video compatibility using new CLI
+validate-video: ## Validate video compatibility using new CLI
 	@echo "$(YELLOW)Testing video validation with new CLI...$(NC)"
 	@if [ -n "$(VIDEO)" ]; then \
 		$(VENV_ACTIVATE) && $(PYTHON) autocut.py validate "$(VIDEO)" --detailed; \
 	else \
-		echo "$(BLUE)Usage: make validate VIDEO=path/to/video.mp4$(NC)"; \
+		echo "$(BLUE)Usage: make validate-video VIDEO=path/to/video.mp4$(NC)"; \
 		echo "$(BLUE)Or use: python autocut.py validate path/to/video.mp4$(NC)"; \
 	fi
 
@@ -125,10 +111,6 @@ benchmark: ## Run system performance benchmark using new CLI
 	@echo "$(YELLOW)Running system benchmark with new CLI...$(NC)"
 	$(VENV_ACTIVATE) && $(PYTHON) autocut.py benchmark --detailed
 
-# Legacy support (for compatibility)
-demo-legacy: ## Run old demo script (for comparison)
-	@echo "$(YELLOW)Running legacy demo script...$(NC)"
-	$(VENV_ACTIVATE) && $(PYTHON) test_autocut_demo.py
 
 # CLI help and information
 cli-help: ## Show AutoCut CLI help
@@ -234,7 +216,6 @@ info: ## Show project information
 	@echo "$(BLUE)Testing:$(NC) pytest with $(shell find tests -name 'test_*.py' 2>/dev/null | wc -l) test files"
 	@echo "$(BLUE)Commands:$(NC) Run 'make cli-help' for CLI usage"
 
-status: info ## Show project status (alias for info)
 
 # CI/CD simulation
 ci-test: ## Simulate CI/CD testing pipeline
@@ -255,13 +236,8 @@ dev-test: ## Quick development test cycle
 	$(VENV_ACTIVATE) && $(PYTEST) tests/unit/ -v --tb=short --maxfail=3
 	@echo "$(GREEN)Development tests completed!$(NC)"
 
-dev-integration: ## Development integration test
-	@echo "$(YELLOW)Development integration test...$(NC)"
-	$(VENV_ACTIVATE) && $(PYTEST) tests/integration/test_full_pipeline.py::TestFullPipeline::test_complete_autocut_pipeline -v -s
-	@echo "$(GREEN)Integration test completed!$(NC)"
 
 # Quick reference
-usage: help ## Show usage (alias for help)
 
 # Version and release helpers  
 version: ## Show current version info

@@ -11,7 +11,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 import click
 
@@ -34,7 +33,6 @@ def cli():
     Transform hours of raw footage into polished, music-synced highlight reels
     in minutes. Professional results with minimal effort.
     """
-    pass
 
 
 @cli.command()
@@ -89,12 +87,11 @@ def process(video_files, audio, output, pattern, max_videos, memory_safe, verbos
 
                 matched_files = glob.glob(pattern_or_file)
                 video_list.extend(matched_files)
+            elif os.path.exists(pattern_or_file):
+                video_list.append(pattern_or_file)
             else:
-                if os.path.exists(pattern_or_file):
-                    video_list.append(pattern_or_file)
-                else:
-                    click.echo(f"❌ File not found: {pattern_or_file}", err=True)
-                    sys.exit(1)
+                click.echo(f"❌ File not found: {pattern_or_file}", err=True)
+                sys.exit(1)
 
         if not video_list:
             click.echo("❌ No valid video files provided", err=True)
@@ -157,7 +154,7 @@ def process(video_files, audio, output, pattern, max_videos, memory_safe, verbos
 @cli.command()
 @click.argument("video_path", type=click.Path(exists=True))
 @click.option(
-    "--detailed", "-d", is_flag=True, help="Show detailed validation information"
+    "--detailed", "-d", is_flag=True, help="Show detailed validation information",
 )
 def validate(video_path, detailed):
     """
@@ -220,10 +217,10 @@ def benchmark(detailed):
 
         click.echo("\n💻 System Capabilities:")
         click.echo(
-            f"   Hardware Acceleration: {'✅' if system_info.has_hardware_acceleration else '❌'}"
+            f"   Hardware Acceleration: {'✅' if system_info.has_hardware_acceleration else '❌'}",
         )
         click.echo(
-            f"   Supported Encoders: {', '.join(system_info.available_encoders)}"
+            f"   Supported Encoders: {', '.join(system_info.available_encoders)}",
         )
         click.echo(f"   CPU Cores: {system_info.cpu_cores}")
 
@@ -279,17 +276,17 @@ def demo(quick, pattern):
 
         # Use the API's demo functionality
         result = api.run_demo(
-            quick=quick, pattern=pattern, test_media_dir=str(test_media_dir)
+            quick=quick, pattern=pattern, test_media_dir=str(test_media_dir),
         )
 
         if result.success:
-            click.echo(f"\n🎉 Demo completed successfully!")
+            click.echo("\n🎉 Demo completed successfully!")
             click.echo(f"   Created: {result.output_path}")
             click.echo(f"   Processing time: {result.processing_time:.1f}s")
             click.echo("\n🎬 Watch the video to see AutoCut's beat-sync magic!")
         else:
             click.echo(
-                "❌ Demo failed - check test_media directory has video/audio files"
+                "❌ Demo failed - check test_media directory has video/audio files",
             )
             sys.exit(1)
 

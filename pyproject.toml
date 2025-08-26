@@ -224,7 +224,7 @@ docstring-code-format = true
 
 # MyPy Configuration - Static type checking with strict mode
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.12"
 
 # Enable strict mode (equivalent to --strict)
 strict = true

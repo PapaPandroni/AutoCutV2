@@ -5,11 +5,11 @@ Provides a simple Tkinter-based interface for non-technical users
 to create beat-synced highlight videos.
 """
 
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-from typing import List, Optional, Callable
-import threading
 import os
+import threading
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from typing import List, Optional
 
 
 class AutoCutGUI:
@@ -37,7 +37,7 @@ class AutoCutGUI:
 
         # Title
         title_label = ttk.Label(
-            main_frame, text="AutoCut Video Generator", font=("Arial", 16, "bold")
+            main_frame, text="AutoCut Video Generator", font=("Arial", 16, "bold"),
         )
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
 
@@ -46,56 +46,56 @@ class AutoCutGUI:
 
         self.video_listbox = tk.Listbox(main_frame, height=6)
         self.video_listbox.grid(
-            row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 10)
+            row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 10),
         )
 
         video_button_frame = ttk.Frame(main_frame)
         video_button_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W)
 
         ttk.Button(
-            video_button_frame, text="Add Videos", command=self.select_videos
+            video_button_frame, text="Add Videos", command=self.select_videos,
         ).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(
-            video_button_frame, text="Remove Selected", command=self.remove_video
+            video_button_frame, text="Remove Selected", command=self.remove_video,
         ).pack(side=tk.LEFT)
 
         # Music file section
         ttk.Label(main_frame, text="Music File:").grid(
-            row=4, column=0, sticky=tk.W, pady=(20, 5)
+            row=4, column=0, sticky=tk.W, pady=(20, 5),
         )
 
         self.music_var = tk.StringVar(value="No music file selected")
         ttk.Label(
-            main_frame, textvariable=self.music_var, relief=tk.SUNKEN, padding=5
+            main_frame, textvariable=self.music_var, relief=tk.SUNKEN, padding=5,
         ).grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
 
         ttk.Button(main_frame, text="Select Music", command=self.select_music).grid(
-            row=6, column=0, sticky=tk.W
+            row=6, column=0, sticky=tk.W,
         )
 
         # Output location section
         ttk.Label(main_frame, text="Output Location:").grid(
-            row=7, column=0, sticky=tk.W, pady=(20, 5)
+            row=7, column=0, sticky=tk.W, pady=(20, 5),
         )
 
         self.output_var = tk.StringVar(value="No output location selected")
         ttk.Label(
-            main_frame, textvariable=self.output_var, relief=tk.SUNKEN, padding=5
+            main_frame, textvariable=self.output_var, relief=tk.SUNKEN, padding=5,
         ).grid(row=8, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
 
         ttk.Button(main_frame, text="Choose Output", command=self.select_output).grid(
-            row=9, column=0, sticky=tk.W
+            row=9, column=0, sticky=tk.W,
         )
 
         # Settings section
         settings_frame = ttk.LabelFrame(main_frame, text="Settings", padding="10")
         settings_frame.grid(
-            row=10, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(20, 10)
+            row=10, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(20, 10),
         )
 
         # Tempo preference
         ttk.Label(settings_frame, text="Cutting Style:").grid(
-            row=0, column=0, sticky=tk.W
+            row=0, column=0, sticky=tk.W,
         )
         self.tempo_var = tk.StringVar(value="balanced")
         tempo_combo = ttk.Combobox(
@@ -130,16 +130,16 @@ class AutoCutGUI:
         # Progress bar
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(
-            main_frame, variable=self.progress_var, maximum=100, length=400
+            main_frame, variable=self.progress_var, maximum=100, length=400,
         )
         self.progress_bar.grid(
-            row=12, column=0, columnspan=2, pady=(10, 0), sticky=(tk.W, tk.E)
+            row=12, column=0, columnspan=2, pady=(10, 0), sticky=(tk.W, tk.E),
         )
 
         # Status label
         self.status_var = tk.StringVar(value="Ready")
         ttk.Label(main_frame, textvariable=self.status_var).grid(
-            row=13, column=0, columnspan=2, pady=(5, 0)
+            row=13, column=0, columnspan=2, pady=(5, 0),
         )
 
         # Configure column weights for resizing
@@ -245,7 +245,7 @@ class AutoCutGUI:
             messagebox.showinfo("Success", f"Video saved to: {self.output_path}")
 
         except Exception as e:
-            messagebox.showerror("Error", f"Processing failed: {str(e)}")
+            messagebox.showerror("Error", f"Processing failed: {e!s}")
             self.update_progress(0, "Error occurred")
         finally:
             self.is_processing = False

@@ -5,15 +5,16 @@ Handles music analysis including BPM detection, beat tracking, and
 calculation of musically appropriate clip durations.
 """
 
-from typing import Dict, List, Tuple, Union, Optional
+import contextlib
 import os
+from typing import Dict, List, Tuple, Union
+
 import librosa
 import numpy as np
-from scipy import signal
 
 
 def detect_musical_start(
-    y: np.ndarray, sr: int, tempo: float, beats: np.ndarray
+    y: np.ndarray, sr: int, tempo: float, beats: np.ndarray,
 ) -> Tuple[float, float]:
     """Detect the start of significant musical content using onset detection and energy analysis.
 
@@ -49,12 +50,12 @@ def detect_musical_start(
     hop_length = 512
     frame_length = 2048
     rms_energy = librosa.feature.rms(
-        y=y, frame_length=frame_length, hop_length=hop_length
+        y=y, frame_length=frame_length, hop_length=hop_length,
     )[0]
 
     # Convert RMS frame indices to time
     rms_times = librosa.frames_to_time(
-        np.arange(len(rms_energy)), sr=sr, hop_length=hop_length
+        np.arange(len(rms_energy)), sr=sr, hop_length=hop_length,
     )
 
     # Find significant energy increase (musical content start)
@@ -71,7 +72,7 @@ def detect_musical_start(
 
             # Check if energy stays high for sustained_duration
             end_idx = min(
-                i + int(sustained_duration * sr / hop_length), len(rms_energy)
+                i + int(sustained_duration * sr / hop_length), len(rms_energy),
             )
 
             if np.mean(rms_energy[i:end_idx]) >= energy_threshold * 0.8:
@@ -124,7 +125,7 @@ def detect_intro_duration(
 
     # Time axis for features
     times = librosa.frames_to_time(
-        np.arange(len(rms_energy)), sr=sr, hop_length=hop_length
+        np.arange(len(rms_energy)), sr=sr, hop_length=hop_length,
     )
 
     # Normalize features
@@ -157,13 +158,12 @@ def detect_intro_duration(
                 break
 
     # Clamp to reasonable bounds
-    intro_duration = max(min_intro, min(intro_end_time, max_intro))
+    return max(min_intro, min(intro_end_time, max_intro))
 
-    return intro_duration
 
 
 def create_beat_hierarchy(
-    beats: np.ndarray, tempo: float, sr: int
+    beats: np.ndarray, tempo: float, sr: int,
 ) -> Dict[str, List[float]]:
     """Create hierarchical beat structure with downbeats, half-beats, and measures.
 
@@ -218,8 +218,7 @@ def apply_offset_compensation(beats: List[float], offset: float = -0.04) -> List
     Returns:
         Compensated beat timestamps
     """
-    compensated = [max(0.0, beat + offset) for beat in beats]
-    return compensated
+    return [max(0.0, beat + offset) for beat in beats]
 
 
 def filter_weak_beats_in_intro(
@@ -248,7 +247,7 @@ def filter_weak_beats_in_intro(
     hop_length = 512
     onset_envelope = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
     onset_times = librosa.frames_to_time(
-        np.arange(len(onset_envelope)), sr=sr, hop_length=hop_length
+        np.arange(len(onset_envelope)), sr=sr, hop_length=hop_length,
     )
 
     filtered_beats = []
@@ -323,7 +322,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
 
         # 1. Detect musical start and intro duration
         musical_start_time, intro_duration = detect_musical_start(
-            y, sr, tempo, beat_frames
+            y, sr, tempo, beat_frames,
         )
 
         # 2. Apply systematic offset compensation for librosa latency
@@ -331,7 +330,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
 
         # 3. Filter weak beats during intro sections
         filtered_beats = filter_weak_beats_in_intro(
-            compensated_beats, y, sr, intro_duration, strength_threshold=0.3
+            compensated_beats, y, sr, intro_duration, strength_threshold=0.3,
         )
 
         # 4. Create beat hierarchy structure
@@ -339,7 +338,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
 
         # 5. Enhanced intro detection with configurable thresholds
         refined_intro_duration = detect_intro_duration(
-            y, sr, tempo, energy_threshold=0.3, min_intro=0.5, max_intro=8.0
+            y, sr, tempo, energy_threshold=0.3, min_intro=0.5, max_intro=8.0,
         )
 
         # Validate BPM range
@@ -372,7 +371,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
         }
 
     except Exception as e:
-        raise ValueError(f"Failed to analyze audio file {file_path}: {str(e)}")
+        raise ValueError(f"Failed to analyze audio file {file_path}: {e!s}")
 
 
 def calculate_clip_constraints(bpm: float) -> Tuple[float, List[float]]:
@@ -448,55 +447,33 @@ def get_cut_points(beats: List[float], song_duration: float) -> List[float]:
         cut_points.append(song_duration)
 
     # Remove any cut points beyond song duration
-    cut_points = [cp for cp in cut_points if cp <= song_duration]
+    return [cp for cp in cut_points if cp <= song_duration]
 
-    return cut_points
 
 
 def test_audio_analyzer():
     """Test the audio analyzer with sample data."""
-    print("🎵 AutoCut Audio Analyzer - Test Mode")
-    print("=" * 50)
 
     # Test calculate_clip_constraints function
-    print("\n1. Testing calculate_clip_constraints():")
     test_bpms = [60, 120, 90, 140]
 
     for bpm in test_bpms:
-        try:
+        with contextlib.suppress(ValueError):
             min_dur, allowed_durs = calculate_clip_constraints(bpm)
-            print(
-                f"   BPM {bpm:3d}: min={min_dur:.2f}s, allowed={[f'{d:.2f}' for d in allowed_durs]}"
-            )
-        except ValueError as e:
-            print(f"   BPM {bpm:3d}: ERROR - {e}")
 
     # Test edge cases
-    print("\n2. Testing edge cases:")
     edge_cases = [25, 350]  # Should be rejected
     for bpm in edge_cases:
-        try:
+        with contextlib.suppress(ValueError):
             min_dur, allowed_durs = calculate_clip_constraints(bpm)
-            print(f"   BPM {bpm:3d}: ERROR - should have failed")
-        except ValueError as e:
-            print(f"   BPM {bpm:3d}: ✓ Correctly rejected - {e}")
 
     # Test get_cut_points function
-    print("\n3. Testing get_cut_points():")
     test_beats = [0.5, 1.0, 1.3, 2.0, 2.8, 3.5, 4.0, 4.2, 5.0]
     song_duration = 6.0
 
     cut_points = get_cut_points(test_beats, song_duration)
-    print(f"   Input beats: {test_beats}")
-    print(f"   Song duration: {song_duration}s")
-    print(f"   Cut points: {cut_points}")
 
     # Test with empty beats
     empty_cuts = get_cut_points([], 5.0)
-    print(f"   Empty beats: {empty_cuts} (should be [])")
 
-    print("\n4. Audio file analysis test:")
-    print("   To test with real audio files, place them in test_media/")
-    print("   Supported formats: MP3, WAV, M4A, FLAC")
 
-    print("\n✅ Audio analyzer tests completed!")

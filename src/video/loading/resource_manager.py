@@ -17,7 +17,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, Generator, NamedTuple
+from typing import Any, Dict, Generator, NamedTuple, Optional
 
 try:
     from core.exceptions import VideoProcessingError
@@ -56,12 +56,11 @@ class SystemResources:
         """Get memory pressure level."""
         if self.memory_percent < 50:
             return "low"
-        elif self.memory_percent < 80:
+        if self.memory_percent < 80:
             return "medium"
-        elif self.memory_percent < 95:
+        if self.memory_percent < 95:
             return "high"
-        else:
-            return "critical"
+        return "critical"
 
 
 class MemoryMonitor:
@@ -72,18 +71,18 @@ class MemoryMonitor:
     """
 
     def __init__(
-        self, warning_threshold: float = 80.0, critical_threshold: float = 88.0
+        self, warning_threshold: float = 80.0, critical_threshold: float = 88.0,
     ):
         """Initialize memory monitor with Phase 6E optimized safety thresholds.
-        
+
         PHASE 6E: Optimized thresholds to balance stability with performance:
         - Warning: 80% (was 75%) - start conservative cleanup
         - Critical: 88% (was 80%) - emergency abort only when truly necessary
-        
+
         Previous 80% critical threshold was causing excessive failures at 81% usage,
         resulting in poor clip success rates. Modern systems can handle higher
         memory usage safely with proper cleanup.
-        
+
         Args:
             warning_threshold: Memory usage % to trigger warnings and cleanup
             critical_threshold: Memory usage % to trigger emergency abort
@@ -105,9 +104,9 @@ class MemoryMonitor:
             self._psutil = None
             self._has_psutil = False
             self.logger.warning(
-                "psutil not available - memory monitoring will be limited"
+                "psutil not available - memory monitoring will be limited",
             )
-            
+
         self.logger.info(f"Phase 6E optimized memory thresholds: warning={warning_threshold}%, critical={critical_threshold}%")
         self.logger.info("Memory management optimized to reduce clip loading failures while maintaining system stability")
 
@@ -123,16 +122,15 @@ class MemoryMonitor:
                 memory_percent=memory.percent,
                 timestamp=time.time(),
             )
-        else:
-            # Fallback without psutil
-            return SystemResources(
-                total_memory_gb=8.0,  # Assume 8GB default
-                available_memory_gb=4.0,  # Conservative estimate
-                used_memory_gb=4.0,
-                cpu_count=os.cpu_count() or 4,
-                memory_percent=50.0,  # Conservative estimate
-                timestamp=time.time(),
-            )
+        # Fallback without psutil
+        return SystemResources(
+            total_memory_gb=8.0,  # Assume 8GB default
+            available_memory_gb=4.0,  # Conservative estimate
+            used_memory_gb=4.0,
+            cpu_count=os.cpu_count() or 4,
+            memory_percent=50.0,  # Conservative estimate
+            timestamp=time.time(),
+        )
 
     def check_memory_pressure(self) -> bool:
         """Check if system is under memory pressure.
@@ -156,7 +154,7 @@ class MemoryMonitor:
                 },
             )
 
-        elif resources.memory_percent >= self.warning_threshold:
+        if resources.memory_percent >= self.warning_threshold:
             # Rate-limited warnings
             current_time = time.time()
             with self._lock:
@@ -202,7 +200,7 @@ class VideoResourceManager:
     """
 
     def __init__(
-        self, max_memory_gb: Optional[float] = None, max_concurrent_clips: int = 10
+        self, max_memory_gb: Optional[float] = None, max_concurrent_clips: int = 10,
     ):
         """Initialize resource manager.
 
@@ -240,7 +238,7 @@ class VideoResourceManager:
         }
 
         self.logger.info(
-            f"Resource manager initialized",
+            "Resource manager initialized",
             extra={
                 "max_memory_gb": self.max_memory_gb,
                 "max_concurrent_clips": self.max_concurrent_clips,
@@ -250,7 +248,7 @@ class VideoResourceManager:
 
     @contextmanager
     def allocate_resources(
-        self, estimated_memory_mb: float, require_memory_check: bool = True
+        self, estimated_memory_mb: float, require_memory_check: bool = True,
     ) -> Generator[ResourceAllocation, None, None]:
         """Allocate resources for video processing.
 
@@ -312,11 +310,10 @@ class VideoResourceManager:
                 self._stats["allocations"] += 1
 
                 # Update peak memory tracking
-                if self._allocated_memory_mb > self._stats["peak_memory_mb"]:
-                    self._stats["peak_memory_mb"] = self._allocated_memory_mb
+                self._stats["peak_memory_mb"] = max(self._stats["peak_memory_mb"], self._allocated_memory_mb)
 
                 self.logger.debug(
-                    f"Allocated resources",
+                    "Allocated resources",
                     extra={
                         "allocation_id": allocation_id,
                         "memory_mb": estimated_memory_mb,
@@ -341,7 +338,7 @@ class VideoResourceManager:
                         duration = time.time() - allocation.start_time
 
                         self.logger.debug(
-                            f"Deallocated resources",
+                            "Deallocated resources",
                             extra={
                                 "allocation_id": allocation_id,
                                 "memory_mb": allocation.memory_mb,
@@ -449,7 +446,7 @@ class VideoResourceManager:
                     "active_allocations": len(self._active_allocations),
                     "allocated_memory_mb": self._allocated_memory_mb,
                     "allocated_memory_gb": self._allocated_memory_mb / 1024,
-                }
+                },
             )
         return stats
 
@@ -463,7 +460,7 @@ class VideoResourceManager:
         self._perform_cleanup()
 
         self.logger.info(
-            f"Forced cleanup completed", extra={"cleared_allocations": num_allocations}
+            "Forced cleanup completed", extra={"cleared_allocations": num_allocations},
         )
 
     def configure_limits(

@@ -5,9 +5,10 @@ Provides real-time monitoring of system resources during video processing
 and can scale down workers if memory usage becomes dangerous.
 """
 
+import contextlib
 import threading
 import time
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 try:
     import psutil
@@ -39,7 +40,7 @@ class AdaptiveWorkerMonitor:
         self.min_time_between_adjustments = 30.0  # seconds
 
     def set_scale_callbacks(
-        self, scale_down_cb: Callable[[int], None], scale_up_cb: Callable[[int], None]
+        self, scale_down_cb: Callable[[int], None], scale_up_cb: Callable[[int], None],
     ):
         """Set callbacks for scaling workers up/down"""
         self.scale_down_callback = scale_down_cb
@@ -48,7 +49,6 @@ class AdaptiveWorkerMonitor:
     def start_monitoring(self):
         """Start real-time memory monitoring in background thread"""
         if psutil is None:
-            print("   ⚠️  psutil not available - real-time monitoring disabled")
             return
 
         if self.monitoring:
@@ -56,12 +56,9 @@ class AdaptiveWorkerMonitor:
 
         self.monitoring = True
         self.monitor_thread = threading.Thread(
-            target=self._monitoring_loop, daemon=True, name="AdaptiveWorkerMonitor"
+            target=self._monitoring_loop, daemon=True, name="AdaptiveWorkerMonitor",
         )
         self.monitor_thread.start()
-        print(
-            f"   🔍 Started adaptive monitoring (thresholds: {self.warning_threshold}%/{self.critical_threshold}%)"
-        )
 
     def stop_monitoring(self):
         """Stop monitoring"""
@@ -69,7 +66,6 @@ class AdaptiveWorkerMonitor:
         if self.monitor_thread:
             self.monitor_thread.join(timeout=2.0)
             self.monitor_thread = None
-        print("   🛑 Stopped adaptive monitoring")
 
     def _monitoring_loop(self):
         """Main monitoring loop running in background thread"""
@@ -78,7 +74,6 @@ class AdaptiveWorkerMonitor:
                 self._check_and_adjust()
                 time.sleep(5.0)  # Check every 5 seconds
             except Exception as e:
-                print(f"   ⚠️  Monitor error: {e}")
                 time.sleep(10.0)  # Wait longer on error
 
     def _check_and_adjust(self):
@@ -96,7 +91,7 @@ class AdaptiveWorkerMonitor:
                 if self.current_workers > 1:
                     new_workers = max(1, self.current_workers // 2)
                     self._scale_down(
-                        new_workers, f"CRITICAL memory usage: {memory_percent:.1f}%"
+                        new_workers, f"CRITICAL memory usage: {memory_percent:.1f}%",
                     )
 
             # Warning threshold - gradual scaling
@@ -128,7 +123,7 @@ class AdaptiveWorkerMonitor:
                 ):
                     new_workers = min(self.initial_workers, self.current_workers + 1)
                     self._scale_up(
-                        new_workers, f"Memory recovered: {memory_percent:.1f}%"
+                        new_workers, f"Memory recovered: {memory_percent:.1f}%",
                     )
 
             # Normal range
@@ -136,7 +131,7 @@ class AdaptiveWorkerMonitor:
                 self.consecutive_warnings = max(0, self.consecutive_warnings - 1)
 
         except Exception as e:
-            print(f"   ⚠️  Memory check failed: {e}")
+            pass
 
     def _scale_down(self, new_workers: int, reason: str):
         """Scale down workers with logging"""
@@ -147,13 +142,10 @@ class AdaptiveWorkerMonitor:
         self.current_workers = new_workers
         self.last_scale_down_time = time.time()
 
-        print(f"   📉 Scaling DOWN: {old_workers} → {new_workers} workers ({reason})")
 
         if self.scale_down_callback:
-            try:
+            with contextlib.suppress(Exception):
                 self.scale_down_callback(new_workers)
-            except Exception as e:
-                print(f"   ⚠️  Scale down callback failed: {e}")
 
     def _scale_up(self, new_workers: int, reason: str):
         """Scale up workers with logging"""
@@ -163,13 +155,10 @@ class AdaptiveWorkerMonitor:
         old_workers = self.current_workers
         self.current_workers = new_workers
 
-        print(f"   📈 Scaling UP: {old_workers} → {new_workers} workers ({reason})")
 
         if self.scale_up_callback:
-            try:
+            with contextlib.suppress(Exception):
                 self.scale_up_callback(new_workers)
-            except Exception as e:
-                print(f"   ⚠️  Scale up callback failed: {e}")
 
     def get_current_status(self) -> dict:
         """Get current monitoring status"""
@@ -214,9 +203,6 @@ class ThreadSafeWorkerController:
         # Note: ThreadPoolExecutor doesn't support dynamic scaling
         # This is more of a "request" that could be honored in future implementations
         # For now, we just log the request
-        print(
-            f"   📝 Worker scale request: {new_count} (ThreadPoolExecutor limitation)"
-        )
 
     def get_status(self) -> dict:
         """Get current controller status"""

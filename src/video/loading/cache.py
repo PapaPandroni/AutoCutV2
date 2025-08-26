@@ -14,7 +14,7 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Set
+from typing import Any, Dict, Optional, Set
 
 from moviepy import VideoFileClip
 
@@ -109,7 +109,7 @@ class VideoCache:
         self.logger = get_logger("autocut.video.loading.VideoCache")
 
         self.logger.info(
-            f"Video cache initialized",
+            "Video cache initialized",
             extra={
                 "max_size_mb": max_size_mb,
                 "max_entries": max_entries,
@@ -149,17 +149,16 @@ class VideoCache:
                 )
 
                 return entry.video_clip
-            else:
-                # Cache miss
-                if self.enable_stats:
-                    self._stats["misses"] += 1
+            # Cache miss
+            if self.enable_stats:
+                self._stats["misses"] += 1
 
-                self.logger.debug(f"Cache miss: {cache_key}")
+            self.logger.debug(f"Cache miss: {cache_key}")
 
-                return None
+            return None
 
     def put(
-        self, cache_key: str, video_clip: VideoFileClip, estimated_size_mb: float = 50.0
+        self, cache_key: str, video_clip: VideoFileClip, estimated_size_mb: float = 50.0,
     ) -> bool:
         """Put video clip into cache.
 
@@ -255,8 +254,7 @@ class VideoCache:
                 )
 
                 return True
-            else:
-                return False
+            return False
 
     def clear(self) -> int:
         """Clear entire cache.
@@ -283,7 +281,7 @@ class VideoCache:
             if self.enable_stats:
                 self._stats["clears"] += 1
 
-            self.logger.info(f"Cache cleared", extra={"entries_removed": count})
+            self.logger.info("Cache cleared", extra={"entries_removed": count})
 
             return count
 
@@ -315,7 +313,7 @@ class VideoCache:
             lru_entry.video_clip.close()
         except Exception as e:
             self.logger.warning(
-                f"Error closing evicted video clip: {e}", extra={"cache_key": lru_key}
+                f"Error closing evicted video clip: {e}", extra={"cache_key": lru_key},
             )
 
         if self.enable_stats:
@@ -349,23 +347,22 @@ class VideoCache:
                     self._stats["total_access_time"] / self._stats["hits"] * 1000
                 )  # ms
 
-            stats = {
+            return {
                 "cache_size": len(self._cache),
                 "current_size_mb": round(self._current_size_mb, 2),
                 "max_size_mb": self.max_size_mb,
                 "max_entries": self.max_entries,
                 "size_utilization_percent": round(
-                    self._current_size_mb / self.max_size_mb * 100, 1
+                    self._current_size_mb / self.max_size_mb * 100, 1,
                 ),
                 "count_utilization_percent": round(
-                    len(self._cache) / self.max_entries * 100, 1
+                    len(self._cache) / self.max_entries * 100, 1,
                 ),
                 "hit_rate_percent": round(hit_rate, 2),
                 "avg_access_time_ms": round(avg_access_time, 2),
                 **self._stats.copy(),
             }
 
-            return stats
 
     def get_cache_info(self) -> Dict[str, Any]:
         """Get detailed cache information.
@@ -384,7 +381,7 @@ class VideoCache:
                         "access_count": entry.access_count,
                         "age_seconds": round(entry.age_seconds, 1),
                         "idle_seconds": round(entry.idle_time_seconds, 1),
-                    }
+                    },
                 )
 
             # Sort by most recently used
@@ -442,13 +439,13 @@ class VideoCache:
 
             if stale_removed > 0:
                 self.logger.info(
-                    f"Cache maintenance completed", extra=maintenance_report
+                    "Cache maintenance completed", extra=maintenance_report,
                 )
 
             return maintenance_report
 
     def configure(
-        self, max_size_mb: Optional[float] = None, max_entries: Optional[int] = None
+        self, max_size_mb: Optional[float] = None, max_entries: Optional[int] = None,
     ) -> None:
         """Update cache configuration.
 
@@ -474,7 +471,7 @@ class VideoCache:
 
             if changes:
                 self.logger.info(
-                    "Cache configuration updated", extra={"changes": changes}
+                    "Cache configuration updated", extra={"changes": changes},
                 )
 
     def __len__(self) -> int:

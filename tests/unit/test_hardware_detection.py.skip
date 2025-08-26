@@ -4,11 +4,12 @@ Unit tests for the hardware detection module.
 Tests the HardwareDetector class that detects GPU and hardware acceleration capabilities.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
 import subprocess
+from unittest.mock import MagicMock, patch
 
-from src.hardware.detection import HardwareDetector, HardwareCapabilities
+import pytest
+
+from src.hardware.detection import HardwareCapabilities, HardwareDetector
 
 
 class TestHardwareCapabilities:
@@ -48,7 +49,7 @@ class TestHardwareCapabilities:
         caps_with_nvidia = HardwareCapabilities(nvidia_nvenc_available=True)
         caps_with_intel = HardwareCapabilities(intel_qsv_available=True)
         caps_with_both = HardwareCapabilities(
-            nvidia_nvenc_available=True, intel_qsv_available=True
+            nvidia_nvenc_available=True, intel_qsv_available=True,
         )
         caps_with_none = HardwareCapabilities()
 
@@ -62,7 +63,7 @@ class TestHardwareCapabilities:
         caps_nvidia = HardwareCapabilities(nvidia_nvenc_available=True)
         caps_intel = HardwareCapabilities(intel_qsv_available=True)
         caps_both = HardwareCapabilities(
-            nvidia_nvenc_available=True, intel_qsv_available=True
+            nvidia_nvenc_available=True, intel_qsv_available=True,
         )
         caps_none = HardwareCapabilities()
 
@@ -87,7 +88,7 @@ class TestHardwareDetector:
         """Test NVIDIA GPU detection when available."""
         # Mock nvidia-smi success
         mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="GPU 0: GeForce RTX 3080 (UUID: GPU-12345)\n"
+            returncode=0, stdout="GPU 0: GeForce RTX 3080 (UUID: GPU-12345)\n",
         )
 
         has_nvidia = hardware_detector.has_nvidia_gpu()
@@ -109,7 +110,7 @@ class TestHardwareDetector:
 
     @patch("src.hardware.detection.subprocess.run")
     def test_detect_nvidia_gpu_command_not_found(
-        self, mock_subprocess, hardware_detector
+        self, mock_subprocess, hardware_detector,
     ):
         """Test NVIDIA GPU detection when nvidia-smi not found."""
         # Mock nvidia-smi command not found
@@ -125,7 +126,7 @@ class TestHardwareDetector:
         """Test Intel QSV detection when available."""
         # Mock ffmpeg with QSV support
         mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ffmpeg version 4.4.0\nhwaccels:\n  qsv\n  vaapi\n"
+            returncode=0, stdout="ffmpeg version 4.4.0\nhwaccels:\n  qsv\n  vaapi\n",
         )
 
         has_qsv = hardware_detector.has_intel_qsv()
@@ -138,7 +139,7 @@ class TestHardwareDetector:
         """Test Intel QSV detection when not available."""
         # Mock ffmpeg without QSV support
         mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout="ffmpeg version 4.4.0\nhwaccels:\n  vaapi\n"
+            returncode=0, stdout="ffmpeg version 4.4.0\nhwaccels:\n  vaapi\n",
         )
 
         has_qsv = hardware_detector.has_intel_qsv()
@@ -288,7 +289,7 @@ class TestHardwareDetector:
     def test_caching_functionality(self, hardware_detector):
         """Test that results are cached to avoid repeated system calls."""
         with patch.object(
-            hardware_detector, "has_nvidia_gpu", return_value=True
+            hardware_detector, "has_nvidia_gpu", return_value=True,
         ) as mock_nvidia:
             # First call
             result1 = hardware_detector.detect_capabilities()

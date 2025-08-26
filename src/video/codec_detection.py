@@ -10,7 +10,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple
 
 # Import our custom exceptions with dual import pattern
 try:
@@ -41,7 +41,7 @@ class CodecDetector:
         self._cache_timeout = cache_timeout
 
     def detect_video_codec(
-        self, file_path: str, use_cache: bool = True
+        self, file_path: str, use_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         Detect video codec and format information using FFprobe with enhanced compatibility checking.
@@ -93,7 +93,7 @@ class CodecDetector:
             ]
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, check=True, timeout=15
+                cmd, capture_output=True, text=True, check=True, timeout=15,
             )
             data = json.loads(result.stdout)
 
@@ -116,7 +116,7 @@ class CodecDetector:
 
             # Calculate compatibility score and warnings
             compatibility_score, warnings = self._calculate_compatibility_score(
-                standard_codec, container, format_name, video_stream, format_info
+                standard_codec, container, format_name, video_stream, format_info,
             )
 
             codec_info = {
@@ -129,7 +129,7 @@ class CodecDetector:
                 ),
                 "fps": fps,
                 "duration": float(
-                    video_stream.get("duration", format_info.get("duration", 0))
+                    video_stream.get("duration", format_info.get("duration", 0)),
                 ),
                 "pixel_format": video_stream.get("pix_fmt", "unknown"),
                 "container": container,
@@ -146,7 +146,7 @@ class CodecDetector:
                         s
                         for s in data.get("streams", [])
                         if s.get("codec_type") == "audio"
-                    ]
+                    ],
                 )
                 > 0,
                 "file_size": int(format_info.get("size", 0)),
@@ -167,7 +167,7 @@ class CodecDetector:
             raise VideoProcessingError(f"FFprobe timed out for {file_path}")
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             raise VideoProcessingError(
-                f"Failed to parse video information for {file_path}: {str(e)}"
+                f"Failed to parse video information for {file_path}: {e!s}",
             )
 
     def _standardize_codec_name(self, codec_name: str) -> str:
@@ -196,8 +196,7 @@ class CodecDetector:
             if "/" in fps_str:
                 num, den = map(int, fps_str.split("/"))
                 return num / den if den != 0 else 30.0
-            else:
-                return float(fps_str)
+            return float(fps_str)
         except (ValueError, ZeroDivisionError, TypeError):
             return 30.0  # Fallback to standard frame rate
 
@@ -241,7 +240,7 @@ class CodecDetector:
 
         if codec == "hevc":
             warnings.append(
-                "H.265/HEVC may require transcoding for optimal compatibility"
+                "H.265/HEVC may require transcoding for optimal compatibility",
             )
         elif codec not in codec_scores:
             warnings.append(f"Unknown codec '{codec}' may cause compatibility issues")
@@ -346,28 +345,28 @@ class CodecDetector:
         if codec_info["codec"] == "hevc":
             iphone_info["requires_transcoding"] = True
             iphone_info["compatibility_issues"].append(
-                "H.265/HEVC codec requires transcoding to H.264 for iPhone compatibility"
+                "H.265/HEVC codec requires transcoding to H.264 for iPhone compatibility",
             )
             iphone_info["recommendations"].append(
-                "Transcode to H.264 with Main or Baseline profile"
+                "Transcode to H.264 with Main or Baseline profile",
             )
         elif codec_info["codec"] != "h264":
             iphone_info["is_iphone_compatible"] = False
             iphone_info["compatibility_issues"].append(
-                f"Codec {codec_info['codec']} is not iPhone compatible"
+                f"Codec {codec_info['codec']} is not iPhone compatible",
             )
             iphone_info["recommendations"].append(
-                "Convert to H.264 codec for iPhone compatibility"
+                "Convert to H.264 codec for iPhone compatibility",
             )
 
         # Check pixel format
         if "10" in codec_info["pixel_format"]:
             iphone_info["requires_transcoding"] = True
             iphone_info["compatibility_issues"].append(
-                f"10-bit pixel format ({codec_info['pixel_format']}) requires conversion to 8-bit"
+                f"10-bit pixel format ({codec_info['pixel_format']}) requires conversion to 8-bit",
             )
             iphone_info["recommendations"].append(
-                "Convert to yuv420p (8-bit) pixel format"
+                "Convert to yuv420p (8-bit) pixel format",
             )
 
         # Check profile
@@ -375,19 +374,19 @@ class CodecDetector:
         if "high 10" in profile or "main 10" in profile:
             iphone_info["requires_transcoding"] = True
             iphone_info["compatibility_issues"].append(
-                f"Profile {profile} is 10-bit and requires conversion"
+                f"Profile {profile} is 10-bit and requires conversion",
             )
             iphone_info["recommendations"].append(
-                "Convert to Main or Baseline profile (8-bit)"
+                "Convert to Main or Baseline profile (8-bit)",
             )
 
         # Check container
         if codec_info["container"] not in ["mp4", "mov", "m4v"]:
             iphone_info["compatibility_issues"].append(
-                f"Container {codec_info['container']} has limited iPhone compatibility"
+                f"Container {codec_info['container']} has limited iPhone compatibility",
             )
             iphone_info["recommendations"].append(
-                "Use MP4 or MOV container for best iPhone compatibility"
+                "Use MP4 or MOV container for best iPhone compatibility",
             )
 
         # Update overall compatibility

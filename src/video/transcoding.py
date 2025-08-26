@@ -6,15 +6,14 @@ with hardware acceleration, caching, and iPhone compatibility validation.
 Extracted from the monolithic utils.py for better organization and testability.
 """
 
-import os
-import json
 import hashlib
+import os
+import signal
 import subprocess
 import time
-import signal
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Import our custom exceptions with dual import pattern
 try:
@@ -27,8 +26,6 @@ try:
 except ImportError:
     # Fallback to relative import for package execution context
     from ..core.exceptions import (
-        TranscodingError,
-        VideoProcessingError,
         raise_transcoding_error,
     )
 
@@ -123,10 +120,6 @@ class TranscodingService:
             else hw_settings.get("encoder_type", "CPU")
         )
 
-        print(f"🚀 Enhanced H.265→H.264 transcoding:")
-        print(f"   🔧 Encoder: {encoder_type}")
-        print(f"   📱 iPhone Compatible: ✅")
-        print(f"   🎯 Max Retries: {max_retries}")
 
         # Attempt transcoding with fallbacks
         for attempt in range(max_retries + 1):
@@ -135,17 +128,15 @@ class TranscodingService:
                 if attempt == 0 and hw_settings:
                     # First attempt: Use hardware acceleration if available
                     cmd, description = self._build_transcoding_command(
-                        input_path, output_path, hw_settings, encoder_type
+                        input_path, output_path, hw_settings, encoder_type,
                     )
                 elif attempt == 1 and encoder_type != "CPU":
                     # Second attempt: Fallback to CPU if hardware was used first
-                    print(f"   🔄 Retry {attempt}: Falling back to CPU encoding")
                     cmd, description = self._build_transcoding_command(
-                        input_path, output_path, self._get_cpu_settings(), "CPU"
+                        input_path, output_path, self._get_cpu_settings(), "CPU",
                     )
                 else:
                     # Final attempt: Conservative CPU settings
-                    print(f"   🔄 Retry {attempt}: Conservative CPU encoding")
                     cmd, description = self._build_transcoding_command(
                         input_path,
                         output_path,
@@ -157,18 +148,16 @@ class TranscodingService:
                 if progress_callback:
                     progress_callback(f"Attempt {attempt + 1}: {description}", 0.0)
 
-                print(f"   ⚡ Command: {' '.join(cmd[:10])}... ({description})")
 
                 # Run FFmpeg with monitoring
                 success = self._run_ffmpeg_with_monitoring(
-                    cmd, attempt_start, progress_callback
+                    cmd, attempt_start, progress_callback,
                 )
 
                 attempt_time = time.time() - attempt_start
 
                 if success:
                     # Transcoding succeeded - validate output
-                    print(f"   ✅ Transcoding completed in {attempt_time:.1f}s")
 
                     # Basic file integrity check
                     if (
@@ -179,14 +168,12 @@ class TranscodingService:
                             f"Attempt {attempt + 1}: Transcoded file missing or empty"
                         )
                         attempt_log.append(error_msg)
-                        print(f"   ❌ {error_msg}")
                         if attempt < max_retries:
                             continue
-                        else:
-                            raise_transcoding_error(
-                                f"All attempts failed file integrity: {'; '.join(attempt_log)}",
-                                input_path,
-                            )
+                        raise_transcoding_error(
+                            f"All attempts failed file integrity: {'; '.join(attempt_log)}",
+                            input_path,
+                        )
 
                     # Validate iPhone compatibility
                     if self._validate_iphone_compatibility(output_path):
@@ -194,7 +181,7 @@ class TranscodingService:
 
                         if progress_callback:
                             progress_callback(
-                                f"Complete & Validated ({total_time:.1f}s)", 1.0
+                                f"Complete & Validated ({total_time:.1f}s)", 1.0,
                             )
 
                         self._log_transcoding_success(
@@ -205,22 +192,18 @@ class TranscodingService:
                             encoder_type,
                         )
                         return output_path
-                    else:
-                        error_msg = f"Attempt {attempt + 1}: Output validation failed - not iPhone compatible"
-                        attempt_log.append(error_msg)
-                        print(f"   ❌ {error_msg}")
-                        if attempt < max_retries:
-                            continue
-                        else:
-                            raise_transcoding_error(
-                                f"All attempts failed validation: {'; '.join(attempt_log)}",
-                                input_path,
-                            )
+                    error_msg = f"Attempt {attempt + 1}: Output validation failed - not iPhone compatible"
+                    attempt_log.append(error_msg)
+                    if attempt < max_retries:
+                        continue
+                    raise_transcoding_error(
+                        f"All attempts failed validation: {'; '.join(attempt_log)}",
+                        input_path,
+                    )
                 else:
                     # FFmpeg failed
                     error_msg = f"Attempt {attempt + 1} failed ({attempt_time:.1f}s): FFmpeg execution failed"
                     attempt_log.append(error_msg)
-                    print(f"   ❌ {error_msg}")
 
                     if attempt >= max_retries:
                         break
@@ -230,10 +213,9 @@ class TranscodingService:
                     time.time() - attempt_start if "attempt_start" in locals() else 0
                 )
                 error_msg = (
-                    f"Attempt {attempt + 1} exception ({attempt_time:.1f}s): {str(e)}"
+                    f"Attempt {attempt + 1} exception ({attempt_time:.1f}s): {e!s}"
                 )
                 attempt_log.append(error_msg)
-                print(f"   ❌ {error_msg}")
 
                 if attempt >= max_retries:
                     break
@@ -241,11 +223,11 @@ class TranscodingService:
         # All attempts failed
         total_time = time.time() - start_time
         comprehensive_error = f"Enhanced transcoding failed after {max_retries + 1} attempts ({total_time:.1f}s): {'; '.join(attempt_log)}"
-        print(f"❌ {comprehensive_error}")
         raise_transcoding_error(comprehensive_error, input_path)
+        return None
 
     def preprocess_video_if_needed(
-        self, file_path: str, temp_dir: str = "temp"
+        self, file_path: str, temp_dir: str = "temp",
     ) -> Dict[str, Any]:
         """
         Enhanced video preprocessing with smart caching and comprehensive error handling.
@@ -274,7 +256,6 @@ class TranscodingService:
         filename = Path(file_path).name
 
         try:
-            print(f"🔍 Enhanced preprocessing: {filename}")
 
             # Check transcoding cache first
             cached_path = self._check_transcoding_cache(file_path)
@@ -287,13 +268,9 @@ class TranscodingService:
                 result["diagnostic_message"] = (
                     f"Used cached transcoded file: {Path(cached_path).name}"
                 )
-                print(
-                    f"   ✅ Cache hit: {Path(cached_path).name} ({result['processing_time']:.3f}s)"
-                )
                 return result
 
             # Analyze video format
-            print(f"   📊 Step 1: Analyzing video format...")
             try:
                 codec_info = self.codec_detector.detect_video_codec(file_path)
                 result["original_codec"] = {
@@ -307,17 +284,13 @@ class TranscodingService:
                 compatibility_score = codec_info.get("compatibility_score", 50)
                 warnings = codec_info.get("warnings", [])
 
-                print(
-                    f"   ✅ Codec analysis: {codec_info['codec']} ({compatibility_score}/100 compatibility)"
-                )
                 if warnings:
-                    for warning in warnings:
-                        print(f"      ⚠️  {warning}")
+                    for _warning in warnings:
+                        pass
 
             except Exception as e:
                 result["error_category"] = "CODEC_DETECTION_FAILED"
                 result["diagnostic_message"] = f"Codec detection failed: {str(e)[:200]}"
-                print(f"   ❌ Codec detection failed: {str(e)[:100]}...")
                 result["processed_path"] = file_path
                 result["processing_time"] = time.time() - start_time
                 return result
@@ -326,26 +299,17 @@ class TranscodingService:
             if not codec_info["is_hevc"]:
                 # Not H.265 - check if additional processing needed
                 if compatibility_score >= 80:
-                    print(
-                        f"   ✅ {codec_info['codec']} format compatible, no processing needed"
-                    )
                     result["success"] = True
                     result["diagnostic_message"] = (
                         f"Native {codec_info['codec']} compatibility (score: {compatibility_score})"
                     )
                     result["processing_time"] = time.time() - start_time
                     return result
-                else:
-                    print(
-                        f"   ⚠️  {codec_info['codec']} format has compatibility issues (score: {compatibility_score})"
-                    )
 
             # H.265 processing
-            print(f"   📱 Step 2: Testing H.265/iPhone compatibility...")
 
             # Smart compatibility testing
             if self.test_moviepy_h265_compatibility(file_path):
-                print(f"   ✅ H.265 compatible with MoviePy, skipping transcoding")
                 result["success"] = True
                 result["diagnostic_message"] = (
                     "H.265 native MoviePy compatibility confirmed"
@@ -354,7 +318,6 @@ class TranscodingService:
                 return result
 
             # Enhanced transcoding required
-            print(f"   🔄 Step 3: H.265 transcoding required for MoviePy compatibility")
 
             # Create temp directory
             try:
@@ -362,9 +325,8 @@ class TranscodingService:
             except OSError as e:
                 result["error_category"] = "TEMP_DIR_CREATION_FAILED"
                 result["diagnostic_message"] = (
-                    f"Cannot create temp directory {temp_dir}: {str(e)}"
+                    f"Cannot create temp directory {temp_dir}: {e!s}"
                 )
-                print(f"   ❌ Temp directory creation failed: {str(e)}")
                 result["processing_time"] = time.time() - start_time
                 return result
 
@@ -372,15 +334,17 @@ class TranscodingService:
             input_stem = Path(file_path).stem
             cache_key = self._get_file_cache_key(file_path)[:8]
             output_path = os.path.join(
-                temp_dir, f"{input_stem}_h264_iphone_{cache_key}.mp4"
+                temp_dir, f"{input_stem}_h264_iphone_{cache_key}.mp4",
             )
 
             # Enhanced transcoding
             try:
+                import logging
+                logger = logging.getLogger(__name__)
                 transcoded_path = self.transcode_hevc_to_h264(
                     file_path,
                     output_path,
-                    progress_callback=lambda msg, progress: print(f"      📈 {msg}"),
+                    progress_callback=lambda msg, progress: logger.info(f"Transcoding: {msg}"),
                     max_retries=2,
                 )
 
@@ -394,9 +358,6 @@ class TranscodingService:
                     "Enhanced H.265→H.264 transcoding successful with iPhone compatibility validation"
                 )
 
-                print(
-                    f"   ✅ Enhanced transcoding successful: {Path(transcoded_path).name}"
-                )
 
             except Exception as transcoding_error:
                 error_str = str(transcoding_error)
@@ -417,14 +378,9 @@ class TranscodingService:
                     result["error_category"] = "TRANSCODING_UNKNOWN_ERROR"
 
                 result["diagnostic_message"] = f"Transcoding error: {error_str[:200]}"
-                print(f"   ❌ Enhanced transcoding failed: {result['error_category']}")
-                print(f"      Details: {result['diagnostic_message'][:100]}...")
 
                 # Fallback to original file
                 result["processed_path"] = file_path
-                print(
-                    f"   ⚠️  Falling back to original file - may cause downstream processing issues"
-                )
 
         except Exception as e:
             result["error_category"] = "PREPROCESSING_UNEXPECTED_ERROR"
@@ -432,20 +388,15 @@ class TranscodingService:
                 f"Unexpected preprocessing error: {str(e)[:200]}"
             )
             result["processed_path"] = file_path
-            print(f"   ❌ Unexpected preprocessing error: {str(e)[:100]}...")
-            print(f"   ⚠️  Using original file as fallback")
 
         finally:
             result["processing_time"] = time.time() - start_time
             performance_indicator = "⚡" if result["cached"] else "⏱️"
-            print(
-                f"   {performance_indicator} Preprocessing completed in {result['processing_time']:.1f}s"
-            )
 
         return result
 
     def test_moviepy_h265_compatibility(
-        self, file_path: str, timeout_seconds: float = 10.0
+        self, file_path: str, timeout_seconds: float = 10.0,
     ) -> bool:
         """
         Test if MoviePy can load H.265 file directly without transcoding.
@@ -475,9 +426,6 @@ class TranscodingService:
                 signal.signal(signal.SIGALRM, old_handler)
 
         try:
-            print(
-                f"   🧪 Testing MoviePy H.265 compatibility (timeout: {timeout_seconds}s)..."
-            )
             start_time = time.time()
 
             # Try to import MoviePy
@@ -487,7 +435,6 @@ class TranscodingService:
                 try:
                     from moviepy import VideoFileClip
                 except ImportError:
-                    print(f"   ❌ MoviePy not available")
                     return False
 
             # Test H.265 loading with timeout protection
@@ -507,37 +454,20 @@ class TranscodingService:
                 video_clip.close()
 
                 test_time = time.time() - start_time
-                print(f"   ✅ Compatibility test passed ({test_time:.2f}s)")
-                print(
-                    f"      📹 Video: {width}x{height} @ {fps:.1f}fps, {duration:.1f}s"
-                )
-                print(f"      🎯 Frame decode: successful")
 
                 return True
 
         except TimeoutError:
-            print(f"   ⏱️  Compatibility test timed out after {timeout_seconds}s")
-            print(f"      → H.265 loading too slow, transcoding recommended")
             return False
 
         except Exception as e:
             error_msg = str(e).lower()
             test_time = time.time() - start_time
 
-            if any(keyword in error_msg for keyword in ["codec", "decoder", "format"]):
-                print(
-                    f"   ❌ Codec compatibility issue ({test_time:.2f}s): {str(e)[:100]}..."
-                )
-            elif any(keyword in error_msg for keyword in ["memory", "allocation"]):
-                print(
-                    f"   💾 Memory issue ({test_time:.2f}s): Large H.265 file may need transcoding"
-                )
-            elif any(keyword in error_msg for keyword in ["permission", "access"]):
-                print(f"   🔒 File access issue ({test_time:.2f}s): {str(e)[:100]}...")
+            if any(keyword in error_msg for keyword in ["codec", "decoder", "format"]) or any(keyword in error_msg for keyword in ["memory", "allocation"]) or any(keyword in error_msg for keyword in ["permission", "access"]):
+                pass
             else:
-                print(
-                    f"   ❌ Compatibility test failed ({test_time:.2f}s): {str(e)[:100]}..."
-                )
+                pass
 
             return False
 
@@ -586,52 +516,14 @@ class TranscodingService:
         if codec == "h264_nvenc":
             # NVIDIA GPU encoding
             cmd = (
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-hwaccel",
-                    "cuda",
-                    "-hwaccel_output_format",
-                    "cuda",
-                    "-c:v",
-                    "hevc_cuvid",
-                    "-i",
-                    input_path,
-                    "-c:v",
-                    "h264_nvenc",
-                    "-preset",
-                    "fast",
-                    "-crf",
-                    "25",
-                ]
-                + iphone_params
-                + ["-c:a", "aac", "-b:a", "128k", output_path]
+                ["ffmpeg", "-y", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda", "-c:v", "hevc_cuvid", "-i", input_path, "-c:v", "h264_nvenc", "-preset", "fast", "-crf", "25", *iphone_params, "-c:a", "aac", "-b:a", "128k", output_path]
             )
             description = "NVIDIA GPU + iPhone params"
 
         elif codec == "h264_qsv":
             # Intel QuickSync encoding
             cmd = (
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-hwaccel",
-                    "qsv",
-                    "-hwaccel_output_format",
-                    "qsv",
-                    "-c:v",
-                    "hevc_qsv",
-                    "-i",
-                    input_path,
-                    "-c:v",
-                    "h264_qsv",
-                    "-preset",
-                    "fast",
-                    "-crf",
-                    "25",
-                ]
-                + iphone_params
-                + ["-c:a", "aac", "-b:a", "128k", output_path]
+                ["ffmpeg", "-y", "-hwaccel", "qsv", "-hwaccel_output_format", "qsv", "-c:v", "hevc_qsv", "-i", input_path, "-c:v", "h264_qsv", "-preset", "fast", "-crf", "25", *iphone_params, "-c:a", "aac", "-b:a", "128k", output_path]
             )
             description = "Intel QSV + iPhone params"
 
@@ -642,22 +534,7 @@ class TranscodingService:
             crf = settings.get("crf", "25")
 
             cmd = (
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    input_path,
-                    "-c:v",
-                    "libx264",
-                    "-threads",
-                    str(threads),
-                    "-preset",
-                    preset,
-                    "-crf",
-                    str(crf),
-                ]
-                + iphone_params
-                + ["-c:a", "aac", "-b:a", "128k", output_path]
+                ["ffmpeg", "-y", "-i", input_path, "-c:v", "libx264", "-threads", str(threads), "-preset", preset, "-crf", str(crf), *iphone_params, "-c:a", "aac", "-b:a", "128k", output_path]
             )
             description = f"CPU {preset} ({threads}t) + iPhone params"
 
@@ -672,7 +549,7 @@ class TranscodingService:
         """Run FFmpeg command with progress monitoring."""
         try:
             process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             )
 
             # Progress monitoring
@@ -711,13 +588,12 @@ class TranscodingService:
         """Get CPU encoding settings."""
         if conservative:
             return {"codec": "libx264", "preset": "fast", "crf": "23", "threads": 2}
-        else:
-            return {
-                "codec": "libx264",
-                "preset": "ultrafast",
-                "crf": "25",
-                "threads": min(os.cpu_count() or 4, 6),
-            }
+        return {
+            "codec": "libx264",
+            "preset": "ultrafast",
+            "crf": "25",
+            "threads": min(os.cpu_count() or 4, 6),
+        }
 
     def _log_transcoding_success(
         self,
@@ -732,15 +608,8 @@ class TranscodingService:
             input_size = os.path.getsize(input_path) / (1024 * 1024)  # MB
             output_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
 
-            print(f"✅ Enhanced iPhone H.265→H.264 transcoding successful:")
-            print(f"   📁 Input: {Path(input_path).name}")
-            print(f"   📁 Output: {Path(output_path).name}")
-            print(f"   ⏱️  Time: {total_time:.1f}s (attempts: {attempts})")
-            print(f"   🔧 Method: {encoder_type}")
-            print(f"   📊 Size: {input_size:.1f}MB → {output_size:.1f}MB")
-            print(f"   📱 iPhone Compatibility: Validated ✅")
         except Exception:
-            print(f"✅ Transcoding successful: {Path(output_path).name}")
+            pass
 
     def _check_transcoding_cache(self, file_path: str) -> Optional[str]:
         """Check if transcoded version exists in cache and is still valid."""
@@ -759,12 +628,10 @@ class TranscodingService:
 
                 # Check if cached file still exists
                 if os.path.exists(cached_path):
-                    print(f"   💾 Cache hit: Using cached transcoded file")
                     return cached_path
-                else:
-                    # Cached file was deleted
-                    del self._transcoding_cache[cache_key]
-                    return None
+                # Cached file was deleted
+                del self._transcoding_cache[cache_key]
+                return None
 
             return None
 
@@ -789,10 +656,10 @@ class TranscodingService:
         try:
             stat = os.stat(file_path)
             cache_string = f"{file_path}_{stat.st_mtime}_{stat.st_size}"
-            return hashlib.md5(cache_string.encode()).hexdigest()
+            return hashlib.md5(cache_string.encode(), usedforsecurity=False).hexdigest()
         except OSError:
             # Fallback to just file path if stat fails
-            return hashlib.md5(file_path.encode()).hexdigest()
+            return hashlib.md5(file_path.encode(), usedforsecurity=False).hexdigest()
 
     def clear_cache(self) -> None:
         """Clear the transcoding cache."""
@@ -807,7 +674,7 @@ class TranscodingService:
                 [
                     time.time() - entry["timestamp"]
                     for entry in self._transcoding_cache.values()
-                ]
+                ],
             )
             if self._transcoding_cache
             else 0,
@@ -821,7 +688,7 @@ _global_transcoding_service = TranscodingService()
 # Backwards compatibility functions
 def transcode_hevc_to_h264_enhanced(
     input_path: str,
-    output_path: str = None,
+    output_path: Optional[str] = None,
     progress_callback: Optional[Callable] = None,
     max_retries: int = 2,
 ) -> str:
@@ -831,13 +698,13 @@ def transcode_hevc_to_h264_enhanced(
     Replaces the original transcode_hevc_to_h264_enhanced() from utils.py
     """
     return _global_transcoding_service.transcode_hevc_to_h264(
-        input_path, output_path, progress_callback, max_retries
+        input_path, output_path, progress_callback, max_retries,
     )
 
 
 def transcode_hevc_to_h264(
     input_path: str,
-    output_path: str = None,
+    output_path: Optional[str] = None,
     progress_callback: Optional[Callable] = None,
 ) -> str:
     """
@@ -846,12 +713,12 @@ def transcode_hevc_to_h264(
     Replaces the original transcode_hevc_to_h264() from utils.py
     """
     return _global_transcoding_service.transcode_hevc_to_h264(
-        input_path, output_path, progress_callback
+        input_path, output_path, progress_callback,
     )
 
 
 def preprocess_video_if_needed_enhanced(
-    file_path: str, temp_dir: str = "temp"
+    file_path: str, temp_dir: str = "temp",
 ) -> Dict[str, Any]:
     """
     Legacy function for backwards compatibility.
@@ -872,7 +739,7 @@ def preprocess_video_if_needed(file_path: str, temp_dir: str = "temp") -> str:
 
 
 def test_moviepy_h265_compatibility(
-    file_path: str, timeout_seconds: float = 10.0
+    file_path: str, timeout_seconds: float = 10.0,
 ) -> bool:
     """
     Legacy function for backwards compatibility.
@@ -880,17 +747,17 @@ def test_moviepy_h265_compatibility(
     Replaces the original test_moviepy_h265_compatibility() from utils.py
     """
     return _global_transcoding_service.test_moviepy_h265_compatibility(
-        file_path, timeout_seconds
+        file_path, timeout_seconds,
     )
 
 
 # Export key classes and functions
 __all__ = [
     "TranscodingService",
+    "preprocess_video_if_needed",
+    "preprocess_video_if_needed_enhanced",
+    "test_moviepy_h265_compatibility",
+    "transcode_hevc_to_h264",
     # Legacy compatibility functions
     "transcode_hevc_to_h264_enhanced",
-    "transcode_hevc_to_h264",
-    "preprocess_video_if_needed_enhanced",
-    "preprocess_video_if_needed",
-    "test_moviepy_h265_compatibility",
 ]

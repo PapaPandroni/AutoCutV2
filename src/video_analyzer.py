@@ -5,8 +5,9 @@ Handles video processing including scene detection, quality scoring,
 motion analysis, and face detection.
 """
 
-from typing import Dict, List, Tuple, Optional
 import os
+from typing import Any, Dict, List, Optional, Tuple
+
 import cv2
 import numpy as np
 
@@ -29,7 +30,7 @@ except ImportError:
     from .video import VideoChunk
 
 
-def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
+def load_video(file_path: str) -> Tuple[VideoFileClip, Dict[str, Any]]:
     """Load video file and extract basic metadata.
 
     Automatically preprocesses problematic video codecs (H.265/HEVC) for
@@ -91,11 +92,11 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict]:
         return video, metadata
 
     except Exception as e:
-        raise ValueError(f"Failed to load video file {file_path}: {str(e)}")
+        raise ValueError(f"Failed to load video file {file_path}: {e!s}")
 
 
 def detect_scenes(
-    video: VideoFileClip, threshold: float = 30.0
+    video: VideoFileClip, threshold: float = 30.0,
 ) -> List[Tuple[float, float]]:
     """Detect scene changes in video based on frame differences.
 
@@ -299,7 +300,7 @@ def detect_motion(video: VideoFileClip, start_time: float, end_time: float) -> f
                 if corners is not None and len(corners) > 10:
                     # Calculate optical flow
                     next_corners, status, error = cv2.calcOpticalFlowPyrLK(
-                        prev_frame, gray, corners, None
+                        prev_frame, gray, corners, None,
                     )
 
                     # Select good points
@@ -312,7 +313,7 @@ def detect_motion(video: VideoFileClip, start_time: float, end_time: float) -> f
 
                         # Calculate motion magnitude
                         motion_magnitudes = np.sqrt(
-                            motion_vectors[:, 0] ** 2 + motion_vectors[:, 1] ** 2
+                            motion_vectors[:, 0] ** 2 + motion_vectors[:, 1] ** 2,
                         )
 
                         # Average motion magnitude
@@ -429,15 +430,15 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
 
 def detect_camera_shake(video: VideoFileClip, start_time: float, end_time: float) -> float:
     """Detect camera shake/instability using dense optical flow analysis.
-    
+
     Uses dense optical flow to analyze global motion patterns and distinguish
     between camera shake (bad) and subject movement (good).
-    
+
     Args:
         video: VideoFileClip object
         start_time: Start time of segment in seconds
         end_time: End time of segment in seconds
-    
+
     Returns:
         Stability score (0-100, higher means more stable/less shaky)
     """
@@ -468,7 +469,7 @@ def detect_camera_shake(video: VideoFileClip, start_time: float, end_time: float
             # Get frame and convert to grayscale
             frame = video.get_frame(t)
             gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-            
+
             # Resize to speed up computation (maintain aspect ratio)
             height, width = gray.shape
             if width > 640:
@@ -480,7 +481,7 @@ def detect_camera_shake(video: VideoFileClip, start_time: float, end_time: float
             if prev_frame is not None:
                 # Calculate dense optical flow using Farneback method
                 flow = cv2.calcOpticalFlowFarneback(
-                    prev_frame, gray, 
+                    prev_frame, gray,
                     None,           # flow (output)
                     0.5,           # pyr_scale: image scale (<1) to build pyramids
                     3,             # levels: number of pyramid layers
@@ -488,9 +489,9 @@ def detect_camera_shake(video: VideoFileClip, start_time: float, end_time: float
                     3,             # iterations: number of iterations at each pyramid level
                     5,             # poly_n: size of pixel neighborhood for polynomial expansion
                     1.2,           # poly_sigma: standard deviation of Gaussian for smoothing
-                    0              # flags
+                    0,              # flags
                 )
-                
+
                 # Analyze the flow for camera shake characteristics
                 stability_score = _analyze_flow_stability(flow)
                 stability_metrics.append(stability_score)
@@ -511,51 +512,51 @@ def detect_camera_shake(video: VideoFileClip, start_time: float, end_time: float
 
 def _analyze_flow_stability(flow: np.ndarray) -> float:
     """Analyze dense optical flow to determine camera stability.
-    
+
     Args:
         flow: Dense optical flow array (H x W x 2)
-        
+
     Returns:
         Stability score (0-100, higher is more stable)
     """
     if flow is None or flow.size == 0:
         return 100.0
-        
+
     try:
         # Extract flow components
         flow_x = flow[:, :, 0]
         flow_y = flow[:, :, 1]
-        
+
         # Calculate flow magnitude for each pixel
         flow_magnitude = np.sqrt(flow_x**2 + flow_y**2)
-        
+
         # Ignore very small movements (likely noise)
         significant_motion_mask = flow_magnitude > 0.5
-        
+
         if not np.any(significant_motion_mask):
             return 100.0  # No significant motion = very stable
-        
+
         # Get flow vectors for pixels with significant motion
         significant_flow_x = flow_x[significant_motion_mask]
         significant_flow_y = flow_y[significant_motion_mask]
-        
+
         # 1. Global Motion Consistency Analysis
         # Camera shake typically shows inconsistent/erratic global motion
         mean_flow_x = np.mean(significant_flow_x)
         mean_flow_y = np.mean(significant_flow_y)
-        
+
         # Calculate how much each pixel's motion deviates from global mean
         deviation_x = significant_flow_x - mean_flow_x
         deviation_y = significant_flow_y - mean_flow_y
         deviation_magnitude = np.sqrt(deviation_x**2 + deviation_y**2)
-        
+
         # High deviation indicates inconsistent motion (camera shake)
         motion_consistency = 100.0 - min(100.0, np.mean(deviation_magnitude) * 5)
-        
-        # 2. Global Motion Magnitude Analysis  
+
+        # 2. Global Motion Magnitude Analysis
         # Very high global motion often indicates camera shake or excessive movement
         global_motion_magnitude = np.sqrt(mean_flow_x**2 + mean_flow_y**2)
-        
+
         # Apply penalties for different levels of global motion
         if global_motion_magnitude > 15:
             # Very high motion - likely shake or very unstable
@@ -569,25 +570,25 @@ def _analyze_flow_stability(flow: np.ndarray) -> float:
         else:
             # Low motion - no penalty
             magnitude_penalty = 0
-            
+
         magnitude_score = 100.0 - magnitude_penalty
-        
+
         # 3. Motion Direction Uniformity
         # Camera shake often has random directions, good motion has consistent direction
         flow_angles = np.arctan2(significant_flow_y, significant_flow_x)
-        
+
         # Calculate circular variance of flow angles (0 = all same direction, high = random directions)
         mean_cos = np.mean(np.cos(flow_angles))
         mean_sin = np.mean(np.sin(flow_angles))
         circular_variance = 1 - np.sqrt(mean_cos**2 + mean_sin**2)
-        
+
         # High circular variance indicates random motion directions (shake)
         direction_consistency = 100.0 - (circular_variance * 100)
-        
+
         # 4. Spatial Distribution Analysis
         # Camera shake affects entire frame, localized motion affects specific regions
         motion_pixel_ratio = np.sum(significant_motion_mask) / significant_motion_mask.size
-        
+
         # If most pixels have motion, it's likely camera movement - apply additional scrutiny
         if motion_pixel_ratio > 0.7:
             # For global motion, emphasize consistency and reasonable magnitude
@@ -602,18 +603,18 @@ def _analyze_flow_stability(flow: np.ndarray) -> float:
         else:
             # Localized motion is generally good (subject movement)
             spatial_consistency_score = 90.0
-        
+
         # Combine all metrics with weights
         # Emphasize consistency metrics for shake detection
         final_stability = (
-            0.30 * motion_consistency +      # How consistent is the motion?  
+            0.30 * motion_consistency +      # How consistent is the motion?
             0.30 * magnitude_score +         # Is global motion magnitude reasonable?
             0.25 * direction_consistency +   # Is motion direction consistent?
             0.15 * spatial_consistency_score # Is spatial distribution reasonable?
         )
-        
+
         return float(np.clip(final_stability, 0.0, 100.0))
-        
+
     except Exception:
         # Return neutral score if analysis fails
         return 50.0
@@ -621,9 +622,9 @@ def _analyze_flow_stability(flow: np.ndarray) -> float:
 
 def analyze_video_file(
     file_path: str,
-    bpm: float = None,
+    bpm: Optional[float] = None,
     min_beats: float = 1.0,
-    min_scene_duration: float = None,
+    min_scene_duration: Optional[float] = None,
 ) -> List[VideoChunk]:
     """Analyze video file and return scored chunks suitable for editing.
 
@@ -655,7 +656,7 @@ def analyze_video_file(
     if not logger.handlers:
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
@@ -665,14 +666,14 @@ def analyze_video_file(
         # Explicit override provided - use it
         calculated_min_duration = min_scene_duration
         logger.info(
-            f"Using explicit minimum scene duration: {calculated_min_duration}s"
+            f"Using explicit minimum scene duration: {calculated_min_duration}s",
         )
     elif bpm is not None:
         # Calculate beat-based minimum duration
         beat_duration = 60.0 / bpm  # Duration of one beat in seconds
         calculated_min_duration = beat_duration * min_beats
         logger.info(
-            f"Using beat-based minimum scene duration: {calculated_min_duration:.3f}s ({min_beats} beats at {bpm:.1f} BPM)"
+            f"Using beat-based minimum scene duration: {calculated_min_duration:.3f}s ({min_beats} beats at {bpm:.1f} BPM)",
         )
     else:
         # No BPM provided, use config default
@@ -687,7 +688,7 @@ def analyze_video_file(
         except ImportError:
             calculated_min_duration = 0.5
         logger.info(
-            f"Using fallback minimum scene duration: {calculated_min_duration}s (no BPM available)"
+            f"Using fallback minimum scene duration: {calculated_min_duration}s (no BPM available)",
         )
 
     if not os.path.exists(file_path):
@@ -716,18 +717,18 @@ def analyze_video_file(
             video, metadata = load_video(file_path)
             processing_stats["load_success"] = True
             logger.info(
-                f"Video loaded successfully: {metadata['width']}x{metadata['height']}, {metadata['duration']:.2f}s, {metadata['fps']:.2f}fps"
+                f"Video loaded successfully: {metadata['width']}x{metadata['height']}, {metadata['duration']:.2f}s, {metadata['fps']:.2f}fps",
             )
 
             # Log transcoding information if applicable
             if metadata.get("was_transcoded", False):
                 logger.info(
-                    f"Video was transcoded from: {file_path} -> {metadata['processed_file_path']}"
+                    f"Video was transcoded from: {file_path} -> {metadata['processed_file_path']}",
                 )
         except Exception as e:
-            error_msg = f"Failed to load video {filename}: {str(e)}"
+            error_msg = f"Failed to load video {filename}: {e!s}"
             processing_stats["errors"].append(error_msg)
-            logger.error(error_msg)
+            logger.exception(error_msg)
             raise ValueError(error_msg)
 
         # Step 2: Scene detection with detailed logging
@@ -743,12 +744,12 @@ def analyze_video_file(
                 processing_stats["errors"].append(error_msg)
                 logger.warning(error_msg)
         except Exception as e:
-            error_msg = f"Scene detection failed for {filename}: {str(e)}"
+            error_msg = f"Scene detection failed for {filename}: {e!s}"
             processing_stats["errors"].append(error_msg)
-            logger.error(error_msg)
+            logger.exception(error_msg)
             # Don't raise here, try to continue with single scene
             scenes = [(0.0, metadata["duration"])]
-            logger.info(f"Fallback: Using entire video as single scene")
+            logger.info("Fallback: Using entire video as single scene")
 
         # Step 3: Filter scenes by minimum duration (using calculated beat-based duration)
         valid_scenes = [
@@ -761,13 +762,13 @@ def analyze_video_file(
         if not valid_scenes:
             # If no scenes meet minimum duration, use the original scenes
             logger.warning(
-                f"No scenes meet minimum duration {calculated_min_duration:.3f}s, using all {len(scenes)} scenes"
+                f"No scenes meet minimum duration {calculated_min_duration:.3f}s, using all {len(scenes)} scenes",
             )
             valid_scenes = scenes
             processing_stats["valid_scenes"] = len(valid_scenes)
 
         logger.info(
-            f"Scene filtering complete: {len(valid_scenes)} valid scenes (min duration: {calculated_min_duration:.3f}s)"
+            f"Scene filtering complete: {len(valid_scenes)} valid scenes (min duration: {calculated_min_duration:.3f}s)",
         )
 
         # Step 4: Analyze each scene and create VideoChunk objects
@@ -777,14 +778,14 @@ def analyze_video_file(
         for scene_idx, (start_time, end_time) in enumerate(valid_scenes):
             scene_duration = end_time - start_time
             logger.debug(
-                f"Analyzing scene {scene_idx + 1}/{len(valid_scenes)}: {start_time:.2f}-{end_time:.2f}s ({scene_duration:.2f}s)"
+                f"Analyzing scene {scene_idx + 1}/{len(valid_scenes)}: {start_time:.2f}-{end_time:.2f}s ({scene_duration:.2f}s)",
             )
 
             try:
                 # Calculate basic quality score
                 quality_score = score_scene(video, start_time, end_time)
                 logger.debug(
-                    f"Scene {scene_idx + 1} quality score: {quality_score:.2f}"
+                    f"Scene {scene_idx + 1} quality score: {quality_score:.2f}",
                 )
 
                 # Calculate motion score
@@ -821,9 +822,9 @@ def analyze_video_file(
                 face_score = min(100, face_count * 25)  # 4+ faces = 100 points
 
                 enhanced_score = (
-                    0.60 * quality_score + 
-                    0.15 * motion_score + 
-                    0.10 * stability_score + 
+                    0.60 * quality_score +
+                    0.15 * motion_score +
+                    0.10 * stability_score +
                     0.15 * face_score
                 )
 
@@ -842,16 +843,16 @@ def analyze_video_file(
                 chunks.append(chunk)
                 processing_stats["chunks_created"] += 1
                 logger.debug(
-                    f"Scene {scene_idx + 1} chunk created: score={enhanced_score:.2f}"
+                    f"Scene {scene_idx + 1} chunk created: score={enhanced_score:.2f}",
                 )
 
             except Exception as e:
                 # Log detailed error for this specific scene but continue processing
-                error_msg = f"Scene {scene_idx + 1} analysis failed: {str(e)}"
+                error_msg = f"Scene {scene_idx + 1} analysis failed: {e!s}"
                 scene_errors.append(error_msg)
                 processing_stats["chunks_failed"] += 1
                 logger.warning(
-                    f"Scene {scene_idx + 1} failed ({start_time:.2f}-{end_time:.2f}s): {str(e)}"
+                    f"Scene {scene_idx + 1} failed ({start_time:.2f}-{end_time:.2f}s): {e!s}",
                 )
                 continue
 
@@ -879,15 +880,15 @@ def analyze_video_file(
             # Provide detailed diagnosis
             if processing_stats["scenes_found"] == 0:
                 logger.error(
-                    f"Root cause: No scenes detected - check if video is valid and not corrupted"
+                    "Root cause: No scenes detected - check if video is valid and not corrupted",
                 )
             elif processing_stats["valid_scenes"] == 0:
                 logger.error(
-                    f"Root cause: No scenes meet minimum duration {calculated_min_duration:.3f}s"
+                    f"Root cause: No scenes meet minimum duration {calculated_min_duration:.3f}s",
                 )
             else:
                 logger.error(
-                    f"Root cause: All scene analysis steps failed - check video codec compatibility"
+                    "Root cause: All scene analysis steps failed - check video codec compatibility",
                 )
 
             return []  # Return empty list instead of raising exception
@@ -896,19 +897,15 @@ def analyze_video_file(
         chunks.sort(key=lambda x: x.score, reverse=True)
 
         logger.info(
-            f"Successfully created {len(chunks)} chunks from {filename} (scores: {chunks[0].score:.1f}-{chunks[-1].score:.1f})"
+            f"Successfully created {len(chunks)} chunks from {filename} (scores: {chunks[0].score:.1f}-{chunks[-1].score:.1f})",
         )
         return chunks
 
     except Exception as e:
-        error_msg = f"Critical error analyzing {filename}: {str(e)}"
+        error_msg = f"Critical error analyzing {filename}: {e!s}"
         processing_stats["errors"].append(error_msg)
-        logger.error(error_msg)
-        logger.error(f"Processing stats: {processing_stats}")
+        logger.exception(error_msg)
+        logger.exception(f"Processing stats: {processing_stats}")
         raise ValueError(error_msg)
 
 
-if __name__ == "__main__":
-    # Test script for video analysis
-    print("AutoCut Video Analyzer - Test Mode")
-    print("TODO: Add test with sample video files")

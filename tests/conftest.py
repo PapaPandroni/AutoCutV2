@@ -6,21 +6,22 @@ for the AutoCut V2 test suite.
 """
 
 import os
+import shutil
 import sys
 import tempfile
-import shutil
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 import pytest
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Import core modules
-from src.video.validation import VideoValidator, ValidationResult
-from src.video.codec_detection import CodecDetector
 from src.hardware.detection import HardwareDetector
+from src.video.codec_detection import CodecDetector
 from src.video.transcoding import TranscodingService
+from src.video.validation import ValidationResult, VideoValidator
 
 
 @pytest.fixture(scope="session")
@@ -101,7 +102,7 @@ def mock_ffprobe_output() -> Dict[str, Any]:
                 "height": 1080,
                 "r_frame_rate": "24/1",
                 "duration": "10.5",
-            }
+            },
         ],
         "format": {
             "filename": "test_video.mov",
@@ -163,7 +164,7 @@ class TestHelpers:
 
     @staticmethod
     def create_mock_video_file(
-        temp_dir: Path, filename: str = "test.mp4", size_mb: float = 1.0
+        temp_dir: Path, filename: str = "test.mp4", size_mb: float = 1.0,
     ) -> Path:
         """Create a mock video file for testing."""
         file_path = temp_dir / filename
@@ -174,7 +175,7 @@ class TestHelpers:
 
     @staticmethod
     def create_mock_audio_file(
-        temp_dir: Path, filename: str = "test.mp3", size_mb: float = 0.5
+        temp_dir: Path, filename: str = "test.mp3", size_mb: float = 0.5,
     ) -> Path:
         """Create a mock audio file for testing."""
         file_path = temp_dir / filename
@@ -219,7 +220,7 @@ def _has_gpu():
 
 
 pytest.mark.gpu = pytest.mark.skipif(
-    not _has_gpu(), reason="GPU hardware not available"
+    not _has_gpu(), reason="GPU hardware not available",
 )
 
 pytest.mark.media_required = pytest.mark.skipif(

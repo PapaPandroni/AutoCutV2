@@ -5,8 +5,9 @@ These tests verify that the core refactored modules can be imported
 and have basic functionality working.
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 class TestBasicImports:
@@ -14,9 +15,9 @@ class TestBasicImports:
 
     def test_import_video_modules(self):
         """Test importing video modules."""
-        from src.video.validation import VideoValidator
         from src.video.codec_detection import CodecDetector
         from src.video.transcoding import TranscodingService
+        from src.video.validation import VideoValidator
 
         # Test instantiation
         validator = VideoValidator()
@@ -142,7 +143,7 @@ class TestTestingFramework:
     @pytest.mark.skipif(True, reason="Testing skip functionality")
     def test_skip_functionality(self):
         """This test should be skipped."""
-        assert False  # Should not run
+        raise AssertionError  # Should not run
 
     def test_fixture_access(self, temp_dir):
         """Test that fixtures work."""
@@ -156,9 +157,9 @@ class TestWeek1Achievements:
     def test_modular_architecture(self):
         """Test that modular architecture is in place."""
         # Test that we can import from different modules
-        from src.video import validation
-        from src.hardware import detection
         from src.core import exceptions
+        from src.hardware import detection
+        from src.video import validation
 
         assert validation is not None
         assert detection is not None
