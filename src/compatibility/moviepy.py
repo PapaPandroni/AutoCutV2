@@ -42,10 +42,10 @@ def import_moviepy_safely():
                 concatenate_videoclips,
                 CompositeVideoClip,
             )
-        except ImportError:
+        except ImportError as e:
             raise RuntimeError(
                 "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
-            )
+            ) from e
 
 
 def check_moviepy_api_compatibility() -> Dict[str, Any]:
@@ -154,7 +154,7 @@ def subclip_safely(
             # If both fail, raise informative error
             raise RuntimeError(
                 f"Neither 'subclipped' nor 'subclip' methods available on {type(clip)}"
-            )
+            ) from None
     except Exception:
         # Re-raise other exceptions
         raise
@@ -182,7 +182,7 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info: Dict[str, An
             # If both fail, raise informative error
             raise RuntimeError(
                 f"Neither 'with_audio' nor 'set_audio' methods available on {type(video_clip)}"
-            )
+            ) from None
     except Exception:
         # Re-raise other exceptions
         raise
@@ -398,7 +398,7 @@ def resize_clip_safely(
                 )
             except Exception as e:
                 logger.exception(f"All resize methods failed: {e}")
-                raise RuntimeError(f"Unable to resize clip: {e}")
+                raise RuntimeError(f"Unable to resize clip: {e}") from e
 
         # CRITICAL FIX: Check if letterboxing should be applied based on scaling mode
         if new_width == target_width and new_height == target_height:
@@ -686,7 +686,7 @@ def crop_clip_safely(
         except AttributeError:
             raise RuntimeError(
                 f"Neither 'cropped' nor 'crop' methods available on {type(clip)}"
-            )
+            ) from None
     except Exception:
         # Re-raise other exceptions
         raise
@@ -775,7 +775,7 @@ def write_videofile_safely(
         except Exception as fallback_error:
             raise RuntimeError(
                 f"Video writing failed even with fallback parameters: {fallback_error}"
-            )
+            ) from fallback_error
 
 
 # Legacy compatibility functions that may be needed

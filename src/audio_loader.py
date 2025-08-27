@@ -156,12 +156,12 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
                 return _fallback_wav_processing(audio_file)
 
         logger.exception(f"❌ {error_msg}")
-        raise RuntimeError(error_msg)
+        raise RuntimeError(error_msg) from e
 
     except subprocess.TimeoutExpired:
         error_msg = "FFmpeg subprocess timed out after 60 seconds"
         logger.exception(f"❌ {error_msg}")
-        raise RuntimeError(error_msg)
+        raise RuntimeError(error_msg) from None  # TimeoutExpired doesn't need chaining
 
     except Exception as e:
         error_msg = f"FFmpeg subprocess unexpected error: {e!s}"
@@ -175,7 +175,7 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
                 error_msg += f" (fallback also failed: {fallback_error})"
 
         logger.exception(f"❌ {error_msg}")
-        raise RuntimeError(error_msg)
+        raise RuntimeError(error_msg) from e
 
 
 def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
@@ -327,8 +327,8 @@ def load_audio_with_librosa(audio_file: str) -> "AudioArrayClip":
 
     try:
         import librosa
-    except ImportError:
-        raise RuntimeError("Librosa not available - install with: pip install librosa")
+    except ImportError as e:
+        raise RuntimeError("Librosa not available - install with: pip install librosa") from e
 
     if not os.path.exists(audio_file):
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
@@ -367,7 +367,7 @@ def load_audio_with_librosa(audio_file: str) -> "AudioArrayClip":
     except Exception as e:
         error_msg = f"Librosa loading failed: {e!s}"
         logger.exception(f"❌ {error_msg}")
-        raise RuntimeError(error_msg)
+        raise RuntimeError(error_msg) from e
 
 
 def get_audio_info(audio_file: str) -> dict:
