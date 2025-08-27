@@ -1510,8 +1510,8 @@ class RobustVideoLoader:
 
         # Create temporary converted file
         temp_dir = tempfile.mkdtemp(prefix="autocut_conversion_")
-        base_name = os.path.splitext(os.path.basename(video_file))[0]
-        converted_file = os.path.join(temp_dir, f"{base_name}_converted.mp4")
+        base_name = Path(video_file).stem
+        converted_file = Path(temp_dir) / f"{base_name}_converted.mp4"
 
         try:
             # Build FFmpeg command for format conversion with intelligent canvas scaling
@@ -1551,7 +1551,7 @@ class RobustVideoLoader:
                     "aac",
                     "-avoid_negative_ts",
                     "make_zero",
-                    converted_file,
+                    str(converted_file),
                 ]
             )
 
@@ -1589,10 +1589,10 @@ class RobustVideoLoader:
         except Exception as e:
             # Cleanup on failure
             try:
-                if os.path.exists(converted_file):
-                    os.remove(converted_file)
-                if os.path.exists(temp_dir):
-                    os.rmdir(temp_dir)
+                if converted_file.exists():
+                    converted_file.unlink()
+                if Path(temp_dir).exists():
+                    Path(temp_dir).rmdir()
             except:
                 pass
             raise RuntimeError(f"Format conversion failed: {e}")
@@ -1617,8 +1617,8 @@ class RobustVideoLoader:
 
         # Create temporary reduced quality file
         temp_dir = tempfile.mkdtemp(prefix="autocut_quality_reduction_")
-        base_name = os.path.splitext(os.path.basename(video_file))[0]
-        reduced_file = os.path.join(temp_dir, f"{base_name}_reduced.mp4")
+        base_name = Path(video_file).stem
+        reduced_file = Path(temp_dir) / f"{base_name}_reduced.mp4"
 
         try:
             # Build FFmpeg command for quality reduction with intelligent canvas scaling
@@ -1672,7 +1672,7 @@ class RobustVideoLoader:
                     "96k",  # Reduced audio bitrate
                     "-avoid_negative_ts",
                     "make_zero",
-                    reduced_file,
+                    str(reduced_file),
                 ]
             )
 
@@ -1706,10 +1706,10 @@ class RobustVideoLoader:
         except Exception as e:
             # Cleanup on failure
             try:
-                if os.path.exists(reduced_file):
-                    os.remove(reduced_file)
-                if os.path.exists(temp_dir):
-                    os.rmdir(temp_dir)
+                if reduced_file.exists():
+                    reduced_file.unlink()
+                if Path(temp_dir).exists():
+                    Path(temp_dir).rmdir()
             except:
                 pass
             raise RuntimeError(f"Quality reduction failed: {e}")
@@ -1734,8 +1734,8 @@ class RobustVideoLoader:
 
         # Create temporary minimal file
         temp_dir = tempfile.mkdtemp(prefix="autocut_emergency_")
-        base_name = os.path.splitext(os.path.basename(video_file))[0]
-        minimal_file = os.path.join(temp_dir, f"{base_name}_minimal.mp4")
+        base_name = Path(video_file).stem
+        minimal_file = Path(temp_dir) / f"{base_name}_minimal.mp4"
 
         try:
             # Emergency settings: maximum compatibility, minimal quality, with intelligent canvas scaling
@@ -1800,7 +1800,7 @@ class RobustVideoLoader:
                     "make_zero",
                     "-movflags",
                     "+faststart",
-                    minimal_file,
+                    str(minimal_file),
                 ]
             )
 
@@ -1832,10 +1832,10 @@ class RobustVideoLoader:
         except Exception as e:
             # Cleanup on failure
             try:
-                if os.path.exists(minimal_file):
-                    os.remove(minimal_file)
-                if os.path.exists(temp_dir):
-                    os.rmdir(temp_dir)
+                if minimal_file.exists():
+                    minimal_file.unlink()
+                if Path(temp_dir).exists():
+                    Path(temp_dir).rmdir()
             except:
                 pass
             raise RuntimeError(f"Emergency loading failed: {e}")
@@ -2334,7 +2334,7 @@ def test_independent_subclip_creation(video_path: Optional[str] = None) -> bool:
         # Use a test media file if available
         test_files = ["test_media/sample.mp4", "test_media/demo.mp4", "demo.mp4"]
         for test_file in test_files:
-            if os.path.exists(test_file):
+            if Path(test_file).exists():
                 video_path = test_file
                 break
 
@@ -2878,12 +2878,12 @@ def render_video(
                     return AudioFileClip(audio_file)
 
         # Validate audio file before processing
-        if not os.path.exists(audio_file):
+        if not Path(audio_file).exists():
             raise RuntimeError(f"Audio file not found: {audio_file}")
 
         # Check audio file size for potential issues
         try:
-            audio_size = os.path.getsize(audio_file)
+            audio_size = Path(audio_file).stat().st_size
             if audio_size == 0:
                 raise RuntimeError(f"Audio file is empty: {audio_file}")
         except Exception as size_error:
@@ -3091,7 +3091,7 @@ def render_video(
         }
 
         # Create output directory
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Encode video with compatibility layer
         try:
@@ -3247,7 +3247,7 @@ def assemble_clips(
         """
         try:
             # Check 1: File existence
-            if not os.path.exists(audio_path):
+            if not Path(audio_path).exists():
                 return False, f"Audio file not found: {audio_path}"
 
             # Check 2: File accessibility
@@ -3256,7 +3256,7 @@ def assemble_clips(
 
             # Check 3: File size validation
             try:
-                file_size = os.path.getsize(audio_path)
+                file_size = Path(audio_path).stat().st_size
                 if file_size == 0:
                     return False, f"Audio file is empty: {audio_path}"
                 if file_size < 1024:  # Less than 1KB is suspicious
@@ -3356,7 +3356,7 @@ def assemble_clips(
 
     logger.info("=== AutoCut Video Processing Started ===")
     logger.info(f"Input videos: {len(video_files)} files")
-    logger.info(f"Audio file: {os.path.basename(audio_file)}")
+    logger.info(f"Audio file: {Path(audio_file).name}")
     logger.info(f"Output path: {output_path}")
     logger.info(f"Pattern: {pattern}")
 
@@ -3373,11 +3373,11 @@ def assemble_clips(
         raise ValueError(error_msg)
 
     logger.info("   ✅ Audio file validation passed")
-    logger.info(f"   📁 File: {os.path.basename(audio_file)}")
-    logger.info(f"   📊 Size: {os.path.getsize(audio_file) / (1024 * 1024):.2f}MB")
+    logger.info(f"   📁 File: {Path(audio_file).name}")
+    logger.info(f"   📊 Size: {Path(audio_file).stat().st_size / (1024 * 1024):.2f}MB")
 
     # Validate video files
-    missing_videos = [vf for vf in video_files if not os.path.exists(vf)]
+    missing_videos = [vf for vf in video_files if not Path(vf).exists()]
     if missing_videos:
         error_msg = f"Video files not found: {missing_videos}"
         logger.error(error_msg)
@@ -3451,7 +3451,7 @@ def assemble_clips(
 
     for i, video_file in enumerate(video_files):
         processing_summary["videos_processed"] += 1
-        filename = os.path.basename(video_file)
+        filename = Path(video_file).name
 
         file_result = {
             "file_path": video_file,
@@ -3714,7 +3714,7 @@ def assemble_clips(
         # Final success summary
         logger.info("=== AutoCut Processing Complete ===")
         logger.info(
-            f"✅ Successfully created video: {os.path.basename(final_video_path)}",
+            f"✅ Successfully created video: {Path(final_video_path).name}",
         )
         logger.info("📊 Processing summary:")
         logger.info(
