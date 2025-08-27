@@ -6,6 +6,7 @@ and can scale down workers if memory usage becomes dangerous.
 """
 
 import contextlib
+import logging
 import threading
 import time
 from typing import Callable, Optional
@@ -37,7 +38,10 @@ class AdaptiveWorkerMonitor:
         # Monitoring state
         self.consecutive_warnings = 0
         self.last_scale_down_time = 0
-        self.min_time_between_adjustments = 30.0  # seconds
+        self.min_time_between_adjustments = 30  # seconds
+        
+        # Logger for error handling
+        self.logger = logging.getLogger(__name__)
 
     def set_scale_callbacks(
         self,
@@ -74,11 +78,19 @@ class AdaptiveWorkerMonitor:
     def _monitoring_loop(self):
         """Main monitoring loop running in background thread"""
         while self.monitoring:
-            try:
-                self._check_and_adjust()
+            if self._safe_check_and_adjust():
                 time.sleep(5.0)  # Check every 5 seconds
-            except Exception as e:
+            else:
                 time.sleep(10.0)  # Wait longer on error
+
+    def _safe_check_and_adjust(self) -> bool:
+        """Safe wrapper for _check_and_adjust that handles exceptions outside the loop."""
+        try:
+            self._check_and_adjust()
+            return True
+        except Exception as e:
+            self.logger.error(f"Monitoring check failed: {e}")
+            return False
 
     def _check_and_adjust(self):
         """Check memory usage and adjust workers if needed"""
@@ -137,14 +149,14 @@ class AdaptiveWorkerMonitor:
                 self.consecutive_warnings = max(0, self.consecutive_warnings - 1)
 
         except Exception as e:
-            pass
+            # Log error but continue monitoring
+            self.logger.warning(f"Memory check failed: {e}")
 
     def _scale_down(self, new_workers: int, reason: str):
         """Scale down workers with logging"""
         if new_workers >= self.current_workers:
             return
 
-        old_workers = self.current_workers
         self.current_workers = new_workers
         self.last_scale_down_time = time.time()
 
@@ -157,7 +169,6 @@ class AdaptiveWorkerMonitor:
         if new_workers <= self.current_workers:
             return
 
-        old_workers = self.current_workers
         self.current_workers = new_workers
 
         if self.scale_up_callback:

@@ -9,6 +9,7 @@ This module provides video encoding capabilities including:
 Extracted from clip_assembler.py as part of system consolidation.
 """
 
+import logging
 import os
 import time
 from typing import Any, Dict, List, Tuple, Optional
@@ -137,7 +138,9 @@ class VideoEncoder:
                         moviepy_params["bitrate"] = f"{reduced_bitrate}k"
 
         except Exception as e:
-            pass
+            # Log memory monitoring failure but continue encoding
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Memory-based bitrate adjustment failed: {e}")
 
         # Enhanced FFmpeg parameters for format consistency
         format_consistency_params = [

@@ -686,9 +686,19 @@ class TranscodingService:
         try:
             input_size = os.path.getsize(input_path) / (1024 * 1024)  # MB
             output_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
-
-        except Exception:
-            pass
+            
+            self.logger.info(
+                f"Transcoding completed successfully: "
+                f"Input: {input_size:.1f}MB -> Output: {output_size:.1f}MB "
+                f"({total_time:.1f}s, {attempts} attempts, {encoder_type})"
+            )
+        except Exception as e:
+            # Log success without file sizes if we can't get them
+            self.logger.info(
+                f"Transcoding completed successfully "
+                f"({total_time:.1f}s, {attempts} attempts, {encoder_type})"
+            )
+            self.logger.debug(f"Could not get file size info: {e}")
 
     def _check_transcoding_cache(self, file_path: str) -> Optional[str]:
         """Check if transcoded version exists in cache and is still valid."""
