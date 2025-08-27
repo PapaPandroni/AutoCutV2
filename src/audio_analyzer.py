@@ -396,7 +396,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
         }
 
     except Exception as e:
-        raise ValueError(f"Failed to analyze audio file {file_path}: {e!s}")
+        raise ValueError(f"Failed to analyze audio file {file_path}: {e!s}") from e
 
 
 def calculate_clip_constraints(bpm: float) -> Tuple[float, List[float]]:

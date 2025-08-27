@@ -436,7 +436,7 @@ class VideoLoadingStrategy(ABC):
                 except Exception as e:
                     raise VideoProcessingError(
                         f"Clip validation failed for {spec}: {e}"
-                    )
+                    ) from e
 
                 # Cache the loaded clip
                 self.cache.put(cache_key, clip, estimated_size_mb=50)

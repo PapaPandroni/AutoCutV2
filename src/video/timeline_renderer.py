@@ -207,7 +207,7 @@ class TimelineRenderer:
             # Log the import issue for debugging
             raise RuntimeError(
                 f"New rendering system not available - import failed: {import_err}"
-            )
+            ) from import_err
         except Exception as e:
             # Maintain backward compatibility with RuntimeError
-            raise RuntimeError(f"Video rendering failed: {e!s}")
+            raise RuntimeError(f"Video rendering failed: {e!s}") from e
