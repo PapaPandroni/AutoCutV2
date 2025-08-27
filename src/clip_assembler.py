@@ -12,6 +12,7 @@ import os
 import threading
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import psutil
@@ -193,7 +194,7 @@ class VideoCache:
         if VideoFileClip is None:
             raise RuntimeError("MoviePy not available. Please install moviepy>=1.0.3")
 
-        if not os.path.exists(video_path):
+        if not Path(video_path).exists():
             raise FileNotFoundError(f"Video file not found: {video_path}")
 
         with self._lock:
@@ -678,7 +679,7 @@ class VideoPreprocessor:
         """
         import os
 
-        if not os.path.exists(video_path):
+        if not Path(video_path).exists():
             return {"needs_preprocessing": False, "reason": "file_not_found"}
 
         try:
@@ -820,23 +821,21 @@ class VideoPreprocessor:
         cache_key = f"{video_path}_{hash(str(analysis['reasons']))}"
         if cache_key in self.preprocessing_cache:
             cached_path = self.preprocessing_cache[cache_key]
-            if os.path.exists(cached_path):
+            if Path(cached_path).exists():
                 return cached_path
 
         # Determine output path
         if output_dir is None:
-            output_dir = os.path.dirname(video_path)
+            output_dir = Path(video_path).parent
 
-        base_name = os.path.splitext(os.path.basename(video_path))[0]
+        base_name = Path(video_path).stem
         processed_name = f"{base_name}_processed.mp4"
-        processed_path = os.path.join(output_dir, processed_name)
+        processed_path = Path(output_dir) / processed_name
 
         # If processed version already exists and is newer, use it
-        if os.path.exists(processed_path) and os.path.getmtime(
-            processed_path,
-        ) > os.path.getmtime(video_path):
-            self.preprocessing_cache[cache_key] = processed_path
-            return processed_path
+        if processed_path.exists() and processed_path.stat().st_mtime > Path(video_path).stat().st_mtime:
+            self.preprocessing_cache[cache_key] = str(processed_path)
+            return str(processed_path)
 
         # Perform preprocessing
         try:
@@ -847,9 +846,9 @@ class VideoPreprocessor:
                 getattr(self, "_target_format", None),
             )
 
-            if success and os.path.exists(processed_path):
-                self.preprocessing_cache[cache_key] = processed_path
-                return processed_path
+            if success and processed_path.exists():
+                self.preprocessing_cache[cache_key] = str(processed_path)
+                return str(processed_path)
             return video_path
 
         except Exception as e:
@@ -964,8 +963,8 @@ class VideoPreprocessor:
         cleaned_count = 0
 
         for cached_path in list(self.preprocessing_cache.values()):
-            if os.path.exists(cached_path):
-                file_age_hours = (current_time - os.path.getmtime(cached_path)) / 3600
+            if Path(cached_path).exists():
+                file_age_hours = (current_time - Path(cached_path).stat().st_mtime) / 3600
                 if file_age_hours > max_age_hours:
                     try:
                         os.remove(cached_path)
@@ -975,7 +974,7 @@ class VideoPreprocessor:
 
         # Clear cache entries for non-existent files
         self.preprocessing_cache = {
-            k: v for k, v in self.preprocessing_cache.items() if os.path.exists(v)
+            k: v for k, v in self.preprocessing_cache.items() if Path(v).exists()
         }
 
         if cleaned_count > 0:
