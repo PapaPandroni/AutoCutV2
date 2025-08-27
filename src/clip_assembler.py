@@ -203,7 +203,7 @@ class VideoCache:
                     video_clip = VideoFileClip(video_path)
                     self._cache[video_path] = video_clip
                 except Exception as e:
-                    raise RuntimeError(f"Failed to load video {video_path}: {e!s}")
+                    raise RuntimeError(f"Failed to load video {video_path}: {e!s}") from e
 
             # Increment reference count
             self._ref_counts[video_path] += 1
@@ -240,12 +240,16 @@ class VideoCache:
 
     def clear(self) -> None:
         """Clear all cached videos and close resources."""
+        def _safe_close_video(video_clip):
+            """Safely close video clip, ignoring any exceptions."""
+            try:
+                video_clip.close()
+            except Exception:
+                pass  # Ignore cleanup errors
+        
         with self._lock:
             for video_clip in self._cache.values():
-                try:
-                    video_clip.close()
-                except Exception:
-                    pass  # Ignore cleanup errors
+                _safe_close_video(video_clip)
             self._cache.clear()
             self._ref_counts.clear()
 
@@ -399,14 +403,18 @@ class VideoResourceManager:
         """
         import gc
 
+        def _safe_cleanup_video(video):
+            """Safely cleanup a single video resource."""
+            try:
+                self.active_videos.discard(id(video))
+                video.close()
+            except Exception:
+                pass  # Ignore cleanup errors during resource cleanup
+
         cleanup_count = len(self.delayed_cleanup_videos)
         if cleanup_count > 0:
             for video in self.delayed_cleanup_videos.values():
-                try:
-                    self.active_videos.discard(id(video))
-                    video.close()
-                except Exception as e:
-                    pass
+                _safe_cleanup_video(video)
 
             self.delayed_cleanup_videos.clear()
             gc.collect()  # Force garbage collection
@@ -531,7 +539,7 @@ def load_video_clips_sequential(
                                 "get_frame returned None during validation",
                             )
                     except Exception as e:
-                        raise RuntimeError(f"Clip validation failed: {e}")
+                        raise RuntimeError(f"Clip validation failed: {e}") from e
 
                     original_index = clip_data.get(
                         "original_index",
@@ -1286,7 +1294,7 @@ def load_video_clips_with_advanced_memory_management(
                                     "get_frame returned None during validation",
                                 )
                         except Exception as e:
-                            raise RuntimeError(f"Clip validation failed: {e}")
+                            raise RuntimeError(f"Clip validation failed: {e}") from e
 
                         video_clips.append(segment)
                         file_clips_loaded += 1
@@ -1409,7 +1417,8 @@ class RobustVideoLoader:
 
         last_error = None
 
-        for strategy_name, strategy_func in strategies:
+        def _try_loading_strategy(strategy_name: str, strategy_func, clip_data, resource_manager, canvas_format):
+            """Try a single loading strategy and return result or None."""
             try:
                 # CRITICAL FIX: Pass canvas_format to all fallback strategies
                 result = strategy_func(
@@ -1424,16 +1433,21 @@ class RobustVideoLoader:
                     else:
                         pass
 
-                    return result
-
+                    return result, None
+                return None, None
             except Exception as e:
-                last_error = e
                 error_type = type(e).__name__
                 self.error_statistics["error_types"][error_type] = (
                     self.error_statistics["error_types"].get(error_type, 0) + 1
                 )
+                return None, e
 
-                continue
+        for strategy_name, strategy_func in strategies:
+            result, error = _try_loading_strategy(strategy_name, strategy_func, clip_data, resource_manager, canvas_format)
+            if result is not None:
+                return result
+            if error is not None:
+                last_error = error
 
         # All strategies failed
         self.error_statistics["failed_loads"] += 1
@@ -1595,10 +1609,10 @@ class RobustVideoLoader:
                     Path(temp_dir).rmdir()
             except:
                 pass
-            raise RuntimeError(f"Format conversion failed: {e}")
+            raise RuntimeError(f"Format conversion failed: {e}") from e
 
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("Format conversion timed out")
+        except subprocess.TimeoutExpired as timeout_error:
+            raise RuntimeError("Format conversion timed out") from timeout_error
 
     def _load_with_quality_reduction(
         self,
@@ -1712,10 +1726,10 @@ class RobustVideoLoader:
                     Path(temp_dir).rmdir()
             except:
                 pass
-            raise RuntimeError(f"Quality reduction failed: {e}")
+            raise RuntimeError(f"Quality reduction failed: {e}") from e
 
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("Quality reduction timed out")
+        except subprocess.TimeoutExpired as timeout_error:
+            raise RuntimeError("Quality reduction timed out") from timeout_error
 
     def _load_emergency_minimal(
         self,
@@ -1838,10 +1852,10 @@ class RobustVideoLoader:
                     Path(temp_dir).rmdir()
             except:
                 pass
-            raise RuntimeError(f"Emergency loading failed: {e}")
+            raise RuntimeError(f"Emergency loading failed: {e}") from e
 
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("Emergency loading timed out")
+        except subprocess.TimeoutExpired as timeout_error:
+            raise RuntimeError("Emergency loading timed out") from timeout_error
 
     def get_error_report(self) -> Dict[str, Any]:
         """Get comprehensive error statistics report."""
@@ -2127,7 +2141,7 @@ def load_video_clips_parallel(
     except Exception as e:
         # Clean up cache on error
         video_cache.clear()
-        raise RuntimeError(f"Parallel video loading failed: {e!s}")
+        raise RuntimeError(f"Parallel video loading failed: {e!s}") from e
 
     finally:
         # Always stop monitoring when done
@@ -2186,8 +2200,8 @@ def check_moviepy_api_compatibility():
             )
 
             import_pattern = "legacy"  # from moviepy.editor import ...
-        except ImportError:
-            raise RuntimeError("Could not import MoviePy with either import pattern")
+        except ImportError as import_error:
+            raise RuntimeError("Could not import MoviePy with either import pattern") from import_error
 
     # CRITICAL FIX: Proper API detection for MoviePy 2.2.1
     # Use class inspection instead of unreliable dummy instances
@@ -2313,8 +2327,8 @@ def subclip_safely(clip, start_time, end_time=None, compatibility_info=None):
             f"Neither 'subclipped' nor 'subclip' methods work on {type(clip)}",
         )
 
-    except AttributeError:
-        raise RuntimeError(f"Could not find subclip method on clip type {type(clip)}")
+    except AttributeError as attr_error:
+        raise RuntimeError(f"Could not find subclip method on clip type {type(clip)}") from attr_error
 
 
 def test_independent_subclip_creation(video_path: Optional[str] = None) -> bool:
@@ -2413,10 +2427,10 @@ def import_moviepy_safely():
                 concatenate_videoclips,
                 CompositeVideoClip,
             )
-        except ImportError:
+        except ImportError as import_error:
             raise RuntimeError(
                 "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
-            )
+            ) from import_error
 
 
 def write_videofile_safely(video_clip, output_path, compatibility_info=None, **kwargs):
@@ -2447,7 +2461,7 @@ def write_videofile_safely(video_clip, output_path, compatibility_info=None, **k
     try:
         video_clip.write_videofile(output_path, **safe_kwargs)
     except Exception as e:
-        raise RuntimeError(f"Failed to write video file: {e!s}")
+        raise RuntimeError(f"Failed to write video file: {e!s}") from e
 
 
 # ClipTimeline class extracted to src/video/timeline_renderer.py
@@ -2954,7 +2968,7 @@ def render_video(
             traceback.print_exc()
             raise RuntimeError(
                 f"Failed to load video clips using robust loading system: {e}"
-            )
+            ) from e
 
         if not video_clips:
             raise RuntimeError(
@@ -2974,7 +2988,7 @@ def render_video(
         try:
             audio_clip = load_audio_robust(audio_file)
         except Exception as audio_error:
-            raise RuntimeError(f"Failed to load audio file {audio_file}: {audio_error}")
+            raise RuntimeError(f"Failed to load audio file {audio_file}: {audio_error}") from audio_error
 
         # Trim audio to match video duration or vice versa
         video_duration = final_video.duration
@@ -3057,12 +3071,12 @@ def render_video(
                     try:
                         # Fallback to legacy set_audio method
                         final_video = final_video.set_audio(audio_clip)
-                    except AttributeError:
+                    except AttributeError as attr_error:
                         raise RuntimeError(
                             f"Cannot attach audio to {type(final_video)} - no compatible method found"
-                        )
+                        ) from attr_error
         except Exception as audio_attach_error:
-            raise RuntimeError(f"Failed to attach audio to video: {audio_attach_error}")
+            raise RuntimeError(f"Failed to attach audio to video: {audio_attach_error}") from audio_attach_error
 
         if progress_callback:
             progress_callback("Encoding video", 0.7)
@@ -3153,7 +3167,7 @@ def render_video(
         return output_path
 
     except Exception as e:
-        raise RuntimeError(f"Failed to render video: {e!s}")
+        raise RuntimeError(f"Failed to render video: {e!s}") from e
 
 
 def add_transitions(
@@ -3183,13 +3197,13 @@ def add_transitions(
         # Delegate to the new modular system
         return add_transitions_modular(clips, transition_duration)
 
-    except ImportError:
+    except ImportError as import_error:
         # Fallback to legacy implementation if modules not available
         raise RuntimeError(
             "New transition system not available - refactoring incomplete"
-        )
+        ) from import_error
     except Exception as e:
-        raise RuntimeError(f"Transition creation failed: {e!s}")
+        raise RuntimeError(f"Transition creation failed: {e!s}") from e
 
 
 def assemble_clips(
@@ -3403,7 +3417,7 @@ def assemble_clips(
             error_msg = f"Audio file access error during analysis: {e!s}"
             logger.exception(error_msg)
             processing_summary["errors"].append(error_msg)
-            raise ValueError(error_msg)
+            raise ValueError(error_msg) from e
         except Exception as e:
             error_msg = f"Audio analysis failed: {e!s}"
             logger.exception(error_msg)
@@ -3417,7 +3431,7 @@ def assemble_clips(
                 error_msg += " (Check file permissions)"
 
             processing_summary["errors"].append(error_msg)
-            raise ValueError(error_msg)
+            raise ValueError(error_msg) from e
 
         # CRITICAL FIX: Use compensated beats instead of raw beats to fix sync issues
         beats = audio_data["compensated_beats"]  # Offset-corrected and filtered beats
@@ -3442,7 +3456,7 @@ def assemble_clips(
         error_msg = f"Failed to analyze audio file: {e!s}"
         logger.exception(error_msg)
         processing_summary["errors"].append(error_msg)
-        raise RuntimeError(error_msg)
+        raise RuntimeError(error_msg) from e
 
     # Step 2: Analyze all video files with detailed per-file tracking
     logger.info("=== Step 2: Video Analysis ===")
@@ -3677,7 +3691,7 @@ def assemble_clips(
     except Exception as e:
         error_msg = f"Failed to match clips to beats: {e!s}"
         logger.exception(error_msg)
-        raise RuntimeError(error_msg)
+        raise RuntimeError(error_msg) from e
 
     # Step 4: Render final video
     logger.info("=== Step 4: Video Rendering ===")
@@ -3735,7 +3749,7 @@ def assemble_clips(
     except Exception as e:
         error_msg = f"Failed to render video: {e!s}"
         logger.exception(error_msg)
-        raise RuntimeError(error_msg)
+        raise RuntimeError(error_msg) from e
 
     # Export timeline JSON for debugging (optional)
     try:

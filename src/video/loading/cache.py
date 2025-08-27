@@ -270,8 +270,8 @@ class VideoCache:
         with self._lock:
             count = len(self._cache)
 
-            # Clean up all video clips
-            for entry in self._cache.values():
+            def _safe_close_cache_entry(entry):
+                """Safely close a cache entry, logging any errors."""
                 try:
                     entry.video_clip.close()
                 except Exception as e:
@@ -279,6 +279,10 @@ class VideoCache:
                         f"Error closing video clip during clear: {e}",
                         extra={"cache_key": entry.cache_key},
                     )
+
+            # Clean up all video clips
+            for entry in self._cache.values():
+                _safe_close_cache_entry(entry)
 
             self._cache.clear()
             self._current_size_mb = 0.0

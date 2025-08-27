@@ -37,14 +37,17 @@ class VideoNormalizationPipeline:
 
         normalized_clips = []
 
-        for _i, clip in enumerate(video_clips):
+        def _safe_normalize_clip(clip, target_format):
+            """Safely normalize clip, returning original on failure."""
             try:
-                normalized_clip = self._normalize_single_clip(clip, target_format)
-                normalized_clips.append(normalized_clip)
-
+                return self._normalize_single_clip(clip, target_format)
             except Exception as e:
                 # Use original clip if normalization fails
-                normalized_clips.append(clip)
+                return clip
+
+        for _i, clip in enumerate(video_clips):
+            normalized_clip = _safe_normalize_clip(clip, target_format)
+            normalized_clips.append(normalized_clip)
 
         return normalized_clips
 

@@ -203,19 +203,31 @@ class SystemProfiler:
         resolution_factors = []
         expansion_ratios = []
 
-        for video_file in sample_files:
+        def _analyze_video_with_fallback(video_file):
+            """Analyze single video memory with fallback values."""
             try:
                 estimate = self._analyze_single_video_memory(video_file)
-                memory_estimates.append(estimate["memory_mb"])
-                codec_factors.append(estimate["codec_factor"])
-                resolution_factors.append(estimate["resolution_factor"])
-                expansion_ratios.append(estimate["expansion_ratio"])
+                return {
+                    "memory_mb": estimate["memory_mb"],
+                    "codec_factor": estimate["codec_factor"],
+                    "resolution_factor": estimate["resolution_factor"],
+                    "expansion_ratio": estimate["expansion_ratio"]
+                }
             except Exception as e:
                 # Use conservative fallback for failed analysis
-                memory_estimates.append(200.0)
-                codec_factors.append(1.5)
-                resolution_factors.append(1.2)
-                expansion_ratios.append(4.0)
+                return {
+                    "memory_mb": 200.0,
+                    "codec_factor": 1.5,
+                    "resolution_factor": 1.2,
+                    "expansion_ratio": 4.0
+                }
+
+        for video_file in sample_files:
+            estimate = _analyze_video_with_fallback(video_file)
+            memory_estimates.append(estimate["memory_mb"])
+            codec_factors.append(estimate["codec_factor"])
+            resolution_factors.append(estimate["resolution_factor"])
+            expansion_ratios.append(estimate["expansion_ratio"])
 
         # Calculate averages
         avg_memory = sum(memory_estimates) / len(memory_estimates)

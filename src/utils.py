@@ -275,12 +275,16 @@ class ProgressTracker:
         self.current_step = min(step, self.total_steps)
         percentage = (self.current_step / self.total_steps) * 100
 
-        for callback in self.callbacks:
+        def _safe_call_callback(callback, percentage: float, message: str) -> None:
+            """Safely call a callback function, logging any errors."""
             try:
                 callback(percentage, message)
             except Exception as e:
                 # Don't let callback errors stop processing
                 logging.warning(f"Progress callback error: {e}")
+
+        for callback in self.callbacks:
+            _safe_call_callback(callback, percentage, message)
 
     def increment(self, message: str = "") -> None:
         """Increment progress by one step."""

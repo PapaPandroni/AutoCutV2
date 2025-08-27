@@ -20,6 +20,7 @@ Key Benefits:
 import logging
 import os
 import subprocess
+from typing import Any, Optional, Tuple
 
 import numpy as np
 
@@ -470,18 +471,16 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
     last_error = None
     error_diagnostics = []
 
-    # Try each strategy in order
-    for strategy_name, loader_func in strategies:
+    # Helper function to try a single loading strategy
+    def _try_loading_strategy(strategy_name: str, loader_func) -> Tuple[Optional[Any], Optional[Exception]]:
         try:
             logger.info(f"🔄 Attempting: {strategy_name}")
             result = loader_func(audio_file)
             logger.info(f"✅ Audio loading successful with {strategy_name}")
-            return result
-
+            return result, None
         except Exception as e:
-            last_error = e
             error_str = str(e)
-
+            
             # Enhanced error diagnostics for common FFMPEG_AudioReader issues
             if _is_ffmpeg_audioreader_error(error_str):
                 diagnostic = _diagnose_ffmpeg_audioreader_error(
@@ -494,8 +493,15 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
             else:
                 error_diagnostics.append(f"{strategy_name}: {error_str}")
                 logger.warning(f"⚠️ {strategy_name} failed: {error_str}")
-
-            continue
+            
+            return None, e
+    
+    # Try each strategy in order
+    for strategy_name, loader_func in strategies:
+        result, error = _try_loading_strategy(strategy_name, loader_func)
+        if result is not None:
+            return result
+        last_error = error
 
     # All strategies failed - provide comprehensive error report
     error_msg = (

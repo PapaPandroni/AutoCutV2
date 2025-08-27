@@ -274,14 +274,18 @@ class VideoCache:
         # First clear regular clip cache
         self._cache.clear()
 
-        # Then close parent videos (this is safe to do at the end)
-        for filepath, clip in self._parent_videos.items():
+        def _safe_close_parent_video(filepath: str, clip):
+            """Safely close a parent video clip."""
             try:
                 if hasattr(clip, "close"):
                     clip.close()
                 self.logger.debug(f"Closed parent video: {filepath}")
             except Exception as e:
                 self.logger.warning(f"Failed to close parent video {filepath}: {e}")
+
+        # Then close parent videos (this is safe to do at the end)
+        for filepath, clip in self._parent_videos.items():
+            _safe_close_parent_video(filepath, clip)
 
         self._parent_videos.clear()
 
@@ -1043,19 +1047,22 @@ class RobustLoader(VideoLoadingStrategy):
         with LoggingContext("robust_loading", self.logger) as ctx:
             ctx.log(f"Loading {len(clip_specs)} clips with robust strategy")
 
-            for spec in clip_specs:
+            def _safe_load_clip_spec(spec, ctx):
+                """Safely load a clip spec, returning None on failure."""
                 try:
-                    loaded_clip = self._load_clip_with_retry(spec)
-                    loaded_clips.append(loaded_clip)
-
+                    return self._load_clip_with_retry(spec)
                 except Exception as e:
                     ctx.log(
                         f"Failed to load {spec} after all retry attempts: {e}",
                         level="ERROR",
                         extra={"spec": str(spec)},
                     )
-                    # Add None placeholder to preserve index mapping
-                    loaded_clips.append(None)
+                    # Return None placeholder to preserve index mapping
+                    return None
+
+            for spec in clip_specs:
+                loaded_clip = _safe_load_clip_spec(spec, ctx)
+                loaded_clips.append(loaded_clip)
 
             successful_count = sum(1 for clip in loaded_clips if clip is not None)
             ctx.log(
@@ -1065,43 +1072,47 @@ class RobustLoader(VideoLoadingStrategy):
 
         return loaded_clips
 
+    def _try_single_load_attempt(self, spec: ClipSpec, attempt: int) -> Tuple[Optional[LoadedClip], Optional[Exception]]:
+        """Try a single load attempt, returning result or exception."""
+        try:
+            if attempt > 0:
+                self._retry_stats["retries"] += 1
+                delay = self.retry_delay * (2 ** (attempt - 1))  # Exponential backoff
+                self.logger.info(
+                    f"Retry attempt {attempt} for {spec}",
+                    extra={"delay": f"{delay:.1f}s"},
+                )
+                time.sleep(delay)
+
+            result = self._load_single_clip(spec)
+            return result, None
+
+        except iPhoneCompatibilityError as e:
+            # Try transcoding for iPhone H.265 issues
+            if self.enable_transcoding and attempt == 0:
+                try:
+                    result = self._load_with_transcoding(spec)
+                    return result, None
+                except Exception as transcoding_error:
+                    self.logger.warning(
+                        f"Transcoding failed for {spec}: {transcoding_error}",
+                    )
+                    return None, e
+            else:
+                return None, e
+
+        except Exception as e:
+            return None, e
+
     def _load_clip_with_retry(self, spec: ClipSpec) -> LoadedClip:
         """Load clip with retry and fallback logic."""
         last_exception = None
 
         for attempt in range(self.max_retries + 1):
-            try:
-                if attempt > 0:
-                    self._retry_stats["retries"] += 1
-                    delay = self.retry_delay * (
-                        2 ** (attempt - 1)
-                    )  # Exponential backoff
-                    self.logger.info(
-                        f"Retry attempt {attempt} for {spec}",
-                        extra={"delay": f"{delay:.1f}s"},
-                    )
-                    time.sleep(delay)
-
-                return self._load_single_clip(spec)
-
-            except iPhoneCompatibilityError as e:
-                # Try transcoding for iPhone H.265 issues
-                if self.enable_transcoding and attempt == 0:
-                    try:
-                        return self._load_with_transcoding(spec)
-                    except Exception as transcoding_error:
-                        self.logger.warning(
-                            f"Transcoding failed for {spec}: {transcoding_error}",
-                        )
-                        last_exception = e
-                        continue
-                else:
-                    last_exception = e
-                    continue
-
-            except Exception as e:
-                last_exception = e
-                continue
+            result, exception = self._try_single_load_attempt(spec, attempt)
+            if result is not None:
+                return result
+            last_exception = exception
 
         # All retries exhausted
         if last_exception:

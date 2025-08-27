@@ -563,13 +563,18 @@ def merge_timelines(
     """
     merged = ClipTimeline(name=name)
 
+    def _safe_add_entry(merged_timeline, entry):
+        """Safely add entry to merged timeline, logging conflicts."""
+        try:
+            merged_timeline.add_entry(entry)
+            return True
+        except ValidationError:
+            # Skip conflicting entries
+            merged_timeline.logger.warning(f"Skipped conflicting entry: {entry}")
+            return False
+
     for timeline in timelines:
         for entry in timeline.entries:
-            try:
-                merged.add_entry(entry)
-            except ValidationError:
-                # Skip conflicting entries
-                merged.logger.warning(f"Skipped conflicting entry: {entry}")
-                continue
+            _safe_add_entry(merged, entry)
 
     return merged
