@@ -6,6 +6,7 @@ motion analysis, and face detection.
 """
 
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
@@ -63,7 +64,7 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict[str, Any]]:
             except ImportError:
                 from .utils import preprocess_video_if_needed
 
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         raise FileNotFoundError(f"Video file not found: {file_path}")
 
     if VideoFileClip is None:
@@ -83,7 +84,7 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict[str, Any]]:
             "size": video.size,  # (width, height)
             "width": video.w,
             "height": video.h,
-            "filename": os.path.basename(file_path),  # Original filename
+            "filename": Path(file_path).name,  # Original filename
             "file_path": file_path,  # Original file path
             "processed_file_path": processed_file_path,  # May be different if transcoded
             "was_transcoded": processed_file_path != file_path,
@@ -374,7 +375,7 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
         face_cascade = None
         for path in cascade_paths:
             try:
-                if os.path.exists(path):
+                if Path(path).exists():
                     face_cascade = cv2.CascadeClassifier(path)
                     if not face_cascade.empty():
                         break
@@ -704,10 +705,10 @@ def analyze_video_file(
             f"Using fallback minimum scene duration: {calculated_min_duration}s (no BPM available)",
         )
 
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         raise FileNotFoundError(f"Video file not found: {file_path}")
 
-    filename = os.path.basename(file_path)
+    filename = Path(file_path).name
     logger.info(f"Starting analysis of video: {filename}")
 
     # Track processing statistics for detailed reporting
@@ -817,7 +818,7 @@ def analyze_video_file(
 
                 # Create enhanced metadata
                 chunk_metadata = {
-                    "source_file": os.path.basename(file_path),
+                    "source_file": Path(file_path).name,
                     "scene_index": scene_idx,
                     "video_width": metadata["width"],
                     "video_height": metadata["height"],
