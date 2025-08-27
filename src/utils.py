@@ -9,7 +9,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Callable
 
 # Public API - explicitly exported symbols
 __all__ = [
@@ -264,13 +264,13 @@ class ProgressTracker:
     def __init__(self, total_steps: int = 100):
         self.total_steps = total_steps
         self.current_step = 0
-        self.callbacks: List[callable] = []
+        self.callbacks: List[Callable[[float, str], None]] = []
 
-    def add_callback(self, callback: callable):
+    def add_callback(self, callback: Callable[[float, str], None]) -> None:
         """Add a progress callback function."""
         self.callbacks.append(callback)
 
-    def update(self, step: int, message: str = ""):
+    def update(self, step: int, message: str = "") -> None:
         """Update progress and notify callbacks."""
         self.current_step = min(step, self.total_steps)
         percentage = (self.current_step / self.total_steps) * 100
@@ -282,11 +282,11 @@ class ProgressTracker:
                 # Don't let callback errors stop processing
                 logging.warning(f"Progress callback error: {e}")
 
-    def increment(self, message: str = ""):
+    def increment(self, message: str = "") -> None:
         """Increment progress by one step."""
         self.update(self.current_step + 1, message)
 
-    def complete(self, message: str = "Complete"):
+    def complete(self, message: str = "Complete") -> None:
         """Mark progress as complete."""
         self.update(self.total_steps, message)
 
@@ -429,8 +429,8 @@ def _calculate_compatibility_score(
     codec: str,
     container: str,
     format_name: str,
-    video_stream: dict,
-    format_info: dict,
+    video_stream: Dict[str, Any],
+    format_info: Dict[str, Any],
 ) -> Tuple[int, List[str]]:
     """Calculate MoviePy compatibility score and identify potential issues.
 
@@ -547,7 +547,7 @@ def _calculate_compatibility_score(
 def transcode_hevc_to_h264_enhanced(
     input_path: str,
     output_path: Optional[str] = None,
-    progress_callback: Optional[callable] = None,
+    progress_callback: Optional[Callable[[str, float], None]] = None,
     max_retries: int = 2,
 ) -> str:
     """Enhanced transcoding with hardware validation and iPhone compatibility.
@@ -730,8 +730,8 @@ def transcode_hevc_to_h264_enhanced(
 def _build_transcoding_command(
     input_path: str,
     output_path: str,
-    moviepy_params: dict,
-    ffmpeg_params: list,
+    moviepy_params: Dict[str, Any],
+    ffmpeg_params: List[str],
     encoder_type: str,
 ) -> Tuple[List[str], str]:
     """Build optimized FFmpeg transcoding command with iPhone compatibility.
@@ -924,15 +924,15 @@ def _log_transcoding_success(
 def transcode_hevc_to_h264(
     input_path: str,
     output_path: Optional[str] = None,
-    progress_callback: Optional[callable] = None,
+    progress_callback: Optional[Callable[[str, float], None]] = None,
 ) -> str:
     """Legacy function - calls enhanced version for backward compatibility."""
     return transcode_hevc_to_h264_enhanced(input_path, output_path, progress_callback)
 
 
 # Smart transcoding cache to avoid re-processing identical files
-_TRANSCODING_CACHE = {}
-_TRANSCODING_CACHE_TIMEOUT = 3600  # 1 hour
+_TRANSCODING_CACHE: Dict[str, Dict[str, Any]] = {}
+_TRANSCODING_CACHE_TIMEOUT: int = 3600  # 1 hour
 
 
 def _get_file_cache_key(file_path: str) -> str:
@@ -1189,7 +1189,7 @@ def preprocess_video_if_needed_enhanced(
     return result
 
 
-def validate_transcoded_output(output_path: str) -> dict:
+def validate_transcoded_output(output_path: str) -> Dict[str, Any]:
     """Validate transcoded output meets iPhone processing requirements.
 
     Public interface for comprehensive output validation with detailed diagnostics.
@@ -1206,7 +1206,7 @@ def validate_transcoded_output(output_path: str) -> dict:
         - 'iphone_compatible': iPhone-specific requirements check
         - 'error_details': List of any validation errors
     """
-    validation_result = {
+    validation_result: Dict[str, Any] = {
         "valid": False,
         "codec_profile": "unknown",
         "pixel_format": "unknown",
@@ -1365,15 +1365,15 @@ def test_moviepy_h265_compatibility(
 
 
 # Enhanced hardware detection cache for performance
-_HARDWARE_DETECTION_CACHE = None
-_CACHE_TIMESTAMP = None
-_CACHE_TIMEOUT = 300  # 5 minutes
+_HARDWARE_DETECTION_CACHE: Optional[Tuple[Dict[str, Any], List[str], Dict[str, Any]]] = None
+_CACHE_TIMESTAMP: Optional[float] = None
+_CACHE_TIMEOUT: int = 300  # 5 minutes
 
 
 def detect_optimal_codec_settings_enhanced() -> Tuple[
     Dict[str, Any],
     List[str],
-    Dict[str, str],
+    Dict[str, Any],
 ]:
     """Enhanced hardware detection with actual capability testing and iPhone validation.
 
@@ -1417,7 +1417,7 @@ def detect_optimal_codec_settings_enhanced() -> Tuple[
         },
     )
 
-    diagnostics = {"tests_performed": [], "errors_encountered": []}
+    diagnostics: Dict[str, Any] = {"tests_performed": [], "errors_encountered": []}
 
     try:
         # Step 1: Check if FFmpeg is available
@@ -1546,7 +1546,7 @@ def _test_hardware_encoder(
     encoder_name: str,
     encoder_codec: str,
     test_iphone_parameters: bool = True,
-    diagnostics: Optional[Dict] = None,
+    diagnostics: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Fast hardware encoder testing with intelligent early termination.
 
