@@ -9,9 +9,8 @@ import glob
 import os
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, Path as PathType
 from typing import Any, Dict, List, Optional, Union, cast
-from pathlib import Path as PathType
 
 # Import core AutoCut modules (src is in path, so no relative imports needed)
 from clip_assembler import assemble_clips

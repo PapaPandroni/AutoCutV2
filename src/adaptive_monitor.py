@@ -39,7 +39,7 @@ class AdaptiveWorkerMonitor:
         self.consecutive_warnings = 0
         self.last_scale_down_time = 0
         self.min_time_between_adjustments = 30  # seconds
-        
+
         # Logger for error handling
         self.logger = logging.getLogger(__name__)
 
@@ -88,8 +88,8 @@ class AdaptiveWorkerMonitor:
         try:
             self._check_and_adjust()
             return True
-        except Exception as e:
-            self.logger.error(f"Monitoring check failed: {e}")
+        except Exception:
+            self.logger.exception("Monitoring check failed")
             return False
 
     def _check_and_adjust(self):

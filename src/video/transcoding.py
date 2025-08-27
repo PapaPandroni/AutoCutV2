@@ -88,7 +88,7 @@ class TranscodingService:
             TranscodingError: If all transcoding attempts fail
             FileNotFoundError: If input file doesn't exist
         """
-        if not os.path.exists(input_path):
+        if not Path(input_path).exists():
             raise FileNotFoundError(f"Input video file not found: {input_path}")
 
         # Generate output path if not provided
@@ -97,7 +97,7 @@ class TranscodingService:
             output_path = f"{input_stem}_h264.mp4"
 
         # Ensure output directory exists
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        Path(output_path).resolve().parent.mkdir(parents=True, exist_ok=True)
 
         start_time = time.time()
         attempt_log = []
@@ -167,8 +167,8 @@ class TranscodingService:
 
                     # Basic file integrity check
                     if (
-                        not os.path.exists(output_path)
-                        or os.path.getsize(output_path) == 0
+                        not Path(output_path).exists()
+                        or Path(output_path).stat().st_size == 0
                     ):
                         error_msg = (
                             f"Attempt {attempt + 1}: Transcoded file missing or empty"
@@ -329,7 +329,7 @@ class TranscodingService:
 
             # Create temp directory
             try:
-                os.makedirs(temp_dir, exist_ok=True)
+                Path(temp_dir).mkdir(parents=True, exist_ok=True)
             except OSError as e:
                 result["error_category"] = "TEMP_DIR_CREATION_FAILED"
                 result["diagnostic_message"] = (
@@ -341,10 +341,7 @@ class TranscodingService:
             # Generate output path
             input_stem = Path(file_path).stem
             cache_key = self._get_file_cache_key(file_path)[:8]
-            output_path = os.path.join(
-                temp_dir,
-                f"{input_stem}_h264_iphone_{cache_key}.mp4",
-            )
+            output_path = str(Path(temp_dir) / f"{input_stem}_h264_iphone_{cache_key}.mp4")
 
             # Enhanced transcoding
             try:
@@ -684,9 +681,9 @@ class TranscodingService:
     ) -> None:
         """Log successful transcoding with comprehensive information."""
         try:
-            input_size = os.path.getsize(input_path) / (1024 * 1024)  # MB
-            output_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
-            
+            input_size = Path(input_path).stat().st_size / (1024 * 1024)  # MB
+            output_size = Path(output_path).stat().st_size / (1024 * 1024)  # MB
+
             self.logger.info(
                 f"Transcoding completed successfully: "
                 f"Input: {input_size:.1f}MB -> Output: {output_size:.1f}MB "
@@ -716,7 +713,7 @@ class TranscodingService:
                     return None
 
                 # Check if cached file still exists
-                if os.path.exists(cached_path):
+                if Path(cached_path).exists():
                     return cached_path
                 # Cached file was deleted
                 del self._transcoding_cache[cache_key]
@@ -743,7 +740,7 @@ class TranscodingService:
     def _get_file_cache_key(self, file_path: str) -> str:
         """Generate cache key based on file path and modification time."""
         try:
-            stat = os.stat(file_path)
+            stat = Path(file_path).stat()
             cache_string = f"{file_path}_{stat.st_mtime}_{stat.st_size}"
             return hashlib.md5(cache_string.encode(), usedforsecurity=False).hexdigest()
         except OSError:

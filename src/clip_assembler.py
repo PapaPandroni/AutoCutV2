@@ -246,7 +246,7 @@ class VideoCache:
                 video_clip.close()
             except Exception:
                 pass  # Ignore cleanup errors
-        
+
         with self._lock:
             for video_clip in self._cache.values():
                 _safe_close_video(video_clip)

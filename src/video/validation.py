@@ -283,7 +283,7 @@ class VideoValidator:
                 "MISSING_FILE_PATH",
             )
 
-        if not os.path.exists(file_path):
+        if not Path(file_path).exists():
             return ValidationResult.failure(
                 ValidationType.BASIC_FORMAT,
                 f"File not found: {file_path}",
@@ -320,7 +320,7 @@ class VideoValidator:
             ValidationType.BASIC_FORMAT,
             file_path=file_path,
             extension=file_extension,
-            file_size_mb=os.path.getsize(file_path) / (1024 * 1024),
+            file_size_mb=Path(file_path).stat().st_size / (1024 * 1024),
         )
         result.add_info(
             f"Valid video format: {file_extension}",
@@ -465,7 +465,7 @@ class VideoValidator:
         # Validate audio file
         if audio_file:
             audio_extension = Path(audio_file).suffix.lower()
-            if not os.path.exists(audio_file):
+            if not Path(audio_file).exists():
                 result.add_error(
                     f"Audio file not found: {audio_file}",
                     "AUDIO_FILE_NOT_FOUND",
@@ -499,7 +499,7 @@ class VideoValidator:
         Replaces multiple scattered FFprobe calls throughout validation functions.
         """
         # Check cache first
-        cache_key = f"{file_path}:{os.path.getmtime(file_path)}"
+        cache_key = f"{file_path}:{Path(file_path).stat().st_mtime}"
         if cache_key in self._codec_cache:
             return self._codec_cache[cache_key]
 

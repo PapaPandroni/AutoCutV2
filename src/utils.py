@@ -9,7 +9,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Public API - explicitly exported symbols
 __all__ = [
@@ -17,18 +17,18 @@ __all__ = [
     "SUPPORTED_VIDEO_FORMATS",
     "SUPPORTED_AUDIO_FORMATS", 
     "DEFAULT_CONFIG",
-    
+
     # Core functions
     "detect_optimal_codec_settings",
     "detect_optimal_codec_settings_enhanced",
     "setup_logging",
-    
+
     # Validation functions
     "validate_video_file",
     "validate_audio_file", 
     "validate_input_files",
     "validate_transcoded_output",
-    
+
     # Video processing functions
     "detect_video_codec",
     "transcode_hevc_to_h264",
@@ -36,7 +36,7 @@ __all__ = [
     "preprocess_video_if_needed",
     "preprocess_video_if_needed_enhanced",
     "test_moviepy_h265_compatibility",
-    
+
     # Utility functions
     "ensure_output_directory",
     "format_duration",
@@ -44,7 +44,7 @@ __all__ = [
     "safe_filename",
     "find_all_video_files",
     "get_config_value",
-    
+
     # Classes
     "ProgressTracker",
 ]
@@ -131,7 +131,7 @@ def validate_video_file(file_path: str) -> bool:
     Returns:
         True if file exists and is a supported video format
     """
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         return False
 
     file_extension = Path(file_path).suffix.lower()
@@ -147,7 +147,7 @@ def validate_audio_file(file_path: str) -> bool:
     Returns:
         True if file exists and is a supported audio format
     """
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         return False
 
     file_extension = Path(file_path).suffix.lower()
@@ -193,11 +193,11 @@ def ensure_output_directory(output_path: str) -> str:
     Raises:
         OSError: If directory cannot be created
     """
-    output_path = os.path.abspath(output_path)
-    output_dir = os.path.dirname(output_path)
+    output_path = Path(output_path).resolve()
+    output_dir = output_path.parent
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     return output_path
 
@@ -226,7 +226,7 @@ def get_file_size_mb(file_path: str) -> float:
         File size in MB, or 0 if file doesn't exist
     """
     try:
-        size_bytes = os.path.getsize(file_path)
+        size_bytes = Path(file_path).stat().st_size
         return size_bytes / (1024 * 1024)
     except OSError:
         return 0.0
@@ -319,7 +319,7 @@ def detect_video_codec(file_path: str) -> Dict[str, Any]:
         subprocess.CalledProcessError: If FFprobe fails
         FileNotFoundError: If FFprobe is not installed
     """
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         raise FileNotFoundError(f"Video file not found: {file_path}")
 
     try:
@@ -577,7 +577,7 @@ def transcode_hevc_to_h264_enhanced(
     """
     import time
 
-    if not os.path.exists(input_path):
+    if not Path(input_path).exists():
         raise FileNotFoundError(f"Input video file not found: {input_path}")
 
     # Generate output path if not provided
@@ -586,7 +586,7 @@ def transcode_hevc_to_h264_enhanced(
         output_path = f"{input_stem}_h264.mp4"
 
     # Ensure output directory exists
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    Path(output_path).resolve().parent.mkdir(parents=True, exist_ok=True)
 
     start_time = time.time()
     last_error = None
@@ -664,7 +664,7 @@ def transcode_hevc_to_h264_enhanced(
                 # Transcoding succeeded - check file integrity first
 
                 # Basic file integrity check before validation
-                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                if not Path(output_path).exists() or Path(output_path).stat().st_size == 0:
                     error_msg = f"Attempt {attempt + 1}: Transcoded file missing or empty: {output_path}"
                     attempt_log.append(error_msg)
                     if attempt < max_retries:
@@ -920,8 +920,8 @@ def _log_transcoding_success(
     encoder_type: str,
 ) -> None:
     """Log successful transcoding with comprehensive information."""
-    input_size = os.path.getsize(input_path) / (1024 * 1024)  # MB
-    output_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
+    input_size = Path(input_path).stat().st_size / (1024 * 1024)  # MB
+    output_size = Path(output_path).stat().st_size / (1024 * 1024)  # MB
 
 
 # Legacy function for backward compatibility
@@ -943,7 +943,7 @@ def _get_file_cache_key(file_path: str) -> str:
     """Generate cache key based on file path and modification time."""
     import hashlib
 
-    stat = os.stat(file_path)
+    stat = Path(file_path).stat()
     cache_string = f"{file_path}_{stat.st_mtime}_{stat.st_size}"
     return hashlib.md5(cache_string.encode(), usedforsecurity=False).hexdigest()
 
@@ -966,7 +966,7 @@ def _check_transcoding_cache(file_path: str) -> Optional[str]:
                 return None
 
             # Check if cached file still exists
-            if os.path.exists(cached_path):
+            if Path(cached_path).exists():
                 return cached_path
             # Cached file was deleted
             del _TRANSCODING_CACHE[cache_key]
@@ -1107,7 +1107,7 @@ def preprocess_video_if_needed_enhanced(
 
         # Create temp directory with error handling
         try:
-            os.makedirs(temp_dir, exist_ok=True)
+            Path(temp_dir).mkdir(parents=True, exist_ok=True)
         except OSError as e:
             result["error_category"] = "TEMP_DIR_CREATION_FAILED"
             result["diagnostic_message"] = (
@@ -1119,10 +1119,7 @@ def preprocess_video_if_needed_enhanced(
         # Generate output path with cache-friendly naming
         input_stem = Path(file_path).stem
         cache_key = _get_file_cache_key(file_path)[:8]  # Short hash for filename
-        output_path = os.path.join(
-            temp_dir,
-            f"{input_stem}_h264_iphone_{cache_key}.mp4",
-        )
+        output_path = Path(temp_dir) / f"{input_stem}_h264_iphone_{cache_key}.mp4"
 
         # Enhanced transcoding with retry and validation
         try:
@@ -1220,7 +1217,7 @@ def validate_transcoded_output(output_path: str) -> Dict[str, Any]:
     }
 
     try:
-        if not os.path.exists(output_path):
+        if not Path(output_path).exists():
             validation_result["error_details"].append(
                 f"Output file not found: {output_path}",
             )
@@ -1686,7 +1683,7 @@ def _test_hardware_encoder(
         # Clean up test file
         try:
             if "temp_output" in locals():
-                os.unlink(temp_output)
+                Path(temp_output).unlink()
         except OSError:
             pass
 
@@ -1706,7 +1703,7 @@ def _validate_transcoded_output_enhanced(video_path: str) -> bool:
     Returns:
         True if output is guaranteed iPhone-compatible, False otherwise
     """
-    if not os.path.exists(video_path):
+    if not Path(video_path).exists():
         return False
 
     try:
@@ -2150,7 +2147,7 @@ def _validate_encoder_output_fast(
     Returns:
         True if output meets basic iPhone compatibility, False otherwise
     """
-    if not os.path.exists(video_path):
+    if not Path(video_path).exists():
         return False
 
     try:
@@ -2218,7 +2215,7 @@ def find_all_video_files(directory: str) -> List[str]:
 
     # Search for all patterns
     for pattern in search_patterns:
-        found_files = glob.glob(pattern)
+        found_files = [str(p) for p in Path().glob(pattern)]
         video_files.extend(found_files)
 
     # Remove duplicates and sort

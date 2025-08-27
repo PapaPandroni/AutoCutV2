@@ -15,10 +15,10 @@ from numpy.typing import NDArray
 
 # Import our domain-specific types
 try:
-    from video.types import PathLike, VideoAnalysisResult, SceneSegment
+    from video.types import PathLike, SceneSegment, VideoAnalysisResult
 except ImportError:
     try:
-        from .video.types import PathLike, VideoAnalysisResult, SceneSegment
+        from .video.types import PathLike, SceneSegment, VideoAnalysisResult
     except ImportError:
         # Fallback type definitions if types module not available
         PathLike = Union[str, 'Path']
@@ -154,7 +154,7 @@ def detect_scenes(
 
     for t in timestamps[1:]:  # Skip first timestamp
         frame, diff = _safe_get_frame_diff(t)
-        
+
         if frame is not None:
             if diff is not None and diff > threshold:
                 scene_changes.append(t)
@@ -250,7 +250,7 @@ def score_scene(video: VideoFileClip, start_time: float, end_time: float) -> flo
             frame_score = (
                 0.4 * sharpness_score + 0.3 * brightness_score + 0.3 * contrast_score
             )
-            
+
             return frame_score
 
         except Exception:

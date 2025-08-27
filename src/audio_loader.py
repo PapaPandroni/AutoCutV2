@@ -47,15 +47,15 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
     """
     from moviepy.audio.AudioClip import AudioArrayClip
 
-    if not os.path.exists(audio_file):
+    if not Path(audio_file).exists():
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
     logger.info(
-        f"🔧 Loading audio with FFmpeg subprocess: {os.path.basename(audio_file)}",
+        f"🔧 Loading audio with FFmpeg subprocess: {Path(audio_file).name}",
     )
 
     # Detect file format for optimized processing
-    file_ext = os.path.splitext(audio_file)[1].lower()
+    file_ext = Path(audio_file).suffix.lower()
     is_wav_file = file_ext in [".wav", ".wave"]
 
     if is_wav_file:
@@ -200,7 +200,7 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
     from moviepy.audio.AudioClip import AudioArrayClip
 
     logger.info(
-        f"🔄 Attempting WAV fallback processing for {os.path.basename(audio_file)}"
+        f"🔄 Attempting WAV fallback processing for {Path(audio_file).name}"
     )
 
     # Strategy 1: Use simplified FFmpeg command for WAV files
@@ -331,10 +331,10 @@ def load_audio_with_librosa(audio_file: str) -> "AudioArrayClip":
     except ImportError as e:
         raise RuntimeError("Librosa not available - install with: pip install librosa") from e
 
-    if not os.path.exists(audio_file):
+    if not Path(audio_file).exists():
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
-    logger.info(f"🎵 Loading audio with librosa: {os.path.basename(audio_file)}")
+    logger.info(f"🎵 Loading audio with librosa: {Path(audio_file).name}")
 
     try:
         # Load audio with librosa (sr=44100 for consistency, mono=False for stereo)
@@ -381,13 +381,13 @@ def get_audio_info(audio_file: str) -> dict:
     Returns:
         dict: Audio file information
     """
-    if not os.path.exists(audio_file):
+    if not Path(audio_file).exists():
         return {"error": "File not found"}
 
     info = {
-        "file": os.path.basename(audio_file),
-        "size_mb": round(os.path.getsize(audio_file) / (1024 * 1024), 2),
-        "extension": os.path.splitext(audio_file)[1].lower(),
+        "file": Path(audio_file).name,
+        "size_mb": round(Path(audio_file).stat().st_size / (1024 * 1024), 2),
+        "extension": Path(audio_file).suffix.lower(),
     }
 
     # Try to get additional info with FFmpeg
@@ -448,7 +448,7 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
     if not audio_file:
         raise ValueError("Audio file path cannot be empty")
 
-    if not os.path.exists(audio_file):
+    if not Path(audio_file).exists():
         raise FileNotFoundError(f"Audio file not found: {audio_file}")
 
     # Log audio file information for diagnostics
@@ -456,7 +456,7 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
     logger.info(f"🎯 Loading audio: {audio_info}")
 
     # Detect common problematic scenarios upfront
-    file_ext = os.path.splitext(audio_file)[1].lower()
+    file_ext = Path(audio_file).suffix.lower()
     is_wav_file = file_ext in [".wav", ".wave"]
 
     if is_wav_file:
@@ -480,7 +480,7 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
             return result, None
         except Exception as e:
             error_str = str(e)
-            
+
             # Enhanced error diagnostics for common FFMPEG_AudioReader issues
             if _is_ffmpeg_audioreader_error(error_str):
                 diagnostic = _diagnose_ffmpeg_audioreader_error(
@@ -493,9 +493,9 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
             else:
                 error_diagnostics.append(f"{strategy_name}: {error_str}")
                 logger.warning(f"⚠️ {strategy_name} failed: {error_str}")
-            
+
             return None, e
-    
+
     # Try each strategy in order
     for strategy_name, loader_func in strategies:
         result, error = _try_loading_strategy(strategy_name, loader_func)
@@ -505,7 +505,7 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
 
     # All strategies failed - provide comprehensive error report
     error_msg = (
-        f"All audio loading strategies failed for {os.path.basename(audio_file)}"
+        f"All audio loading strategies failed for {Path(audio_file).name}"
     )
 
     if error_diagnostics:
@@ -577,7 +577,7 @@ def _diagnose_ffmpeg_audioreader_error(
         str: Diagnostic message with specific guidance
     """
     error_lower = error_str.lower()
-    filename = os.path.basename(audio_file)
+    filename = Path(audio_file).name
 
     # Specific error pattern matching and diagnostics
     if "at least one output file must be specified" in error_lower:
