@@ -3595,15 +3595,15 @@ def assemble_clips(
         )
         logger.info("   📊 Content breakdown:")
         logger.info(
-            f"      - Landscape: {canvas_format['analysis']['landscape_count']} clips ({canvas_format['analysis']['landscape_ratio'] * 100:.1f}%)"
+            f"      - Landscape: {canvas_format['aspect_ratio_analysis']['landscape_count']} clips ({(canvas_format['aspect_ratio_analysis']['landscape_count'] / len(all_video_chunks)) * 100:.1f}%)"
         )
         logger.info(
-            f"      - Portrait: {canvas_format['analysis']['portrait_count']} clips ({canvas_format['analysis']['portrait_ratio'] * 100:.1f}%)"
+            f"      - Portrait: {canvas_format['aspect_ratio_analysis']['portrait_count']} clips ({(canvas_format['aspect_ratio_analysis']['portrait_count'] / len(all_video_chunks)) * 100:.1f}%)"
         )
         logger.info(
-            f"      - Square: {canvas_format['analysis']['square_count']} clips ({canvas_format['analysis']['square_ratio'] * 100:.1f}%)"
+            f"      - Square: {canvas_format['aspect_ratio_analysis']['square_count']} clips ({(canvas_format['aspect_ratio_analysis']['square_count'] / len(all_video_chunks)) * 100:.1f}%)"
         )
-        logger.info(f"   💡 Strategy: {canvas_format['description']}")
+        logger.info(f"   💡 Strategy: {canvas_format.get('description', canvas_format.get('aspect_ratio_analysis', {}).get('decision_rationale', 'Canvas analysis'))}")
 
         # Log letterboxing expectations
         if canvas_format.get("letterboxing_analysis"):
@@ -3629,6 +3629,14 @@ def assemble_clips(
             "canvas_type": "fallback_16_9",
             "description": "Fallback 16:9 canvas due to analysis failure",
             "target_fps": 25,
+            "aspect_ratio_analysis": {
+                "landscape_count": 0,
+                "portrait_count": 0,
+                "square_count": 0,
+                "dominant_orientation": "unknown",
+                "decision_rationale": "Analysis failed, using safe fallback",
+            },
+            "letterboxing_analysis": [],
         }
 
     # Step 3: Match clips to beats
