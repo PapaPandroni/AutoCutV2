@@ -172,13 +172,13 @@ class CodecDetector:
             raise VideoProcessingError(
                 f"FFprobe failed for {file_path}",
                 details={"stderr": e.stderr, "command": " ".join(cmd)},
-            )
+            ) from e
         except subprocess.TimeoutExpired:
-            raise VideoProcessingError(f"FFprobe timed out for {file_path}")
+            raise VideoProcessingError(f"FFprobe timed out for {file_path}") from None
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             raise VideoProcessingError(
                 f"Failed to parse video information for {file_path}: {e!s}",
-            )
+            ) from e
 
     def _standardize_codec_name(self, codec_name: str) -> str:
         """Convert various codec name variants to standard names."""

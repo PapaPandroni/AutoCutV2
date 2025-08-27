@@ -58,7 +58,7 @@ class VideoEncoder:
             # Fallback to legacy implementation if modules not available
             return self._fallback_codec_settings()
         except Exception as e:
-            raise RuntimeError(f"Codec detection failed: {e!s}")
+            raise RuntimeError(f"Codec detection failed: {e!s}") from e
 
     def detect_optimal_codec_settings_with_diagnostics(
         self,
@@ -288,7 +288,7 @@ class VideoEncoder:
             return output_path
 
         except Exception as e:
-            raise RuntimeError(f"Video encoding failed: {e!s}")
+            raise RuntimeError(f"Video encoding failed: {e!s}") from e
 
 
 # Legacy functions for backward compatibility

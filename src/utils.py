@@ -418,11 +418,11 @@ def detect_video_codec(file_path: str) -> Dict[str, Any]:
         }
 
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"FFprobe failed for {file_path}: {e.stderr}")
+        raise RuntimeError(f"FFprobe failed for {file_path}: {e.stderr}") from e
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         raise RuntimeError(
             f"Failed to parse video information for {file_path}: {e!s}",
-        )
+        ) from e
 
 
 def _calculate_compatibility_score(

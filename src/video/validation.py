@@ -574,11 +574,11 @@ class VideoValidator:
             return codec_info
 
         except json.JSONDecodeError as e:
-            raise VideoProcessingError(f"FFprobe output parsing failed: {e}")
+            raise VideoProcessingError(f"FFprobe output parsing failed: {e}") from e
         except subprocess.TimeoutExpired:
-            raise VideoProcessingError("FFprobe command timed out")
+            raise VideoProcessingError("FFprobe command timed out") from None
         except Exception as e:
-            raise VideoProcessingError(f"Codec analysis failed: {e}")
+            raise VideoProcessingError(f"Codec analysis failed: {e}") from e
 
     def _check_codec_compatibility(
         self,
