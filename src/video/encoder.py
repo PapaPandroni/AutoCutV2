@@ -11,16 +11,23 @@ Extracted from clip_assembler.py as part of system consolidation.
 
 import os
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import psutil
+
+# Type imports for video processing
+try:
+    from moviepy.editor import VideoFileClip
+except ImportError:
+    # Fallback for type checking when moviepy is not available
+    VideoFileClip = Any
 
 
 class VideoEncoder:
     """Handles video encoding with optimal codec settings and compatibility."""
 
-    def __init__(self):
-        self.compatibility_info = None
+    def __init__(self) -> None:
+        self.compatibility_info: Optional[Dict[str, Any]] = None
 
     def detect_optimal_codec_settings(self) -> Tuple[Dict[str, Any], List[str]]:
         """Legacy codec settings detection for backward compatibility.
@@ -35,18 +42,16 @@ class VideoEncoder:
             - List of FFmpeg-specific parameters for ffmpeg_params argument
         """
         try:
-            # Import the new modular encoder system with dual import pattern
-            try:
-                from video.rendering import (
-                    detect_optimal_codec_settings as detect_codec_modular,
-                )
-            except ImportError:
-                from .video.rendering import (
-                    detect_optimal_codec_settings as detect_codec_modular,
-                )
+            # Import from the correct location - utils module has the function
+            from ..utils import detect_optimal_codec_settings as detect_codec_legacy
 
-            # Delegate to the new modular system
-            return detect_codec_modular()
+            # Delegate to the legacy implementation and ensure proper typing
+            result = detect_codec_legacy()
+            if isinstance(result, tuple) and len(result) == 2:
+                return result
+            else:
+                # Fallback if result format is unexpected
+                return self._fallback_codec_settings()
 
         except ImportError:
             # Fallback to legacy implementation if modules not available
@@ -72,20 +77,8 @@ class VideoEncoder:
             - List of FFmpeg-specific parameters for ffmpeg_params argument
             - Dictionary of diagnostic information and capability details
         """
-        # Import enhanced detection from new hardware module with dual import pattern
-        try:
-            # Try absolute import first for autocut.py context
-            from hardware.detection import detect_optimal_codec_settings_enhanced
-        except ImportError:
-            try:
-                # Try relative import for package context
-                from .hardware.detection import detect_optimal_codec_settings_enhanced
-            except ImportError:
-                # Fallback for backwards compatibility
-                try:
-                    from utils import detect_optimal_codec_settings_enhanced
-                except ImportError:
-                    from .utils import detect_optimal_codec_settings_enhanced
+        # Import enhanced detection from hardware module
+        from ..hardware.detection import detect_optimal_codec_settings_enhanced
 
         return detect_optimal_codec_settings_enhanced()
 
@@ -223,7 +216,7 @@ class VideoEncoder:
 
     def encode_video(
         self,
-        final_video,
+        final_video: Any,  # VideoClip type from moviepy
         output_path: str,
         encoding_params: Dict[str, Any],
     ) -> str:
@@ -238,38 +231,32 @@ class VideoEncoder:
             Path to encoded video file
         """
         try:
-            # Import compatibility layer with dual import pattern
-            try:
-                from compatibility.moviepy import (
-                    check_moviepy_api_compatibility,
-                    write_videofile_safely,
-                )
-            except ImportError:
-                try:
-                    from .compatibility.moviepy import (
-                        check_moviepy_api_compatibility,
-                        write_videofile_safely,
-                    )
-                except ImportError:
-                    # Fallback if compatibility module not available
-                    def write_videofile_safely(
-                        video, path, compatibility_info, **kwargs
-                    ):
-                        video.write_videofile(path, **kwargs)
+            # Import compatibility layer with correct relative path
+            from ..compatibility.moviepy import (
+                check_moviepy_api_compatibility,
+                write_videofile_safely,
+            )
+        except ImportError:
+            # Fallback if compatibility module not available  
+            def write_videofile_safely(
+                video_clip: Any, output_path: str, compatibility_info: Dict[str, Any], **kwargs: Any
+            ) -> Any:
+                return video_clip.write_videofile(output_path, **kwargs)
 
-                    def check_moviepy_api_compatibility():
-                        return {
-                            "version_detected": "unknown",
-                            "method_mappings": {
-                                "subclip": "subclip",
-                                "set_audio": "set_audio",
-                            },
-                        }
+            def check_moviepy_api_compatibility() -> Dict[str, Any]:
+                return {
+                    "version_detected": "unknown",
+                    "method_mappings": {
+                        "subclip": "subclip",
+                        "set_audio": "set_audio",
+                    },
+                }
 
-            # Get compatibility info if not cached
-            if not self.compatibility_info:
-                self.compatibility_info = check_moviepy_api_compatibility()
+        # Get compatibility info if not cached
+        if not self.compatibility_info:
+            self.compatibility_info = check_moviepy_api_compatibility()
 
+        try:
             # Create output directory if needed
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 

@@ -11,6 +11,44 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Public API - explicitly exported symbols
+__all__ = [
+    # Constants
+    "SUPPORTED_VIDEO_FORMATS",
+    "SUPPORTED_AUDIO_FORMATS", 
+    "DEFAULT_CONFIG",
+    
+    # Core functions
+    "detect_optimal_codec_settings",
+    "detect_optimal_codec_settings_enhanced",
+    "setup_logging",
+    
+    # Validation functions
+    "validate_video_file",
+    "validate_audio_file", 
+    "validate_input_files",
+    "validate_transcoded_output",
+    
+    # Video processing functions
+    "detect_video_codec",
+    "transcode_hevc_to_h264",
+    "transcode_hevc_to_h264_enhanced",
+    "preprocess_video_if_needed",
+    "preprocess_video_if_needed_enhanced",
+    "test_moviepy_h265_compatibility",
+    
+    # Utility functions
+    "ensure_output_directory",
+    "format_duration",
+    "get_file_size_mb",
+    "safe_filename",
+    "find_all_video_files",
+    "get_config_value",
+    
+    # Classes
+    "ProgressTracker",
+]
+
 # Import codec settings function from clip_assembler
 try:
     from .clip_assembler import detect_optimal_codec_settings
