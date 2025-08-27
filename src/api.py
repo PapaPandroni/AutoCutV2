@@ -10,7 +10,8 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union, cast
+from pathlib import Path as PathType
 
 # Import core AutoCut modules (src is in path, so no relative imports needed)
 from clip_assembler import assemble_clips
@@ -60,16 +61,16 @@ class AutoCutAPI:
     including video processing, validation, system diagnostics, and demos.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize AutoCut API with required components"""
         self.validator = VideoValidator()
         self.hardware_detector = HardwareDetector()
 
     def process_videos(
         self,
-        video_files: List[str],
-        audio_file: str,
-        output_path: str,
+        video_files: List[Union[str, PathType]],
+        audio_file: Union[str, PathType],
+        output_path: Union[str, PathType],
         pattern: str = "balanced",
         memory_safe: bool = False,
         verbose: bool = False,
@@ -112,7 +113,7 @@ class AutoCutAPI:
         progress_callback = None
         if verbose:
 
-            def progress_callback(step, progress):
+            def progress_callback(step: str, progress: float) -> None:
                 bar_length = 30
                 filled = int(bar_length * progress)
                 bar = "█" * filled + "░" * (bar_length - filled)
@@ -145,7 +146,7 @@ class AutoCutAPI:
 
     def validate_video(
         self,
-        video_path: str,
+        video_path: Union[str, PathType],
         detailed: bool = False,
     ) -> ValidationResult:
         """
@@ -397,7 +398,7 @@ class AutoCutAPI:
                 error_message=str(e),
             )
 
-    def find_supported_videos(self, directory: str) -> List[str]:
+    def find_supported_videos(self, directory: Union[str, PathType]) -> List[str]:
         """
         Find all supported video files in directory
 
@@ -409,7 +410,7 @@ class AutoCutAPI:
         """
         return find_all_video_files(directory)
 
-    def get_supported_formats(self) -> Dict[str, List[str]]:
+    def get_supported_formats(self) -> Dict[str, Union[List[str], int]]:
         """
         Get information about supported file formats
 

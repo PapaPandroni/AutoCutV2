@@ -7,10 +7,23 @@ motion analysis, and face detection.
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
+from numpy.typing import NDArray
+
+# Import our domain-specific types
+try:
+    from video.types import PathLike, VideoAnalysisResult, SceneSegment
+except ImportError:
+    try:
+        from .video.types import PathLike, VideoAnalysisResult, SceneSegment
+    except ImportError:
+        # Fallback type definitions if types module not available
+        PathLike = Union[str, 'Path']
+        VideoAnalysisResult = Dict[str, Any]
+        SceneSegment = Dict[str, Any]
 
 try:
     from moviepy import VideoFileClip
@@ -31,7 +44,7 @@ except ImportError:
     from .video import VideoChunk
 
 
-def load_video(file_path: str) -> Tuple[VideoFileClip, Dict[str, Any]]:
+def load_video(file_path: PathLike) -> Tuple[VideoFileClip, Dict[str, Any]]:
     """Load video file and extract basic metadata.
 
     Automatically preprocesses problematic video codecs (H.265/HEVC) for
@@ -518,7 +531,7 @@ def detect_camera_shake(
         return 50.0
 
 
-def _analyze_flow_stability(flow: np.ndarray) -> float:
+def _analyze_flow_stability(flow: NDArray[np.floating[Any]]) -> float:
     """Analyze dense optical flow to determine camera stability.
 
     Args:
@@ -635,7 +648,7 @@ def _analyze_flow_stability(flow: np.ndarray) -> float:
 
 
 def analyze_video_file(
-    file_path: str,
+    file_path: PathLike,
     bpm: Optional[float] = None,
     min_beats: float = 1.0,
     min_scene_duration: Optional[float] = None,

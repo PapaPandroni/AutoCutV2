@@ -67,8 +67,8 @@ class iPhoneCompatibilityError(VideoProcessingError):
         message: str,
         file_path: Optional[str] = None,
         platform: Optional[str] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize iPhone compatibility error.
 
@@ -104,8 +104,8 @@ class HardwareAccelerationError(AutoCutError):
         message: str,
         encoder_type: Optional[str] = None,
         hardware_info: Optional[Dict[str, Any]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize hardware acceleration error.
 
@@ -141,8 +141,8 @@ class ValidationError(AutoCutError):
         message: str,
         validation_type: Optional[str] = None,
         failed_checks: Optional[List[str]] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize validation error.
 
@@ -175,8 +175,8 @@ class TranscodingError(VideoProcessingError):
         input_format: Optional[str] = None,
         output_format: Optional[str] = None,
         ffmpeg_command: Optional[str] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize transcoding error.
 
@@ -219,8 +219,8 @@ class AudioProcessingError(AutoCutError):
         message: str,
         audio_file: Optional[str] = None,
         analysis_stage: Optional[str] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize audio processing error.
 
@@ -252,8 +252,8 @@ class RenderingError(AutoCutError):
         message: str,
         rendering_stage: Optional[str] = None,
         clip_count: Optional[int] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize rendering error.
 
