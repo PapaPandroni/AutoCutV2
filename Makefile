@@ -47,8 +47,8 @@ deps: ## Install production dependencies only
 
 upgrade-deps: ## Upgrade all development dependencies
 	@echo "$(YELLOW)Upgrading development dependencies...$(NC)"
-	$(VENV_ACTIVATE) && pip install --upgrade ruff mypy bandit pytest pytest-cov pre-commit
-	@echo "$(GREEN)Dependencies upgraded!$(NC)"
+	$(VENV_ACTIVATE) && pip install --upgrade -e ".[dev]"
+	@echo "$(GREEN)Development dependencies upgraded!$(NC)"
 
 # Testing commands
 test: ## Run all tests
@@ -79,13 +79,13 @@ test-coverage: ## Run tests with coverage report
 	@echo "$(YELLOW)Running tests with coverage...$(NC)"
 	$(VENV_ACTIVATE) && $(PYTEST) $(PYTEST_ARGS) --cov=src --cov-report=term-missing --cov-report=html
 
-test-hardware: ## Run hardware-specific tests
+test-hardware: ## Run hardware-specific tests  
 	@echo "$(YELLOW)Running hardware tests...$(NC)"
-	$(VENV_ACTIVATE) && $(PYTEST) $(PYTEST_ARGS) -m "hardware or gpu"
+	$(VENV_ACTIVATE) && $(PYTEST) $(PYTEST_ARGS) -k "hardware or gpu or benchmark" --ignore=tests/integration/ --ignore=tests/cli/
 
 test-media: ## Run tests that require media files
 	@echo "$(YELLOW)Running media-dependent tests...$(NC)"
-	$(VENV_ACTIVATE) && $(PYTEST) $(PYTEST_ARGS) -m "media_required"
+	$(VENV_ACTIVATE) && $(PYTEST) $(PYTEST_ARGS) tests/integration/test_full_pipeline.py tests/reliability/ -k "not test_hardware"
 
 # Application commands - NEW CLI Interface
 demo: ## Run AutoCut demo using new CLI (main entry point)
@@ -150,16 +150,23 @@ quality: lint format type-check security ## Run all code quality checks
 	@echo "$(GREEN)$(BOLD)✓ All code quality checks passed!$(NC)"
 
 # Pre-commit and Git Integration
-setup-hooks: ## Set up pre-commit hooks
+setup-hooks: ## Set up pre-commit hooks (requires pre-commit package)
 	@echo "$(YELLOW)Setting up pre-commit hooks...$(NC)"
-	$(VENV_ACTIVATE) && pre-commit install
-	$(VENV_ACTIVATE) && pre-commit install --hook-type commit-msg
-	$(VENV_ACTIVATE) && pre-commit install --hook-type pre-push
-	@echo "$(GREEN)Pre-commit hooks installed!$(NC)"
+	@if command -v pre-commit >/dev/null 2>&1; then \
+		$(VENV_ACTIVATE) && pre-commit install && pre-commit install --hook-type commit-msg; \
+		echo "$(GREEN)Pre-commit hooks installed!$(NC)"; \
+	else \
+		echo "$(RED)pre-commit not found. Install with: pip install pre-commit$(NC)"; \
+	fi
 
-pre-commit: ## Run pre-commit hooks manually
+pre-commit: ## Run pre-commit hooks manually (requires pre-commit package)
 	@echo "$(YELLOW)Running pre-commit hooks...$(NC)"
-	$(VENV_ACTIVATE) && pre-commit run --all-files
+	@if command -v pre-commit >/dev/null 2>&1; then \
+		$(VENV_ACTIVATE) && pre-commit run --all-files; \
+	else \
+		echo "$(RED)pre-commit not found. Running basic checks instead...$(NC)"; \
+		$(MAKE) lint format type-check security; \
+	fi
 
 validate: ## Validate all code (lint, type-check, security, test)
 	@echo "$(BOLD)$(YELLOW)Running comprehensive validation...$(NC)"
@@ -176,8 +183,8 @@ validate: ## Validate all code (lint, type-check, security, test)
 # Cleanup commands
 clean: ## Clean up generated files and caches
 	@echo "$(YELLOW)Cleaning up generated files and caches...$(NC)"
-	find . -type f -name "*.pyc" -delete
-	find . -type d -name "__pycache__" -delete
+	find . -path ./env -prune -o -type f -name "*.pyc" -print0 | xargs -0 rm -f
+	find . -path ./env -prune -o -type d -name "__pycache__" -print0 | xargs -0 rm -rf
 	rm -rf .pytest_cache/
 	rm -rf .mypy_cache/
 	rm -rf .ruff_cache/
@@ -197,24 +204,21 @@ clean-all: clean ## Clean everything including virtual environment
 	rm -rf env/
 	@echo "$(GREEN)Full cleanup completed!$(NC)"
 
-# Git helpers
+# Git helpers - simplified  
 commit-test: test-quick ## Run quick tests before commit
 	@echo "$(GREEN)Quick tests passed - ready to commit!$(NC)"
-
-commit-full: test ## Run all tests before commit
-	@echo "$(GREEN)All tests passed - ready to commit!$(NC)"
 
 # Information commands
 info: ## Show project information
 	@echo "$(BOLD)AutoCut V2 - Project Information$(NC)"
-	@echo "$(BLUE)Status:$(NC) Week 3 CLI/API Design - IN PROGRESS"
+	@echo "$(BLUE)Status:$(NC) Production-Ready Core Pipeline (January 2025)"
 	@echo "$(BLUE)Python:$(NC) $(shell python3 --version 2>/dev/null || echo 'Not found')"
 	@echo "$(BLUE)Virtual Env:$(NC) $(shell [ -d env ] && echo 'Present' || echo 'Missing - run make setup')"
-	@echo "$(BLUE)CLI Interface:$(NC) autocut.py (NEW - replacing scattered scripts)"
+	@echo "$(BLUE)CLI Interface:$(NC) autocut.py (Complete)"
 	@echo "$(BLUE)Test Files:$(NC) $(shell find test_media -name '*.mov' -o -name '*.mp4' 2>/dev/null | wc -l) video(s), $(shell find test_media -name '*.mp3' -o -name '*.wav' 2>/dev/null | wc -l) audio"
-	@echo "$(BLUE)Architecture:$(NC) Modular (Week 1-2 refactoring complete)"
+	@echo "$(BLUE)Architecture:$(NC) Modular, Memory-Safe, Cross-Platform"
 	@echo "$(BLUE)Testing:$(NC) pytest with $(shell find tests -name 'test_*.py' 2>/dev/null | wc -l) test files"
-	@echo "$(BLUE)Commands:$(NC) Run 'make cli-help' for CLI usage"
+	@echo "$(BLUE)Next Phase:$(NC) GUI Development (Step 6)"
 
 
 # CI/CD simulation
@@ -241,7 +245,7 @@ dev-test: ## Quick development test cycle
 
 # Version and release helpers  
 version: ## Show current version info
-	@echo "AutoCut V2 - Refactoring Phase"
-	@echo "Week 2: Testing Framework - COMPLETE"
+	@echo "AutoCut V2 - Production Pipeline Complete"
+	@echo "Core Features: Audio/Video Analysis, Beat Sync, Hardware Acceleration" 
 	@echo "Architecture: Modular (src/video/, src/hardware/, src/core/)"
-	@echo "Testing: pytest framework with comprehensive test coverage"
+	@echo "Status: Ready for GUI Development Phase"

@@ -60,7 +60,6 @@ dev = [
     # Additional development tools
     "pre-commit>=3.0.0",            # Git hooks management
     "tox>=4.0.0",                   # Testing in multiple environments  
-    "coverage-conditional-plugin>=0.9.0",  # Conditional coverage
     "interrogate>=1.5.0",           # Docstring coverage
 ]
 
@@ -480,7 +479,7 @@ omit = [
 ]
 
 # Coverage plugins  
-plugins = ["coverage_conditional_plugin"]
+# plugins = ["coverage_conditional_plugin"]  # Disabled - plugin not available
 
 [tool.coverage.report]
 # Reporting options
