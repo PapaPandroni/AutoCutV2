@@ -142,7 +142,7 @@ class AutoCutAPI:
             return result_path
 
         except Exception as e:
-            raise RuntimeError(f"Video processing failed: {e!s}")
+            raise RuntimeError(f"Video processing failed: {e!s}") from e
 
     def validate_video(
         self,

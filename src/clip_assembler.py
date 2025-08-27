@@ -155,7 +155,7 @@ except ImportError:
                     except Exception as fallback_error:
                         raise RuntimeError(
                             f"Could not load audio file {audio_file}: {fallback_error}"
-                        )
+                        ) from fallback_error
                 else:
                     # Re-raise non-audio-specific errors
                     raise
@@ -351,7 +351,7 @@ class VideoResourceManager:
                 self.active_videos.add(id(video))
                 yield video
             except Exception as e:
-                raise RuntimeError(f"Failed to load video {video_path}: {e!s}")
+                raise RuntimeError(f"Failed to load video {video_path}: {e!s}") from e
             finally:
                 if video is not None:
                     try:
@@ -389,7 +389,7 @@ class VideoResourceManager:
             return video
 
         except Exception as e:
-            raise RuntimeError(f"Failed to load video {video_path}: {e!s}")
+            raise RuntimeError(f"Failed to load video {video_path}: {e!s}") from e
 
     def cleanup_delayed_videos(self) -> None:
         """Clean up all videos that were loaded with delayed cleanup.

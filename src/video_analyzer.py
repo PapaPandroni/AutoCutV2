@@ -106,7 +106,7 @@ def load_video(file_path: PathLike) -> Tuple[VideoFileClip, Dict[str, Any]]:
         return video, metadata
 
     except Exception as e:
-        raise ValueError(f"Failed to load video file {file_path}: {e!s}")
+        raise ValueError(f"Failed to load video file {file_path}: {e!s}") from e
 
 
 def detect_scenes(
@@ -140,24 +140,25 @@ def detect_scenes(
     prev_frame = None
     scene_changes = [0.0]  # Always start with beginning
 
-    for t in timestamps[1:]:  # Skip first timestamp
+    def _safe_get_frame_diff(timestamp: float) -> Tuple[Optional[np.ndarray], Optional[float]]:
+        """Safely get frame and calculate difference, returning (frame, diff)."""
         try:
-            # Get frame as numpy array
-            frame = video.get_frame(t)
-
+            frame = video.get_frame(timestamp)
             if prev_frame is not None:
-                # Calculate frame difference (mean absolute difference)
                 diff = np.mean(np.abs(frame.astype(float) - prev_frame.astype(float)))
-
-                # If difference exceeds threshold, mark as scene change
-                if diff > threshold:
-                    scene_changes.append(t)
-
-            prev_frame = frame
-
+                return frame, diff
+            return frame, None
         except Exception:
             # Skip problematic frames
-            continue
+            return None, None
+
+    for t in timestamps[1:]:  # Skip first timestamp
+        frame, diff = _safe_get_frame_diff(t)
+        
+        if frame is not None:
+            if diff is not None and diff > threshold:
+                scene_changes.append(t)
+            prev_frame = frame
 
     # Always end with video duration
     if scene_changes[-1] != duration:
@@ -217,10 +218,11 @@ def score_scene(video: VideoFileClip, start_time: float, end_time: float) -> flo
 
     scores = []
 
-    for t in sample_times:
+    def _safe_score_frame(timestamp: float) -> Optional[float]:
+        """Safely score a frame at given timestamp, returning score or None if failed."""
         try:
             # Get frame as RGB numpy array
-            frame = video.get_frame(t)
+            frame = video.get_frame(timestamp)
 
             # Convert to grayscale for sharpness calculation
             gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
@@ -248,12 +250,17 @@ def score_scene(video: VideoFileClip, start_time: float, end_time: float) -> flo
             frame_score = (
                 0.4 * sharpness_score + 0.3 * brightness_score + 0.3 * contrast_score
             )
-
-            scores.append(frame_score)
+            
+            return frame_score
 
         except Exception:
             # Skip problematic frames
-            continue
+            return None
+
+    for t in sample_times:
+        frame_score = _safe_score_frame(t)
+        if frame_score is not None:
+            scores.append(frame_score)
 
     if not scores:
         return 0.0
@@ -413,10 +420,11 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
 
         face_counts = []
 
-        for t in sample_times:
+        def _safe_detect_faces(timestamp: float) -> Optional[int]:
+            """Safely detect faces at given timestamp, returning count or None if failed."""
             try:
                 # Get frame and convert to grayscale
-                frame = video.get_frame(t)
+                frame = video.get_frame(timestamp)
                 gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
                 # Detect faces
@@ -428,11 +436,16 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
                     flags=cv2.CASCADE_SCALE_IMAGE,
                 )
 
-                face_counts.append(len(faces))
+                return len(faces)
 
             except Exception:
                 # Skip problematic frames
-                continue
+                return None
+
+        for t in sample_times:
+            face_count = _safe_detect_faces(t)
+            if face_count is not None:
+                face_counts.append(face_count)
 
         if not face_counts:
             return 0
@@ -756,7 +769,7 @@ def analyze_video_file(
             error_msg = f"Failed to load video {filename}: {e!s}"
             processing_stats["errors"].append(error_msg)
             logger.exception(error_msg)
-            raise ValueError(error_msg)
+            raise ValueError(error_msg) from e
 
         # Step 2: Scene detection with detailed logging
         logger.info(f"Starting scene detection for: {filename}")
@@ -937,4 +950,4 @@ def analyze_video_file(
         processing_stats["errors"].append(error_msg)
         logger.exception(error_msg)
         logger.exception(f"Processing stats: {processing_stats}")
-        raise ValueError(error_msg)
+        raise ValueError(error_msg) from e
