@@ -9,6 +9,7 @@ import glob
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Import core AutoCut modules (src is in path, so no relative imports needed)
@@ -96,16 +97,16 @@ class AutoCutAPI:
 
         # Validate inputs
         for video_file in video_files:
-            if not os.path.exists(video_file):
+            if not Path(video_file).exists():
                 raise ValueError(f"Video file not found: {video_file}")
 
-        if not os.path.exists(audio_file):
+        if not Path(audio_file).exists():
             raise ValueError(f"Audio file not found: {audio_file}")
 
         # Create output directory
-        output_dir = os.path.dirname(output_path)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
+        output_dir = Path(output_path).parent
+        if output_dir != Path('.'):
+            output_dir.mkdir(parents=True, exist_ok=True)
 
         # Set up progress callback for verbose mode
         progress_callback = None
@@ -160,7 +161,7 @@ class AutoCutAPI:
         Raises:
             FileNotFoundError: If video file doesn't exist
         """
-        if not os.path.exists(video_path):
+        if not Path(video_path).exists():
             raise FileNotFoundError(f"Video file not found: {video_path}")
 
         # Use VideoValidator for comprehensive validation
@@ -301,7 +302,7 @@ class AutoCutAPI:
         )
 
         # Test media directory check
-        if not os.path.exists("test_media"):
+        if not Path("test_media").exists():
             issues.append("test_media directory not found")
             recommendations.append(
                 "Create test_media/ directory with sample video/audio files for testing",
