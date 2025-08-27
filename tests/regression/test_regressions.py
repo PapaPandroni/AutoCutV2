@@ -42,7 +42,7 @@ class TestRegressions:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        regression_output_dir: Path
+        regression_output_dir: Path,
     ):
         """Test for MoviePy compatibility regressions (H.265, audio fadeout, etc.)."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -54,7 +54,11 @@ class TestRegressions:
         print("\\n🎬 Testing MoviePy compatibility regression")
 
         # Test H.265/HEVC video processing (was a major issue)
-        h265_videos = [f for f in real_videos if "h265" in f.name.lower() or "hevc" in f.name.lower()]
+        h265_videos = [
+            f
+            for f in real_videos
+            if "h265" in f.name.lower() or "hevc" in f.name.lower()
+        ]
         test_video = h265_videos[0] if h265_videos else real_videos[0]
 
         output_path = str(regression_output_dir / "moviepy_compatibility_test.mp4")
@@ -66,16 +70,18 @@ class TestRegressions:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False
+                verbose=False,
             )
 
             # Validate successful processing
-            assert os.path.exists(result_path), "MoviePy should handle video formats correctly"
+            assert os.path.exists(result_path), (
+                "MoviePy should handle video formats correctly"
+            )
             assert os.path.getsize(result_path) > 0, "Output should not be empty"
 
             print("   ✅ MoviePy compatibility maintained")
             print(f"   📹 Processed: {Path(test_video).name}")
-            print(f"   💾 Output: {os.path.getsize(result_path) / (1024*1024):.1f}MB")
+            print(f"   💾 Output: {os.path.getsize(result_path) / (1024 * 1024):.1f}MB")
 
         except Exception as e:
             error_msg = str(e).lower()
@@ -103,7 +109,9 @@ class TestRegressions:
                 result = analyze_audio(str(audio_file))
 
                 # Validate that analysis doesn't return corrupted data
-                assert isinstance(result, dict), "Audio analysis should return dictionary"
+                assert isinstance(result, dict), (
+                    "Audio analysis should return dictionary"
+                )
                 assert "bpm" in result, "Should detect BPM"
                 assert "beats" in result, "Should detect beats"
                 assert "duration" in result, "Should detect duration"
@@ -113,20 +121,34 @@ class TestRegressions:
                 assert result["bpm"] > 0, "BPM should be positive"
                 assert isinstance(result["beats"], list), "Beats should be a list"
                 assert len(result["beats"]) > 0, "Should find some beats"
-                assert isinstance(result["duration"], (int, float)), "Duration should be numeric"
+                assert isinstance(result["duration"], (int, float)), (
+                    "Duration should be numeric"
+                )
                 assert result["duration"] > 0, "Duration should be positive"
 
                 # Check for reasonable ranges (prevent garbage data regression)
-                assert 30 <= result["bpm"] <= 300, f"BPM should be reasonable: {result['bpm']}"
-                assert result["duration"] < 3600, f"Duration should be reasonable: {result['duration']}s"
+                assert 30 <= result["bpm"] <= 300, (
+                    f"BPM should be reasonable: {result['bpm']}"
+                )
+                assert result["duration"] < 3600, (
+                    f"Duration should be reasonable: {result['duration']}s"
+                )
 
-                print(f"     ✅ Clean analysis: {result['bpm']:.1f} BPM, {len(result['beats'])} beats")
+                print(
+                    f"     ✅ Clean analysis: {result['bpm']:.1f} BPM, {len(result['beats'])} beats"
+                )
 
             except Exception as e:
                 error_msg = str(e).lower()
 
                 # Check for specific audio corruption errors
-                corruption_keywords = ["corrupt", "invalid", "decode", "format", "header"]
+                corruption_keywords = [
+                    "corrupt",
+                    "invalid",
+                    "decode",
+                    "format",
+                    "header",
+                ]
                 if any(keyword in error_msg for keyword in corruption_keywords):
                     pytest.fail(f"Audio analysis corruption regression: {e}")
                 else:
@@ -139,7 +161,7 @@ class TestRegressions:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        regression_output_dir: Path
+        regression_output_dir: Path,
     ):
         """Test for memory leak regressions during repeated processing."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -151,6 +173,7 @@ class TestRegressions:
         print("\\n🧠 Testing memory leak regression")
 
         import psutil
+
         process = psutil.Process()
 
         # Get initial memory baseline
@@ -158,7 +181,10 @@ class TestRegressions:
         print(f"   Initial memory: {initial_memory:.1f}MB")
 
         # Use small video for consistent testing
-        small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+        small_video = next(
+            (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+            real_videos[0],
+        )
 
         memory_samples = [initial_memory]
 
@@ -173,21 +199,21 @@ class TestRegressions:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,  # Use memory-safe mode
-                    verbose=False
+                    verbose=False,
                 )
 
                 # Measure memory after processing
                 current_memory = process.memory_info().rss / (1024 * 1024)
                 memory_samples.append(current_memory)
 
-                print(f"   Iteration {i+1}: {current_memory:.1f}MB")
+                print(f"   Iteration {i + 1}: {current_memory:.1f}MB")
 
                 # Clean up output to prevent disk space issues
                 if os.path.exists(result_path):
                     os.remove(result_path)
 
             except Exception as e:
-                print(f"   ⚠️ Iteration {i+1} failed: {e}")
+                print(f"   ⚠️ Iteration {i + 1} failed: {e}")
 
         # Analyze memory growth
         if len(memory_samples) >= 3:
@@ -210,7 +236,7 @@ class TestRegressions:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        regression_output_dir: Path
+        regression_output_dir: Path,
     ):
         """Test for file handle leak regressions."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -222,13 +248,17 @@ class TestRegressions:
         print("\\n📂 Testing file handle leak regression")
 
         import psutil
+
         process = psutil.Process()
 
         # Get initial file handle count
         initial_handles = len(process.open_files())
         print(f"   Initial file handles: {initial_handles}")
 
-        small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+        small_video = next(
+            (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+            real_videos[0],
+        )
 
         # Process multiple times to detect handle leaks
         for i in range(3):
@@ -241,17 +271,17 @@ class TestRegressions:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,
-                    verbose=False
+                    verbose=False,
                 )
 
                 # Clean up output file
                 if os.path.exists(result_path):
                     os.remove(result_path)
 
-                print(f"   ✅ Iteration {i+1} completed")
+                print(f"   ✅ Iteration {i + 1} completed")
 
             except Exception as e:
-                print(f"   ⚠️ Iteration {i+1} failed: {e}")
+                print(f"   ⚠️ Iteration {i + 1} failed: {e}")
 
         # Check final file handle count
         final_handles = len(process.open_files())
@@ -274,7 +304,7 @@ class TestRegressions:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        regression_output_dir: Path
+        regression_output_dir: Path,
     ):
         """Test for canvas sizing and letterboxing regressions."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -298,15 +328,17 @@ class TestRegressions:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False
+                verbose=False,
             )
 
             # Validate output exists and is valid
             assert os.path.exists(result_path), "Canvas sizing should produce output"
-            assert os.path.getsize(result_path) > 0, "Canvas sizing output should not be empty"
+            assert os.path.getsize(result_path) > 0, (
+                "Canvas sizing output should not be empty"
+            )
 
             print("   ✅ Canvas sizing and letterboxing working")
-            print(f"   📹 Output: {os.path.getsize(result_path) / (1024*1024):.1f}MB")
+            print(f"   📹 Output: {os.path.getsize(result_path) / (1024 * 1024):.1f}MB")
 
         except Exception as e:
             error_msg = str(e).lower()
@@ -325,7 +357,7 @@ class TestRegressions:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        regression_output_dir: Path
+        regression_output_dir: Path,
     ):
         """Test for pattern variation and beat sync regressions."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -337,7 +369,10 @@ class TestRegressions:
         print("\\n🎯 Testing pattern variation regression")
 
         patterns = ["energetic", "balanced", "dramatic", "buildup"]
-        small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+        small_video = next(
+            (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+            real_videos[0],
+        )
 
         pattern_results = []
 
@@ -352,13 +387,13 @@ class TestRegressions:
                     output_path=output_path,
                     pattern=pattern,
                     memory_safe=True,
-                    verbose=False
+                    verbose=False,
                 )
 
                 if os.path.exists(result_path):
                     file_size = os.path.getsize(result_path)
                     pattern_results.append((pattern, file_size))
-                    print(f"     ✅ {pattern}: {file_size / (1024*1024):.1f}MB")
+                    print(f"     ✅ {pattern}: {file_size / (1024 * 1024):.1f}MB")
                 else:
                     print(f"     ❌ {pattern}: No output created")
 
@@ -373,16 +408,20 @@ class TestRegressions:
             if unique_sizes > 1:
                 print("   ✅ Patterns produce varied output sizes")
             else:
-                print("   ⚠️ All patterns produce same output size - may indicate variation regression")
+                print(
+                    "   ⚠️ All patterns produce same output size - may indicate variation regression"
+                )
 
-        print(f"✅ Pattern variation regression test: {len(pattern_results)}/4 patterns working")
+        print(
+            f"✅ Pattern variation regression test: {len(pattern_results)}/4 patterns working"
+        )
 
     def test_error_recovery_regression(
         self,
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        regression_output_dir: Path
+        regression_output_dir: Path,
     ):
         """Test for error recovery and graceful failure regressions."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -400,7 +439,9 @@ class TestRegressions:
 
         output_path = str(regression_output_dir / "error_recovery_test.mp4")
 
-        print(f"   Testing with {len(valid_files)} valid + {len(invalid_files)} invalid files")
+        print(
+            f"   Testing with {len(valid_files)} valid + {len(invalid_files)} invalid files"
+        )
 
         try:
             result_path = api_client.process_videos(
@@ -409,13 +450,15 @@ class TestRegressions:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False
+                verbose=False,
             )
 
             # If it succeeds, should have processed valid files only
             if os.path.exists(result_path):
                 print("   ✅ Error recovery succeeded - processed valid files")
-                print(f"   📹 Output: {os.path.getsize(result_path) / (1024*1024):.1f}MB")
+                print(
+                    f"   📹 Output: {os.path.getsize(result_path) / (1024 * 1024):.1f}MB"
+                )
             else:
                 print("   ⚠️ Error recovery succeeded but no output created")
 
@@ -435,7 +478,7 @@ class TestRegressions:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        regression_output_dir: Path
+        regression_output_dir: Path,
     ):
         """Test for platform-specific regressions (macOS metadata files, path issues, etc.)."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -454,7 +497,9 @@ class TestRegressions:
             print(f"   Found {len(metadata_files)} metadata files (should be ignored)")
 
             # Ensure processing doesn't fail due to metadata files
-            mixed_files = [str(f) for f in real_videos[:1]] + [str(f) for f in metadata_files[:1]]
+            mixed_files = [str(f) for f in real_videos[:1]] + [
+                str(f) for f in metadata_files[:1]
+            ]
             output_path = str(regression_output_dir / "platform_specific_test.mp4")
 
             try:
@@ -464,7 +509,7 @@ class TestRegressions:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,
-                    verbose=False
+                    verbose=False,
                 )
 
                 if os.path.exists(result_path):
@@ -491,7 +536,7 @@ class TestRegressions:
                 output_path=space_output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False
+                verbose=False,
             )
 
             if os.path.exists(result_path):
@@ -513,7 +558,7 @@ class TestRegressions:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        regression_output_dir: Path
+        regression_output_dir: Path,
     ):
         """Test for data integrity and corruption prevention regressions."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -524,7 +569,10 @@ class TestRegressions:
 
         print("\\n🔒 Testing data integrity regression")
 
-        small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+        small_video = next(
+            (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+            real_videos[0],
+        )
         output_path = str(regression_output_dir / "data_integrity_test.mp4")
 
         try:
@@ -534,15 +582,19 @@ class TestRegressions:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False
+                verbose=False,
             )
 
             if os.path.exists(result_path):
                 file_size = os.path.getsize(result_path)
 
                 # Basic integrity checks
-                assert file_size > 1000, "Output file should be substantial (not just header)"
-                assert file_size < 10 * 1024 * 1024 * 1024, "Output file should not be unreasonably large"
+                assert file_size > 1000, (
+                    "Output file should be substantial (not just header)"
+                )
+                assert file_size < 10 * 1024 * 1024 * 1024, (
+                    "Output file should not be unreasonably large"
+                )
 
                 # Try to read file header to ensure it's not corrupted
                 with open(result_path, "rb") as f:
@@ -556,7 +608,7 @@ class TestRegressions:
                         print("   ⚠️ MP4 signature not found in header")
 
                 print("   ✅ Data integrity checks passed")
-                print(f"   📹 File size: {file_size / (1024*1024):.1f}MB")
+                print(f"   📹 File size: {file_size / (1024 * 1024):.1f}MB")
 
             else:
                 print("   ⚠️ No output file created for integrity testing")

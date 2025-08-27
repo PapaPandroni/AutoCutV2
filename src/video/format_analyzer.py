@@ -42,7 +42,8 @@ class VideoFormatAnalyzer:
                 if video_clip.h > 0
                 else 1.0,
                 "resolution_category": self._categorize_resolution(
-                    video_clip.w, video_clip.h,
+                    video_clip.w,
+                    video_clip.h,
                 ),
                 "fps_category": self._categorize_fps(video_clip.fps),
             }
@@ -93,7 +94,8 @@ class VideoFormatAnalyzer:
                 "height": target.get("target_height", 1080),
                 "fps": target.get("target_fps", 24.0),
                 "duration": 0.0,
-                "aspect_ratio": target.get("target_width", 1920) / target.get("target_height", 1080),
+                "aspect_ratio": target.get("target_width", 1920)
+                / target.get("target_height", 1080),
                 "resolution_category": "1080p",
                 "fps_category": "24fps",
             }
@@ -169,8 +171,8 @@ class VideoFormatAnalyzer:
         # INTELLIGENT ASPECT RATIO ANALYSIS
         # Classify videos by aspect ratio with tolerance
         landscape_count = 0  # > 1.3 (wider than 4:3)
-        portrait_count = 0   # < 0.8 (taller than 4:3)
-        square_count = 0     # 0.8 to 1.3 (square-ish)
+        portrait_count = 0  # < 0.8 (taller than 4:3)
+        square_count = 0  # 0.8 to 1.3 (square-ish)
 
         for ar in aspect_ratios:
             if ar > 1.3:
@@ -185,18 +187,21 @@ class VideoFormatAnalyzer:
         portrait_ratio = portrait_count / total_videos
         square_ratio = square_count / total_videos
 
-
         # INTELLIGENT CANVAS SELECTION LOGIC
-        canvas_decision_threshold = 0.8  # 80% of videos must be same orientation for optimization
+        canvas_decision_threshold = (
+            0.8  # 80% of videos must be same orientation for optimization
+        )
 
         if landscape_ratio >= canvas_decision_threshold:
             # Predominantly landscape content - optimize for landscape
             target_aspect_ratio = 16.0 / 9.0  # Standard 16:9
             canvas_type = "landscape_optimized"
-            description = "Predominantly landscape content - 16:9 canvas for minimal letterboxing"
+            description = (
+                "Predominantly landscape content - 16:9 canvas for minimal letterboxing"
+            )
 
             # Find optimal landscape dimensions based on content
-            landscape_widths = [w for w, h in resolutions if w/h > 1.3]
+            landscape_widths = [w for w, h in resolutions if w / h > 1.3]
             if landscape_widths:
                 max_landscape_width = max(landscape_widths)
                 if max_landscape_width >= 3840:  # 4K
@@ -212,10 +217,12 @@ class VideoFormatAnalyzer:
             # Predominantly portrait content - optimize for portrait
             target_aspect_ratio = 9.0 / 16.0  # Portrait 9:16
             canvas_type = "portrait_optimized"
-            description = "Predominantly portrait content - 9:16 canvas for minimal letterboxing"
+            description = (
+                "Predominantly portrait content - 9:16 canvas for minimal letterboxing"
+            )
 
             # Find optimal portrait dimensions based on content
-            portrait_heights = [h for w, h in resolutions if w/h < 0.8]
+            portrait_heights = [h for w, h in resolutions if w / h < 0.8]
             if portrait_heights:
                 max_portrait_height = max(portrait_heights)
                 if max_portrait_height >= 3840:  # 4K portrait
@@ -231,7 +238,9 @@ class VideoFormatAnalyzer:
             # Predominantly square content - optimize for square
             target_aspect_ratio = 1.0  # Square 1:1
             canvas_type = "square_optimized"
-            description = "Predominantly square content - 1:1 canvas for minimal letterboxing"
+            description = (
+                "Predominantly square content - 1:1 canvas for minimal letterboxing"
+            )
 
             # Find optimal square dimensions based on content
             if max_dimension >= 3840:
@@ -239,7 +248,7 @@ class VideoFormatAnalyzer:
             elif max_dimension >= 1920:
                 target_width, target_height = 1080, 1080  # Square HD
             else:
-                target_width, target_height = 720, 720    # Square SD
+                target_width, target_height = 720, 720  # Square SD
 
         else:
             # Mixed aspect ratios - use intelligent default (landscape)
@@ -249,7 +258,9 @@ class VideoFormatAnalyzer:
             # 3. Portrait videos letterbox better in landscape than vice versa
             target_aspect_ratio = 16.0 / 9.0
             canvas_type = "mixed_content_default"
-            description = "Mixed aspect ratios - 16:9 default canvas to avoid tiny videos"
+            description = (
+                "Mixed aspect ratios - 16:9 default canvas to avoid tiny videos"
+            )
 
             # Use high quality landscape dimensions
             if max_dimension >= 3840:
@@ -270,13 +281,15 @@ class VideoFormatAnalyzer:
         fps_diversity = len(set(fps_counts.keys()))
 
         requires_normalization = (
-            resolution_diversity > 1 or
-            fps_diversity > 1 or
-            not all(abs(ar - target_aspect_ratio) < 0.1 for ar in aspect_ratios)
+            resolution_diversity > 1
+            or fps_diversity > 1
+            or not all(abs(ar - target_aspect_ratio) < 0.1 for ar in aspect_ratios)
         )
 
         # Quality level assessment
-        quality_info = "4K" if max_dimension >= 3840 else "HD" if max_dimension >= 1920 else "SD"
+        quality_info = (
+            "4K" if max_dimension >= 3840 else "HD" if max_dimension >= 1920 else "SD"
+        )
 
         # Enhanced logging
 
@@ -286,9 +299,11 @@ class VideoFormatAnalyzer:
             video_ar = w / h
             if abs(video_ar - target_aspect_ratio) > 0.05:  # Significant difference
                 if video_ar > target_aspect_ratio:
-                    letterboxing_info.append(f"Video {i+1}: letterbox (top/bottom bars)")
+                    letterboxing_info.append(
+                        f"Video {i + 1}: letterbox (top/bottom bars)"
+                    )
                 else:
-                    letterboxing_info.append(f"Video {i+1}: pillarbox (side bars)")
+                    letterboxing_info.append(f"Video {i + 1}: pillarbox (side bars)")
 
         if letterboxing_info:
             for _info in letterboxing_info:
@@ -309,10 +324,13 @@ class VideoFormatAnalyzer:
                 "landscape_count": landscape_count,
                 "portrait_count": portrait_count,
                 "square_count": square_count,
-                "dominant_orientation": "landscape" if landscape_ratio >= canvas_decision_threshold
-                                       else "portrait" if portrait_ratio >= canvas_decision_threshold
-                                       else "square" if square_ratio >= canvas_decision_threshold
-                                       else "mixed",
+                "dominant_orientation": "landscape"
+                if landscape_ratio >= canvas_decision_threshold
+                else "portrait"
+                if portrait_ratio >= canvas_decision_threshold
+                else "square"
+                if square_ratio >= canvas_decision_threshold
+                else "mixed",
                 "decision_rationale": description,
             },
             "content_analysis": {
@@ -330,7 +348,8 @@ class VideoFormatAnalyzer:
         return mapping.get(fps_category, 24.0)
 
     def detect_format_compatibility_issues(
-        self, video_clips: List[Any],
+        self,
+        video_clips: List[Any],
     ) -> List[Dict[str, Any]]:
         """Identify specific compatibility issues between video clips.
 

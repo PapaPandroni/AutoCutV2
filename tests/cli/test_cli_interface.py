@@ -31,7 +31,9 @@ class TestCLIInterface:
         output_dir.mkdir(exist_ok=True)
         return output_dir
 
-    def run_cli_command(self, autocut_path: str, args: List[str], timeout: int = 30) -> subprocess.CompletedProcess:
+    def run_cli_command(
+        self, autocut_path: str, args: List[str], timeout: int = 30
+    ) -> subprocess.CompletedProcess:
         """Run autocut CLI command and return the result."""
         cmd = [sys.executable, autocut_path, *args]
 
@@ -48,7 +50,7 @@ class TestCLIInterface:
                 text=True,
                 timeout=timeout,
                 env=env,
-                cwd=str(Path(autocut_path).parent)
+                cwd=str(Path(autocut_path).parent),
             )
         except subprocess.TimeoutExpired as e:
             # Create a mock result object for timeout
@@ -80,7 +82,9 @@ class TestCLIInterface:
         result = self.run_cli_command(autocut_path, ["process", "--help"])
 
         assert result.returncode == 0, f"Process help failed: {result.stderr}"
-        assert "beat-synced compilation" in result.stdout, "Should describe functionality"
+        assert "beat-synced compilation" in result.stdout, (
+            "Should describe functionality"
+        )
         assert "--audio" in result.stdout, "Should show audio option"
         assert "--pattern" in result.stdout, "Should show pattern option"
         assert "energetic" in result.stdout, "Should list pattern options"
@@ -94,8 +98,7 @@ class TestCLIInterface:
     def test_cli_error_handling_missing_files(self, autocut_path: str):
         """Test CLI error handling for missing files."""
         result = self.run_cli_command(
-            autocut_path,
-            ["process", "nonexistent.mp4", "--audio", "nonexistent.mp3"]
+            autocut_path, ["process", "nonexistent.mp4", "--audio", "nonexistent.mp3"]
         )
 
         # Should fail with non-zero exit code
@@ -103,13 +106,16 @@ class TestCLIInterface:
 
         # Should show helpful error message
         error_output = result.stderr.lower()
-        assert any(word in error_output for word in ["not found", "error", "file"]), \
+        assert any(word in error_output for word in ["not found", "error", "file"]), (
             f"Should show file error message, got: {result.stderr}"
+        )
 
         print("✅ CLI properly handles missing files")
         print(f"   Error message: {result.stderr.strip()}")
 
-    def test_cli_error_handling_missing_audio(self, autocut_path: str, sample_video_files):
+    def test_cli_error_handling_missing_audio(
+        self, autocut_path: str, sample_video_files
+    ):
         """Test CLI error handling for missing audio file."""
         # Filter out metadata files
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -119,14 +125,15 @@ class TestCLIInterface:
 
         result = self.run_cli_command(
             autocut_path,
-            ["process", str(real_videos[0]), "--audio", "nonexistent_audio.mp3"]
+            ["process", str(real_videos[0]), "--audio", "nonexistent_audio.mp3"],
         )
 
         assert result.returncode != 0, "Should fail with missing audio file"
 
         error_output = result.stderr.lower()
-        assert any(word in error_output for word in ["not found", "audio", "file"]), \
+        assert any(word in error_output for word in ["not found", "audio", "file"]), (
             f"Should show audio file error, got: {result.stderr}"
+        )
 
         print("✅ CLI properly handles missing audio file")
 
@@ -141,7 +148,7 @@ class TestCLIInterface:
         result = self.run_cli_command(
             autocut_path,
             ["validate", str(real_videos[0])],
-            timeout=60  # Longer timeout for validation
+            timeout=60,  # Longer timeout for validation
         )
 
         # Should succeed (video files should be valid)
@@ -153,19 +160,16 @@ class TestCLIInterface:
 
         # Should show validation results
         output = result.stdout.lower()
-        assert any(word in output for word in ["valid", "compatible", "video"]), \
+        assert any(word in output for word in ["valid", "compatible", "video"]), (
             f"Should show validation results, got: {result.stdout}"
+        )
 
         print("✅ CLI validation command working")
         print(f"   Validated: {Path(real_videos[0]).name}")
 
     def test_cli_benchmark_command(self, autocut_path: str):
         """Test the benchmark command works."""
-        result = self.run_cli_command(
-            autocut_path,
-            ["benchmark"],
-            timeout=30
-        )
+        result = self.run_cli_command(autocut_path, ["benchmark"], timeout=30)
 
         if result.returncode == 124:  # Timeout
             print("⏱️ Benchmark command timed out (still running)")
@@ -175,8 +179,9 @@ class TestCLIInterface:
 
         # Should show system information
         output = result.stdout.lower()
-        assert any(word in output for word in ["system", "capabilities", "cpu"]), \
+        assert any(word in output for word in ["system", "capabilities", "cpu"]), (
             f"Should show system info, got: {result.stdout}"
+        )
 
         print("✅ CLI benchmark command working")
 
@@ -186,7 +191,7 @@ class TestCLIInterface:
         autocut_path: str,
         sample_video_files,
         sample_audio_files,
-        cli_output_dir: Path
+        cli_output_dir: Path,
     ):
         """Test basic process command with real media files."""
         # Filter out metadata files
@@ -197,7 +202,9 @@ class TestCLIInterface:
             pytest.skip("No real media files available")
 
         # Use smaller files for faster testing
-        small_videos = [f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024]  # < 50MB
+        small_videos = [
+            f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024
+        ]  # < 50MB
         if not small_videos:
             small_videos = real_videos[:1]  # Use first video as fallback
 
@@ -209,12 +216,15 @@ class TestCLIInterface:
             [
                 "process",
                 str(small_videos[0]),  # Use just one video for speed
-                "--audio", str(real_audio[0]),
-                "--output", str(output_path),
-                "--pattern", "balanced",
-                "--verbose"
+                "--audio",
+                str(real_audio[0]),
+                "--output",
+                str(output_path),
+                "--pattern",
+                "balanced",
+                "--verbose",
             ],
-            timeout=180  # 3 minutes for processing
+            timeout=180,  # 3 minutes for processing
         )
 
         if result.returncode == 124:  # Timeout
@@ -240,14 +250,14 @@ class TestCLIInterface:
         print("✅ CLI process command working")
         print(f"   Input: {Path(small_videos[0]).name}")
         print(f"   Audio: {Path(real_audio[0]).name}")
-        print(f"   Output: {output_path.stat().st_size / (1024*1024):.1f} MB")
+        print(f"   Output: {output_path.stat().st_size / (1024 * 1024):.1f} MB")
 
     def test_cli_process_patterns(
         self,
         autocut_path: str,
         sample_video_files,
         sample_audio_files,
-        cli_output_dir: Path
+        cli_output_dir: Path,
     ):
         """Test that all patterns are accepted by CLI."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -265,11 +275,14 @@ class TestCLIInterface:
                 [
                     "process",
                     str(real_videos[0]),
-                    "--audio", str(real_audio[0]),
-                    "--pattern", pattern,
-                    "--output", str(cli_output_dir / f"pattern_{pattern}_test.mp4")
+                    "--audio",
+                    str(real_audio[0]),
+                    "--pattern",
+                    pattern,
+                    "--output",
+                    str(cli_output_dir / f"pattern_{pattern}_test.mp4"),
                 ],
-                timeout=5  # Very short timeout - just to test command acceptance
+                timeout=5,  # Very short timeout - just to test command acceptance
             )
 
             # If it times out, that means it started processing (good!)
@@ -319,6 +332,7 @@ class TestCLIInterface:
 
         # Check if file is executable
         import stat
+
         file_stat = autocut_file.stat()
         is_executable = bool(file_stat.st_mode & stat.S_IEXEC)
 

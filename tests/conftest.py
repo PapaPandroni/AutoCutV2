@@ -164,7 +164,9 @@ class TestHelpers:
 
     @staticmethod
     def create_mock_video_file(
-        temp_dir: Path, filename: str = "test.mp4", size_mb: float = 1.0,
+        temp_dir: Path,
+        filename: str = "test.mp4",
+        size_mb: float = 1.0,
     ) -> Path:
         """Create a mock video file for testing."""
         file_path = temp_dir / filename
@@ -175,7 +177,9 @@ class TestHelpers:
 
     @staticmethod
     def create_mock_audio_file(
-        temp_dir: Path, filename: str = "test.mp3", size_mb: float = 0.5,
+        temp_dir: Path,
+        filename: str = "test.mp3",
+        size_mb: float = 0.5,
     ) -> Path:
         """Create a mock audio file for testing."""
         file_path = temp_dir / filename
@@ -220,7 +224,8 @@ def _has_gpu():
 
 
 pytest.mark.gpu = pytest.mark.skipif(
-    not _has_gpu(), reason="GPU hardware not available",
+    not _has_gpu(),
+    reason="GPU hardware not available",
 )
 
 pytest.mark.media_required = pytest.mark.skipif(

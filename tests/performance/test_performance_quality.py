@@ -70,7 +70,7 @@ class TestPerformanceQuality:
             "peak_memory_mb": max(start_memory, end_memory),
             "memory_delta_mb": end_memory - start_memory,
             "cpu_time_user": end_cpu_times.user - start_cpu_times.user,
-            "cpu_time_system": end_cpu_times.system - start_cpu_times.system
+            "cpu_time_system": end_cpu_times.system - start_cpu_times.system,
         }
 
     @pytest.mark.media_required
@@ -102,7 +102,9 @@ class TestPerformanceQuality:
             print(f"   📊 Duration: {result['duration']:.1f}s")
 
             # Quality validation
-            assert 60 <= result["bpm"] <= 200, f"BPM should be reasonable: {result['bpm']}"
+            assert 60 <= result["bpm"] <= 200, (
+                f"BPM should be reasonable: {result['bpm']}"
+            )
             assert len(result["beats"]) > 0, "Should detect some beats"
             assert result["duration"] > 0, "Should detect duration"
 
@@ -125,7 +127,7 @@ class TestPerformanceQuality:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        performance_output_dir: Path
+        performance_output_dir: Path,
     ):
         """Test performance with small batch processing (2-3 videos)."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -137,7 +139,9 @@ class TestPerformanceQuality:
         print("\n🎬 Testing small batch processing performance")
 
         # Use smaller files for predictable timing
-        small_videos = [f for f in real_videos if f.stat().st_size < 100 * 1024 * 1024][:3]
+        small_videos = [f for f in real_videos if f.stat().st_size < 100 * 1024 * 1024][
+            :3
+        ]
         if len(small_videos) < 2:
             small_videos = real_videos[:2]
 
@@ -162,7 +166,7 @@ class TestPerformanceQuality:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False
+                verbose=False,
             )
 
         metrics = self.measure_resource_usage(process_videos)
@@ -173,7 +177,9 @@ class TestPerformanceQuality:
 
         print(f"   ⏱️ Processing time: {metrics['processing_time']:.1f}s")
         print(f"   💾 Peak memory: {metrics['peak_memory_mb']:.1f}MB")
-        print(f"   🖥️ CPU time: {metrics['cpu_time_user']:.1f}s user + {metrics['cpu_time_system']:.1f}s system")
+        print(
+            f"   🖥️ CPU time: {metrics['cpu_time_user']:.1f}s user + {metrics['cpu_time_system']:.1f}s system"
+        )
 
         # Validate output
         if os.path.exists(output_path):
@@ -203,7 +209,7 @@ class TestPerformanceQuality:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        performance_output_dir: Path
+        performance_output_dir: Path,
     ):
         """Test memory usage with different video counts."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -221,7 +227,9 @@ class TestPerformanceQuality:
             print(f"   Testing with {video_count} videos...")
 
             videos = [str(f) for f in real_videos[:video_count]]
-            output_path = str(performance_output_dir / f"memory_scale_{video_count}.mp4")
+            output_path = str(
+                performance_output_dir / f"memory_scale_{video_count}.mp4"
+            )
 
             def process_videos():
                 return api_client.process_videos(
@@ -230,17 +238,19 @@ class TestPerformanceQuality:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,  # Use memory-safe mode
-                    verbose=False
+                    verbose=False,
                 )
 
             metrics = self.measure_resource_usage(process_videos)
 
-            memory_results.append({
-                "video_count": video_count,
-                "peak_memory": metrics["peak_memory_mb"],
-                "memory_delta": metrics["memory_delta_mb"],
-                "success": metrics["success"]
-            })
+            memory_results.append(
+                {
+                    "video_count": video_count,
+                    "peak_memory": metrics["peak_memory_mb"],
+                    "memory_delta": metrics["memory_delta_mb"],
+                    "success": metrics["success"],
+                }
+            )
 
             if metrics["success"]:
                 print(f"     ✅ Peak memory: {metrics['peak_memory_mb']:.1f}MB")
@@ -254,7 +264,9 @@ class TestPerformanceQuality:
         if len(successful_results) >= 2:
             print("\n   📊 Memory scaling analysis:")
             for result in successful_results:
-                print(f"     {result['video_count']} videos: {result['peak_memory']:.1f}MB peak")
+                print(
+                    f"     {result['video_count']} videos: {result['peak_memory']:.1f}MB peak"
+                )
 
             # Check if memory usage grows linearly (which would be bad)
             if len(successful_results) >= 2:
@@ -264,9 +276,13 @@ class TestPerformanceQuality:
                 memory_growth = last_result["peak_memory"] / first_result["peak_memory"]
                 video_growth = last_result["video_count"] / first_result["video_count"]
 
-                scaling_efficiency = memory_growth / video_growth  # Should be close to 1 for good scaling
+                scaling_efficiency = (
+                    memory_growth / video_growth
+                )  # Should be close to 1 for good scaling
 
-                print(f"   📈 Scaling efficiency: {scaling_efficiency:.2f} (lower is better)")
+                print(
+                    f"   📈 Scaling efficiency: {scaling_efficiency:.2f} (lower is better)"
+                )
 
                 if scaling_efficiency < 1.5:
                     print("   ✅ Good memory scaling")
@@ -281,7 +297,7 @@ class TestPerformanceQuality:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        performance_output_dir: Path
+        performance_output_dir: Path,
     ):
         """Test consistency of processing times across multiple runs."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -293,13 +309,16 @@ class TestPerformanceQuality:
         print("\n🔄 Testing processing time consistency")
 
         # Use a small video for consistent timing
-        small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+        small_video = next(
+            (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+            real_videos[0],
+        )
 
         processing_times = []
 
         # Run multiple iterations
         for i in range(3):  # 3 runs for consistency testing
-            print(f"   Run {i+1}/3...")
+            print(f"   Run {i + 1}/3...")
 
             output_path = str(performance_output_dir / f"consistency_{i}.mp4")
 
@@ -310,7 +329,7 @@ class TestPerformanceQuality:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,
-                    verbose=False
+                    verbose=False,
                 )
 
             metrics = self.measure_resource_usage(process_video)
@@ -323,7 +342,9 @@ class TestPerformanceQuality:
 
         if len(processing_times) >= 2:
             avg_time = statistics.mean(processing_times)
-            std_dev = statistics.stdev(processing_times) if len(processing_times) > 1 else 0
+            std_dev = (
+                statistics.stdev(processing_times) if len(processing_times) > 1 else 0
+            )
             cv = (std_dev / avg_time) * 100  # Coefficient of variation as percentage
 
             print("\n   📊 Processing time analysis:")
@@ -344,7 +365,7 @@ class TestPerformanceQuality:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        performance_output_dir: Path
+        performance_output_dir: Path,
     ):
         """Test beat synchronization accuracy."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -379,7 +400,7 @@ class TestPerformanceQuality:
                     output_path=output_path,
                     pattern=pattern,
                     memory_safe=True,
-                    verbose=False
+                    verbose=False,
                 )
 
                 if os.path.exists(result_path):
@@ -406,7 +427,7 @@ class TestPerformanceQuality:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        performance_output_dir: Path
+        performance_output_dir: Path,
     ):
         """Test CPU utilization efficiency."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -424,7 +445,10 @@ class TestPerformanceQuality:
         print(f"   System: {cpu_count} cores, {cpu_count_logical} logical CPUs")
 
         output_path = str(performance_output_dir / "cpu_efficiency_test.mp4")
-        small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+        small_video = next(
+            (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+            real_videos[0],
+        )
 
         # Monitor CPU usage during processing
         def process_with_monitoring():
@@ -435,7 +459,7 @@ class TestPerformanceQuality:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,
-                    verbose=False
+                    verbose=False,
                 )
 
             # Sample CPU usage during processing
@@ -443,6 +467,7 @@ class TestPerformanceQuality:
             start_time = time.time()
 
             import threading
+
             processing_complete = threading.Event()
             result = {"output": None, "error": None}
 
@@ -484,7 +509,9 @@ class TestPerformanceQuality:
                 avg_cpu = statistics.mean(cpu_samples)
                 max_cpu = max(cpu_samples)
 
-                print(f"   📊 CPU usage - Average: {avg_cpu:.1f}%, Peak: {max_cpu:.1f}%")
+                print(
+                    f"   📊 CPU usage - Average: {avg_cpu:.1f}%, Peak: {max_cpu:.1f}%"
+                )
                 print(f"   ⏱️ Processing time: {processing_time:.2f}s")
 
                 # CPU efficiency analysis
@@ -493,7 +520,9 @@ class TestPerformanceQuality:
                 elif avg_cpu > 50:
                     print("   ✅ Moderate CPU utilization - acceptable efficiency")
                 else:
-                    print("   ⚠️ Low CPU utilization - may not be fully utilizing available resources")
+                    print(
+                        "   ⚠️ Low CPU utilization - may not be fully utilizing available resources"
+                    )
             else:
                 print("   ⚠️ No CPU samples collected")
 
@@ -506,7 +535,7 @@ class TestPerformanceQuality:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        performance_output_dir: Path
+        performance_output_dir: Path,
     ):
         """Test quality vs performance tradeoffs with different settings."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -517,12 +546,15 @@ class TestPerformanceQuality:
 
         print("\n⚖️ Testing quality vs performance tradeoffs")
 
-        small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+        small_video = next(
+            (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+            real_videos[0],
+        )
 
         # Test different configurations
         configs = [
             {"name": "Memory-Safe", "memory_safe": True},
-            {"name": "Standard", "memory_safe": False}
+            {"name": "Standard", "memory_safe": False},
         ]
 
         results = []
@@ -530,7 +562,10 @@ class TestPerformanceQuality:
         for config in configs:
             print(f"   Testing {config['name']} mode...")
 
-            output_path = str(performance_output_dir / f"quality_performance_{config['name'].lower()}.mp4")
+            output_path = str(
+                performance_output_dir
+                / f"quality_performance_{config['name'].lower()}.mp4"
+            )
 
             def process_video():
                 return api_client.process_videos(
@@ -539,20 +574,22 @@ class TestPerformanceQuality:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=config["memory_safe"],
-                    verbose=False
+                    verbose=False,
                 )
 
             metrics = self.measure_resource_usage(process_video)
 
             if metrics["success"]:
-                output_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+                output_size = (
+                    os.path.getsize(output_path) if os.path.exists(output_path) else 0
+                )
 
                 result_data = {
                     "config": config["name"],
                     "processing_time": metrics["processing_time"],
                     "peak_memory": metrics["peak_memory_mb"],
                     "output_size_mb": output_size / (1024 * 1024),
-                    "cpu_time": metrics["cpu_time_user"]
+                    "cpu_time": metrics["cpu_time_user"],
                 }
                 results.append(result_data)
 
@@ -566,11 +603,17 @@ class TestPerformanceQuality:
         if len(results) >= 2:
             print("\n   📊 Performance comparison:")
             for result in results:
-                print(f"     {result['config']}: {result['processing_time']:.2f}s, {result['peak_memory']:.1f}MB")
+                print(
+                    f"     {result['config']}: {result['processing_time']:.2f}s, {result['peak_memory']:.1f}MB"
+                )
 
             # Find the best balance
             fastest = min(results, key=lambda x: x["processing_time"])
             most_efficient = min(results, key=lambda x: x["peak_memory"])
 
-            print(f"   🏃 Fastest: {fastest['config']} ({fastest['processing_time']:.2f}s)")
-            print(f"   🧠 Most memory efficient: {most_efficient['config']} ({most_efficient['peak_memory']:.1f}MB)")
+            print(
+                f"   🏃 Fastest: {fastest['config']} ({fastest['processing_time']:.2f}s)"
+            )
+            print(
+                f"   🧠 Most memory efficient: {most_efficient['config']} ({most_efficient['peak_memory']:.1f}MB)"
+            )

@@ -70,7 +70,6 @@ class HardwareDetector:
         ):
             return self._hardware_cache
 
-
         # Default high-performance CPU settings
         default_result = {
             "moviepy_params": {
@@ -106,7 +105,10 @@ class HardwareDetector:
             # Step 3: Test NVIDIA NVENC
             if "h264_nvenc" in available_encoders:
                 nvenc_result = self._test_hardware_encoder(
-                    "NVENC", "h264_nvenc", True, diagnostics,
+                    "NVENC",
+                    "h264_nvenc",
+                    True,
+                    diagnostics,
                 )
                 if nvenc_result["success"]:
                     result = {
@@ -127,7 +129,8 @@ class HardwareDetector:
                         "diagnostics": {
                             "driver_status": nvenc_result.get("driver_status", "OK"),
                             "iphone_compatible": nvenc_result.get(
-                                "iphone_compatible", True,
+                                "iphone_compatible",
+                                True,
                             ),
                             "error_category": None,
                             "diagnostic_message": f"NVIDIA GPU acceleration (5-10x faster): {nvenc_result.get('message', '')}",
@@ -142,7 +145,10 @@ class HardwareDetector:
             # Step 4: Test Intel QSV
             if "h264_qsv" in available_encoders:
                 qsv_result = self._test_hardware_encoder(
-                    "QSV", "h264_qsv", True, diagnostics,
+                    "QSV",
+                    "h264_qsv",
+                    True,
+                    diagnostics,
                 )
                 if qsv_result["success"]:
                     result = {
@@ -159,7 +165,8 @@ class HardwareDetector:
                         "diagnostics": {
                             "driver_status": qsv_result.get("driver_status", "OK"),
                             "iphone_compatible": qsv_result.get(
-                                "iphone_compatible", True,
+                                "iphone_compatible",
+                                True,
                             ),
                             "error_category": None,
                             "diagnostic_message": f"Intel Quick Sync acceleration (3-5x faster): {qsv_result.get('message', '')}",
@@ -242,7 +249,11 @@ class HardwareDetector:
         """Check if FFmpeg is available and get version information."""
         try:
             result = subprocess.run(
-                ["ffmpeg", "-version"], check=False, capture_output=True, text=True, timeout=5,
+                ["ffmpeg", "-version"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             diagnostics["ffmpeg_version"] = (
                 result.stdout.split("\\n")[0] if result.stdout else "Unknown"
@@ -260,7 +271,11 @@ class HardwareDetector:
         """List available FFmpeg encoders."""
         try:
             result = subprocess.run(
-                ["ffmpeg", "-encoders"], check=False, capture_output=True, text=True, timeout=5,
+                ["ffmpeg", "-encoders"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             diagnostics["available_encoders"] = "Listed successfully"
             return result.stdout
@@ -308,7 +323,6 @@ class HardwareDetector:
         temp_output = None
 
         try:
-
             with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_file:
                 temp_output = temp_file.name
 
@@ -337,7 +351,11 @@ class HardwareDetector:
 
             # Reduced timeout for faster failure detection
             combined_result = subprocess.run(
-                combined_cmd, check=False, capture_output=True, text=True, timeout=3,
+                combined_cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=3,
             )
 
             if combined_result.returncode != 0:
@@ -376,7 +394,8 @@ class HardwareDetector:
 
             # Quick format validation
             format_valid = self._validate_encoder_output_fast(
-                temp_output, expected_profile="Main",
+                temp_output,
+                expected_profile="Main",
             )
             result["iphone_compatible"] = format_valid
 
@@ -409,7 +428,9 @@ class HardwareDetector:
         return result
 
     def _validate_encoder_output_fast(
-        self, video_path: str, expected_profile: str = "Main",
+        self,
+        video_path: str,
+        expected_profile: str = "Main",
     ) -> bool:
         """
         Fast encoder output validation for hardware detection testing.
@@ -438,7 +459,9 @@ class HardwareDetector:
                 video_path,
             ]
 
-            result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=2)
+            result = subprocess.run(
+                cmd, check=False, capture_output=True, text=True, timeout=2
+            )
             if result.returncode != 0:
                 return False
 
@@ -479,7 +502,9 @@ class HardwareDetector:
         return {"cached": False}
 
     def test_specific_encoder(
-        self, encoder_name: str, encoder_codec: str,
+        self,
+        encoder_name: str,
+        encoder_codec: str,
     ) -> Dict[str, Any]:
         """
         Test a specific hardware encoder without caching.
@@ -505,7 +530,10 @@ class HardwareDetector:
 
         # Test the encoder
         test_result = self._test_hardware_encoder(
-            encoder_name, encoder_codec, True, diagnostics,
+            encoder_name,
+            encoder_codec,
+            True,
+            diagnostics,
         )
 
         test_result["diagnostics"] = diagnostics
@@ -517,7 +545,9 @@ _global_detector = HardwareDetector()
 
 
 def detect_optimal_codec_settings_enhanced() -> Tuple[
-    Dict[str, Any], List[str], Dict[str, str],
+    Dict[str, Any],
+    List[str],
+    Dict[str, str],
 ]:
     """
     Legacy function for backwards compatibility.

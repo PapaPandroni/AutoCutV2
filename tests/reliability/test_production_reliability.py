@@ -41,7 +41,7 @@ class TestProductionReliability:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        reliability_output_dir: Path
+        reliability_output_dir: Path,
     ):
         """Test that memory-safe mode properly reduces resource usage."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -53,7 +53,9 @@ class TestProductionReliability:
         output_path = str(reliability_output_dir / "memory_safe_test.mp4")
 
         # Use small videos for this test
-        small_videos = [f for f in real_videos if f.stat().st_size < 100 * 1024 * 1024][:2]
+        small_videos = [f for f in real_videos if f.stat().st_size < 100 * 1024 * 1024][
+            :2
+        ]
         if not small_videos:
             small_videos = real_videos[:1]
 
@@ -69,7 +71,7 @@ class TestProductionReliability:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False  # Reduce output noise
+                verbose=False,  # Reduce output noise
             )
 
             processing_time = time.time() - start_time
@@ -78,7 +80,9 @@ class TestProductionReliability:
             assert os.path.getsize(result_path) > 0, "Output should not be empty"
 
             print(f"✅ Memory-safe processing completed in {processing_time:.1f}s")
-            print(f"   Output size: {os.path.getsize(result_path) / (1024*1024):.1f} MB")
+            print(
+                f"   Output size: {os.path.getsize(result_path) / (1024 * 1024):.1f} MB"
+            )
 
         except Exception as e:
             # If it fails, it should not be due to memory issues
@@ -105,7 +109,11 @@ class TestProductionReliability:
             # Very long paths
             (["x" * 1000 + ".mp4"], "audio.mp3", "Should handle extremely long paths"),
             # Special characters
-            (["video with spaces.mp4"], "audio with spaces.mp3", "Should handle spaces"),
+            (
+                ["video with spaces.mp4"],
+                "audio with spaces.mp3",
+                "Should handle spaces",
+            ),
             (["video\\nwith\\nnewlines.mp4"], "audio.mp3", "Should handle newlines"),
         ]
 
@@ -117,7 +125,7 @@ class TestProductionReliability:
                     video_files=video_files,
                     audio_file=audio_file,
                     output_path=output_path,
-                    pattern="balanced"
+                    pattern="balanced",
                 )
                 # If it doesn't raise an exception, that's unexpected but not necessarily bad
                 print("   ⚠️ Unexpectedly succeeded - check if this is intended")
@@ -138,7 +146,7 @@ class TestProductionReliability:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        reliability_output_dir: Path
+        reliability_output_dir: Path,
     ):
         """Test that file handles are properly managed and don't leak."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -151,6 +159,7 @@ class TestProductionReliability:
 
         # Get initial file handle count (approximate)
         import psutil
+
         current_process = psutil.Process()
         initial_handles = len(current_process.open_files())
 
@@ -162,7 +171,10 @@ class TestProductionReliability:
 
             try:
                 # Use just one small video to minimize processing time
-                small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+                small_video = next(
+                    (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+                    real_videos[0],
+                )
 
                 api_client.process_videos(
                     video_files=[str(small_video)],
@@ -170,13 +182,13 @@ class TestProductionReliability:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,  # Use memory-safe mode for predictable behavior
-                    verbose=False
+                    verbose=False,
                 )
 
-                print(f"   ✅ Iteration {i+1} completed")
+                print(f"   ✅ Iteration {i + 1} completed")
 
             except Exception as e:
-                print(f"   ⚠️ Iteration {i+1} failed: {e}")
+                print(f"   ⚠️ Iteration {i + 1} failed: {e}")
                 # Don't fail the test - we're testing handle management, not success
 
         # Check final file handle count
@@ -198,7 +210,7 @@ class TestProductionReliability:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        reliability_output_dir: Path
+        reliability_output_dir: Path,
     ):
         """Test graceful error recovery and degradation."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -226,21 +238,25 @@ class TestProductionReliability:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False
+                verbose=False,
             )
 
             # If it succeeds, it should have processed only the good files
             print("   ✅ Processing succeeded with partial files")
 
             if os.path.exists(result_path):
-                print(f"   📹 Output created: {os.path.getsize(result_path) / (1024*1024):.1f} MB")
+                print(
+                    f"   📹 Output created: {os.path.getsize(result_path) / (1024 * 1024):.1f} MB"
+                )
 
         except Exception as e:
             # Should fail gracefully with informative error
             error_msg = str(e)
 
             # Check that error message is informative
-            if any(word in error_msg.lower() for word in ["file", "not", "found", "exist"]):
+            if any(
+                word in error_msg.lower() for word in ["file", "not", "found", "exist"]
+            ):
                 print(f"   ✅ Failed gracefully with clear error: {e}")
             else:
                 print(f"   ⚠️ Error message could be clearer: {e}")
@@ -250,7 +266,7 @@ class TestProductionReliability:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        reliability_output_dir: Path
+        reliability_output_dir: Path,
     ):
         """Test that concurrent processing doesn't cause issues."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -270,8 +286,13 @@ class TestProductionReliability:
         def process_video(thread_id):
             """Process video in a separate thread."""
             try:
-                output_path = str(reliability_output_dir / f"concurrent_test_{thread_id}.mp4")
-                small_video = next((f for f in real_videos if f.stat().st_size < 30 * 1024 * 1024), real_videos[0])
+                output_path = str(
+                    reliability_output_dir / f"concurrent_test_{thread_id}.mp4"
+                )
+                small_video = next(
+                    (f for f in real_videos if f.stat().st_size < 30 * 1024 * 1024),
+                    real_videos[0],
+                )
 
                 result = api_client.process_videos(
                     video_files=[str(small_video)],
@@ -279,7 +300,7 @@ class TestProductionReliability:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,  # Use memory-safe for more predictable behavior
-                    verbose=False
+                    verbose=False,
                 )
                 results.append((thread_id, result))
                 print(f"   ✅ Thread {thread_id} completed")
@@ -305,12 +326,16 @@ class TestProductionReliability:
         if len(results) > 0:
             print("   ✅ At least one concurrent process succeeded")
         elif len(errors) == len(threads):
-            print("   ⚠️ All concurrent processes failed - might indicate resource issues")
+            print(
+                "   ⚠️ All concurrent processes failed - might indicate resource issues"
+            )
 
         # Check that all threads finished (no deadlocks)
         active_threads = [t for t in threads if t.is_alive()]
         if active_threads:
-            print(f"   ⚠️ {len(active_threads)} threads still running - possible deadlock")
+            print(
+                f"   ⚠️ {len(active_threads)} threads still running - possible deadlock"
+            )
         else:
             print("   ✅ All threads completed - no deadlocks detected")
 
@@ -330,7 +355,7 @@ class TestProductionReliability:
                 video_files=["fake.mp4"],
                 audio_file="fake.mp3",
                 output_path=readonly_path,
-                pattern="balanced"
+                pattern="balanced",
             )
             print("   ⚠️ Unexpectedly succeeded with readonly path")
 
@@ -338,8 +363,13 @@ class TestProductionReliability:
             error_msg = str(e).lower()
 
             # Should fail gracefully with clear error about file/permission issues
-            if any(word in error_msg for word in ["permission", "file", "directory", "access"]):
-                print(f"   ✅ Handled disk/permission error gracefully: {type(e).__name__}")
+            if any(
+                word in error_msg
+                for word in ["permission", "file", "directory", "access"]
+            ):
+                print(
+                    f"   ✅ Handled disk/permission error gracefully: {type(e).__name__}"
+                )
             else:
                 print(f"   ⚠️ Error handling could be clearer: {e}")
 
@@ -348,7 +378,7 @@ class TestProductionReliability:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        reliability_output_dir: Path
+        reliability_output_dir: Path,
     ):
         """Test stability with larger batches of files."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -372,7 +402,7 @@ class TestProductionReliability:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,  # Use memory-safe for large batches
-                verbose=False
+                verbose=False,
             )
 
             processing_time = time.time() - start_time
@@ -380,7 +410,9 @@ class TestProductionReliability:
             if os.path.exists(result_path):
                 file_size = os.path.getsize(result_path) / (1024 * 1024)
                 print(f"   ✅ Batch processing completed in {processing_time:.1f}s")
-                print(f"   📹 Output: {file_size:.1f} MB from {len(video_files)} input videos")
+                print(
+                    f"   📹 Output: {file_size:.1f} MB from {len(video_files)} input videos"
+                )
             else:
                 print("   ⚠️ Processing claimed success but no output file found")
 
@@ -389,8 +421,12 @@ class TestProductionReliability:
             print(f"   ⚠️ Batch processing failed: {error_msg}")
 
             # Check if it's a reasonable failure (memory, timeout, etc.)
-            if any(word in error_msg.lower() for word in ["memory", "timeout", "resource"]):
-                print("   💡 Failure due to resource constraints is acceptable for large batches")
+            if any(
+                word in error_msg.lower() for word in ["memory", "timeout", "resource"]
+            ):
+                print(
+                    "   💡 Failure due to resource constraints is acceptable for large batches"
+                )
             else:
                 print("   🔍 Unexpected failure type - may need investigation")
 
@@ -400,7 +436,7 @@ class TestProductionReliability:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        reliability_output_dir: Path
+        reliability_output_dir: Path,
     ):
         """Test stability over extended operation (multiple processes)."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -416,10 +452,13 @@ class TestProductionReliability:
 
         # Run multiple iterations to test stability
         for i in range(5):  # 5 iterations should be manageable
-            print(f"   Iteration {i+1}/5...")
+            print(f"   Iteration {i + 1}/5...")
 
             output_path = str(reliability_output_dir / f"extended_test_{i}.mp4")
-            small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+            small_video = next(
+                (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+                real_videos[0],
+            )
 
             try:
                 result_path = api_client.process_videos(
@@ -428,24 +467,24 @@ class TestProductionReliability:
                     output_path=output_path,
                     pattern="balanced",
                     memory_safe=True,
-                    verbose=False
+                    verbose=False,
                 )
 
                 if os.path.exists(result_path) and os.path.getsize(result_path) > 0:
                     success_count += 1
-                    print(f"   ✅ Iteration {i+1} successful")
+                    print(f"   ✅ Iteration {i + 1} successful")
                 else:
                     error_count += 1
-                    print(f"   ⚠️ Iteration {i+1} produced no valid output")
+                    print(f"   ⚠️ Iteration {i + 1} produced no valid output")
 
             except Exception as e:
                 error_count += 1
-                print(f"   ⚠️ Iteration {i+1} failed: {e}")
+                print(f"   ⚠️ Iteration {i + 1} failed: {e}")
 
         print("\\n📊 Extended operation results:")
         print(f"   ✅ Successes: {success_count}/5")
         print(f"   ⚠️ Errors: {error_count}/5")
-        print(f"   📈 Success rate: {(success_count/5)*100:.1f}%")
+        print(f"   📈 Success rate: {(success_count / 5) * 100:.1f}%")
 
         # A reasonable success rate indicates good stability
         if success_count >= 3:  # 60% success rate

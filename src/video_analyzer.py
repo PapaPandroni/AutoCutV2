@@ -96,7 +96,8 @@ def load_video(file_path: str) -> Tuple[VideoFileClip, Dict[str, Any]]:
 
 
 def detect_scenes(
-    video: VideoFileClip, threshold: float = 30.0,
+    video: VideoFileClip,
+    threshold: float = 30.0,
 ) -> List[Tuple[float, float]]:
     """Detect scene changes in video based on frame differences.
 
@@ -300,7 +301,10 @@ def detect_motion(video: VideoFileClip, start_time: float, end_time: float) -> f
                 if corners is not None and len(corners) > 10:
                     # Calculate optical flow
                     next_corners, status, error = cv2.calcOpticalFlowPyrLK(
-                        prev_frame, gray, corners, None,
+                        prev_frame,
+                        gray,
+                        corners,
+                        None,
                     )
 
                     # Select good points
@@ -428,7 +432,9 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
         return 0
 
 
-def detect_camera_shake(video: VideoFileClip, start_time: float, end_time: float) -> float:
+def detect_camera_shake(
+    video: VideoFileClip, start_time: float, end_time: float
+) -> float:
     """Detect camera shake/instability using dense optical flow analysis.
 
     Uses dense optical flow to analyze global motion patterns and distinguish
@@ -481,15 +487,16 @@ def detect_camera_shake(video: VideoFileClip, start_time: float, end_time: float
             if prev_frame is not None:
                 # Calculate dense optical flow using Farneback method
                 flow = cv2.calcOpticalFlowFarneback(
-                    prev_frame, gray,
-                    None,           # flow (output)
-                    0.5,           # pyr_scale: image scale (<1) to build pyramids
-                    3,             # levels: number of pyramid layers
-                    15,            # winsize: averaging window size
-                    3,             # iterations: number of iterations at each pyramid level
-                    5,             # poly_n: size of pixel neighborhood for polynomial expansion
-                    1.2,           # poly_sigma: standard deviation of Gaussian for smoothing
-                    0,              # flags
+                    prev_frame,
+                    gray,
+                    None,  # flow (output)
+                    0.5,  # pyr_scale: image scale (<1) to build pyramids
+                    3,  # levels: number of pyramid layers
+                    15,  # winsize: averaging window size
+                    3,  # iterations: number of iterations at each pyramid level
+                    5,  # poly_n: size of pixel neighborhood for polynomial expansion
+                    1.2,  # poly_sigma: standard deviation of Gaussian for smoothing
+                    0,  # flags
                 )
 
                 # Analyze the flow for camera shake characteristics
@@ -587,7 +594,9 @@ def _analyze_flow_stability(flow: np.ndarray) -> float:
 
         # 4. Spatial Distribution Analysis
         # Camera shake affects entire frame, localized motion affects specific regions
-        motion_pixel_ratio = np.sum(significant_motion_mask) / significant_motion_mask.size
+        motion_pixel_ratio = (
+            np.sum(significant_motion_mask) / significant_motion_mask.size
+        )
 
         # If most pixels have motion, it's likely camera movement - apply additional scrutiny
         if motion_pixel_ratio > 0.7:
@@ -596,10 +605,14 @@ def _analyze_flow_stability(flow: np.ndarray) -> float:
             if motion_consistency > 95 and global_motion_magnitude > 5:
                 # Perfect consistency with high magnitude might indicate camera pan
                 # Apply moderate penalty to prefer less camera movement
-                spatial_consistency_score = 85.0 - min(10, (global_motion_magnitude - 5) * 1)
+                spatial_consistency_score = 85.0 - min(
+                    10, (global_motion_magnitude - 5) * 1
+                )
             else:
                 # Use average of motion and direction consistency for global motion
-                spatial_consistency_score = (motion_consistency + direction_consistency) / 2
+                spatial_consistency_score = (
+                    motion_consistency + direction_consistency
+                ) / 2
         else:
             # Localized motion is generally good (subject movement)
             spatial_consistency_score = 90.0
@@ -607,10 +620,10 @@ def _analyze_flow_stability(flow: np.ndarray) -> float:
         # Combine all metrics with weights
         # Emphasize consistency metrics for shake detection
         final_stability = (
-            0.30 * motion_consistency +      # How consistent is the motion?
-            0.30 * magnitude_score +         # Is global motion magnitude reasonable?
-            0.25 * direction_consistency +   # Is motion direction consistent?
-            0.15 * spatial_consistency_score # Is spatial distribution reasonable?
+            0.30 * motion_consistency  # How consistent is the motion?
+            + 0.30 * magnitude_score  # Is global motion magnitude reasonable?
+            + 0.25 * direction_consistency  # Is motion direction consistent?
+            + 0.15 * spatial_consistency_score  # Is spatial distribution reasonable?
         )
 
         return float(np.clip(final_stability, 0.0, 100.0))
@@ -798,7 +811,9 @@ def analyze_video_file(
 
                 # Calculate camera stability score
                 stability_score = detect_camera_shake(video, start_time, end_time)
-                logger.debug(f"Scene {scene_idx + 1} stability score: {stability_score:.2f}")
+                logger.debug(
+                    f"Scene {scene_idx + 1} stability score: {stability_score:.2f}"
+                )
 
                 # Create enhanced metadata
                 chunk_metadata = {
@@ -822,10 +837,10 @@ def analyze_video_file(
                 face_score = min(100, face_count * 25)  # 4+ faces = 100 points
 
                 enhanced_score = (
-                    0.60 * quality_score +
-                    0.15 * motion_score +
-                    0.10 * stability_score +
-                    0.15 * face_score
+                    0.60 * quality_score
+                    + 0.15 * motion_score
+                    + 0.10 * stability_score
+                    + 0.15 * face_score
                 )
 
                 # Create VideoChunk with canonical signature
@@ -835,9 +850,11 @@ def analyze_video_file(
                     end_time=end_time,
                     score=enhanced_score,
                     motion_score=motion_score,
-                    face_score=min(100, face_count * 25),  # Convert face count to score (4+ faces = 100)
+                    face_score=min(
+                        100, face_count * 25
+                    ),  # Convert face count to score (4+ faces = 100)
                     brightness_score=None,  # Individual components not extracted yet
-                    sharpness_score=None,   # Individual components not extracted yet
+                    sharpness_score=None,  # Individual components not extracted yet
                 )
 
                 chunks.append(chunk)
@@ -907,5 +924,3 @@ def analyze_video_file(
         logger.exception(error_msg)
         logger.exception(f"Processing stats: {processing_stats}")
         raise ValueError(error_msg)
-
-

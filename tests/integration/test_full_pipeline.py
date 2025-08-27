@@ -28,7 +28,10 @@ class TestFullPipeline:
     """Test complete AutoCut pipeline integration."""
 
     def test_complete_autocut_pipeline(
-        self, sample_video_files, sample_audio_files, temp_dir,
+        self,
+        sample_video_files,
+        sample_audio_files,
+        temp_dir,
     ):
         """Test the complete AutoCut pipeline from start to finish."""
         if not sample_video_files or not sample_audio_files:
@@ -132,7 +135,10 @@ class TestFullPipeline:
         print(f"Full pipeline test completed successfully. Output: {output_path}")
 
     def test_pipeline_with_hardware_acceleration(
-        self, sample_video_files, sample_audio_files, temp_dir,
+        self,
+        sample_video_files,
+        sample_audio_files,
+        temp_dir,
     ):
         """Test pipeline with hardware acceleration when available."""
         if not sample_video_files or not sample_audio_files:
@@ -179,7 +185,11 @@ class TestFullPipeline:
         )
 
     def test_pipeline_error_recovery(
-        self, sample_video_files, sample_audio_files, temp_dir, test_helpers,
+        self,
+        sample_video_files,
+        sample_audio_files,
+        temp_dir,
+        test_helpers,
     ):
         """Test pipeline behavior with problematic input files."""
         if not sample_audio_files:
@@ -222,7 +232,10 @@ class TestFullPipeline:
             )
 
     def test_pipeline_performance_benchmarks(
-        self, sample_video_files, sample_audio_files, temp_dir,
+        self,
+        sample_video_files,
+        sample_audio_files,
+        temp_dir,
     ):
         """Test pipeline performance benchmarks."""
         if not sample_video_files or not sample_audio_files:
@@ -293,7 +306,10 @@ class TestFullPipeline:
         )
 
     def test_pipeline_with_different_patterns(
-        self, sample_video_files, sample_audio_files, temp_dir,
+        self,
+        sample_video_files,
+        sample_audio_files,
+        temp_dir,
     ):
         """Test pipeline with different editing patterns."""
         if not sample_video_files or not sample_audio_files:
@@ -373,7 +389,8 @@ class TestPipelineComponentIntegration:
                         )
 
                         transcoding_result = transcoding_service.transcode_h265_to_h264(
-                            str(video_file), str(output_path),
+                            str(video_file),
+                            str(output_path),
                         )
 
                         if transcoding_result.success:
@@ -414,7 +431,9 @@ class TestPipelineComponentIntegration:
         assert True  # Integration test completed
 
     def test_hardware_detection_to_transcoding_integration(
-        self, sample_video_files, temp_dir,
+        self,
+        sample_video_files,
+        temp_dir,
     ):
         """Test integration between hardware detection and transcoding."""
         if not sample_video_files:
@@ -432,7 +451,8 @@ class TestPipelineComponentIntegration:
 
         # Test transcoding with detected hardware
         result = transcoding_service.transcode_h265_to_h264(
-            str(test_file), str(output_path),
+            str(test_file),
+            str(output_path),
         )
 
         # Verify the encoder used matches hardware capabilities
@@ -452,7 +472,10 @@ class TestPipelineStressTests:
     """Stress tests for the pipeline."""
 
     def test_pipeline_with_many_files(
-        self, sample_video_files, sample_audio_files, temp_dir,
+        self,
+        sample_video_files,
+        sample_audio_files,
+        temp_dir,
     ):
         """Test pipeline with many input files."""
         if len(sample_video_files) < 5:
@@ -496,7 +519,10 @@ class TestPipelineStressTests:
             pytest.fail(f"Stress test failed: {e!s}")
 
     def test_pipeline_memory_usage(
-        self, sample_video_files, sample_audio_files, temp_dir,
+        self,
+        sample_video_files,
+        sample_audio_files,
+        temp_dir,
     ):
         """Test pipeline memory usage doesn't grow excessively."""
         if not sample_video_files or not sample_audio_files:

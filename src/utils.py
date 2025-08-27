@@ -344,7 +344,11 @@ def detect_video_codec(file_path: str) -> Dict[str, Any]:
 
         # Calculate compatibility score and warnings
         compatibility_score, warnings = _calculate_compatibility_score(
-            standard_codec, container, format_name, video_stream, format_info,
+            standard_codec,
+            container,
+            format_name,
+            video_stream,
+            format_info,
         )
 
         return {
@@ -375,7 +379,6 @@ def detect_video_codec(file_path: str) -> Dict[str, Any]:
             > 0,
         }
 
-
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"FFprobe failed for {file_path}: {e.stderr}")
     except (json.JSONDecodeError, KeyError, ValueError) as e:
@@ -385,7 +388,11 @@ def detect_video_codec(file_path: str) -> Dict[str, Any]:
 
 
 def _calculate_compatibility_score(
-    codec: str, container: str, format_name: str, video_stream: dict, format_info: dict,
+    codec: str,
+    container: str,
+    format_name: str,
+    video_stream: dict,
+    format_info: dict,
 ) -> Tuple[int, List[str]]:
     """Calculate MoviePy compatibility score and identify potential issues.
 
@@ -550,7 +557,6 @@ def transcode_hevc_to_h264_enhanced(
     encoder_type = diagnostics.get("encoder_type", "CPU")
     iphone_compatible = diagnostics.get("iphone_compatible", True)
 
-
     # Attempt transcoding with fallbacks
     for attempt in range(max_retries + 1):
         try:
@@ -558,7 +564,11 @@ def transcode_hevc_to_h264_enhanced(
             if attempt == 0:
                 # First attempt: Use detected optimal settings
                 cmd, description = _build_transcoding_command(
-                    input_path, output_path, moviepy_params, ffmpeg_params, encoder_type,
+                    input_path,
+                    output_path,
+                    moviepy_params,
+                    ffmpeg_params,
+                    encoder_type,
                 )
             elif attempt == 1 and encoder_type != "CPU":
                 # Second attempt: Fallback to CPU if hardware was used first
@@ -587,10 +597,12 @@ def transcode_hevc_to_h264_enhanced(
             if progress_callback:
                 progress_callback(f"Attempt {attempt + 1}: {description}", 0.0)
 
-
             # Run FFmpeg with timeout and monitoring
             process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             )
 
             # Progress monitoring
@@ -625,11 +637,16 @@ def transcode_hevc_to_h264_enhanced(
 
                     if progress_callback:
                         progress_callback(
-                            f"Complete & Validated ({total_time:.1f}s)", 1.0,
+                            f"Complete & Validated ({total_time:.1f}s)",
+                            1.0,
                         )
 
                     _log_transcoding_success(
-                        input_path, output_path, total_time, attempt + 1, encoder_type,
+                        input_path,
+                        output_path,
+                        total_time,
+                        attempt + 1,
+                        encoder_type,
                     )
                     return output_path
                 # Output validation failed
@@ -642,7 +659,8 @@ def transcode_hevc_to_h264_enhanced(
                 )
             # FFmpeg failed
             error_details = _categorize_transcoding_error(
-                stderr_output, encoder_type,
+                stderr_output,
+                encoder_type,
             )
             error_msg = f"Attempt {attempt + 1} failed ({attempt_time:.1f}s): {error_details['category']} - {error_details['message']}"
             attempt_log.append(error_msg)
@@ -655,9 +673,7 @@ def transcode_hevc_to_h264_enhanced(
             attempt_time = (
                 time.time() - attempt_start if "attempt_start" in locals() else 0
             )
-            error_msg = (
-                f"Attempt {attempt + 1} exception ({attempt_time:.1f}s): {e!s}"
-            )
+            error_msg = f"Attempt {attempt + 1} exception ({attempt_time:.1f}s): {e!s}"
             attempt_log.append(error_msg)
             last_error = e
 
@@ -740,15 +756,34 @@ def _build_transcoding_command(
 
     elif codec == "h264_qsv":
         # OPTIMIZATION: Streamlined Intel QSV command
-        cmd = (
-            ["ffmpeg", "-y", "-hwaccel", "qsv", "-hwaccel_output_format", "qsv", "-c:v", "hevc_qsv", "-i", input_path, "-c:v", "h264_qsv", *ffmpeg_params, *iphone_params, "-c:a", "aac", "-b:a", "128k", output_path]
-        )
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-hwaccel",
+            "qsv",
+            "-hwaccel_output_format",
+            "qsv",
+            "-c:v",
+            "hevc_qsv",
+            "-i",
+            input_path,
+            "-c:v",
+            "h264_qsv",
+            *ffmpeg_params,
+            *iphone_params,
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            output_path,
+        ]
         description = "Intel QSV + iPhone params (validated)"
 
     else:
         # OPTIMIZATION: Optimized CPU encoding with adaptive threading
         threads = min(
-            moviepy_params.get("threads", os.cpu_count() or 4), 6,
+            moviepy_params.get("threads", os.cpu_count() or 4),
+            6,
         )  # Cap at 6 for efficiency
 
         if encoder_type == "CPU_CONSERVATIVE":
@@ -760,9 +795,23 @@ def _build_transcoding_command(
             cpu_params = ffmpeg_params
             description = f"CPU optimized ({threads}t) + iPhone params"
 
-        cmd = (
-            ["ffmpeg", "-y", "-i", input_path, "-c:v", "libx264", "-threads", str(threads), *cpu_params, *iphone_params, "-c:a", "aac", "-b:a", "128k", output_path]
-        )
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_path,
+            "-c:v",
+            "libx264",
+            "-threads",
+            str(threads),
+            *cpu_params,
+            *iphone_params,
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            output_path,
+        ]
 
     return cmd, description
 
@@ -831,7 +880,6 @@ def _log_transcoding_success(
     """Log successful transcoding with comprehensive information."""
     input_size = os.path.getsize(input_path) / (1024 * 1024)  # MB
     output_size = os.path.getsize(output_path) / (1024 * 1024)  # MB
-
 
 
 # Legacy function for backward compatibility
@@ -903,7 +951,8 @@ def _update_transcoding_cache(file_path: str, transcoded_path: str):
 
 
 def preprocess_video_if_needed_enhanced(
-    file_path: str, temp_dir: str = "temp",
+    file_path: str,
+    temp_dir: str = "temp",
 ) -> Dict[str, Any]:
     """Enhanced preprocessing with smart caching and comprehensive error handling.
 
@@ -950,7 +999,6 @@ def preprocess_video_if_needed_enhanced(
     filename = Path(file_path).name
 
     try:
-
         # OPTIMIZATION: Phase 0 - Check transcoding cache first
         cached_path = _check_transcoding_cache(file_path)
         if cached_path:
@@ -1030,7 +1078,8 @@ def preprocess_video_if_needed_enhanced(
         input_stem = Path(file_path).stem
         cache_key = _get_file_cache_key(file_path)[:8]  # Short hash for filename
         output_path = os.path.join(
-            temp_dir, f"{input_stem}_h264_iphone_{cache_key}.mp4",
+            temp_dir,
+            f"{input_stem}_h264_iphone_{cache_key}.mp4",
         )
 
         # Enhanced transcoding with retry and validation
@@ -1039,7 +1088,9 @@ def preprocess_video_if_needed_enhanced(
             transcoded_path = transcode_hevc_to_h264_enhanced(
                 file_path,
                 output_path,
-                progress_callback=lambda msg, progress: logger.info(f"Transcoding: {msg}"),
+                progress_callback=lambda msg, progress: logger.info(
+                    f"Transcoding: {msg}"
+                ),
                 max_retries=2,
             )
 
@@ -1052,7 +1103,6 @@ def preprocess_video_if_needed_enhanced(
             result["diagnostic_message"] = (
                 "Enhanced H.265→H.264 transcoding successful with iPhone compatibility validation"
             )
-
 
         except Exception as transcoding_error:
             # Detailed transcoding error analysis
@@ -1084,7 +1134,6 @@ def preprocess_video_if_needed_enhanced(
             else:
                 result["error_category"] = "TRANSCODING_UNKNOWN_ERROR"
                 result["diagnostic_message"] = f"Transcoding error: {error_str[:200]}"
-
 
             # Fallback to original file with warning
             result["processed_path"] = file_path
@@ -1144,10 +1193,12 @@ def validate_transcoded_output(output_path: str) -> dict:
             try:
                 codec_info = detect_video_codec(output_path)
                 validation_result["codec_profile"] = codec_info.get(
-                    "profile", "unknown",
+                    "profile",
+                    "unknown",
                 )
                 validation_result["pixel_format"] = codec_info.get(
-                    "pixel_format", "unknown",
+                    "pixel_format",
+                    "unknown",
                 )
                 validation_result["moviepy_compatible"] = True
                 validation_result["iphone_compatible"] = True
@@ -1178,7 +1229,8 @@ def preprocess_video_if_needed(file_path: str, temp_dir: str = "temp") -> str:
 
 
 def test_moviepy_h265_compatibility(
-    file_path: str, timeout_seconds: float = 10.0,
+    file_path: str,
+    timeout_seconds: float = 10.0,
 ) -> bool:
     """Test if MoviePy can load H.265 file directly without transcoding.
 
@@ -1254,7 +1306,11 @@ def test_moviepy_h265_compatibility(
         test_time = time.time() - start_time
 
         # Categorize compatibility issues
-        if any(keyword in error_msg for keyword in ["codec", "decoder", "format"]) or any(keyword in error_msg for keyword in ["memory", "allocation"]) or any(keyword in error_msg for keyword in ["permission", "access"]):
+        if (
+            any(keyword in error_msg for keyword in ["codec", "decoder", "format"])
+            or any(keyword in error_msg for keyword in ["memory", "allocation"])
+            or any(keyword in error_msg for keyword in ["permission", "access"])
+        ):
             pass
         else:
             pass
@@ -1277,7 +1333,9 @@ _CACHE_TIMEOUT = 300  # 5 minutes
 
 
 def detect_optimal_codec_settings_enhanced() -> Tuple[
-    Dict[str, Any], List[str], Dict[str, str],
+    Dict[str, Any],
+    List[str],
+    Dict[str, str],
 ]:
     """Enhanced hardware detection with actual capability testing and iPhone validation.
 
@@ -1308,7 +1366,6 @@ def detect_optimal_codec_settings_enhanced() -> Tuple[
     ):
         return _HARDWARE_DETECTION_CACHE
 
-
     # Default high-performance CPU settings
     default_result = (
         {"codec": "libx264", "audio_codec": "aac", "threads": os.cpu_count() or 4},
@@ -1328,7 +1385,11 @@ def detect_optimal_codec_settings_enhanced() -> Tuple[
         # Step 1: Check if FFmpeg is available
         try:
             result = subprocess.run(
-                ["ffmpeg", "-version"], check=False, capture_output=True, text=True, timeout=5,
+                ["ffmpeg", "-version"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             diagnostics["ffmpeg_version"] = (
                 result.stdout.split("\n")[0] if result.stdout else "Unknown"
@@ -1344,7 +1405,11 @@ def detect_optimal_codec_settings_enhanced() -> Tuple[
         # Step 2: List available encoders
         try:
             result = subprocess.run(
-                ["ffmpeg", "-encoders"], check=False, capture_output=True, text=True, timeout=5,
+                ["ffmpeg", "-encoders"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             available_encoders = result.stdout
             diagnostics["available_encoders"] = "Listed successfully"
@@ -1393,7 +1458,10 @@ def detect_optimal_codec_settings_enhanced() -> Tuple[
         # Step 4: Test Intel QSV with iPhone parameter validation
         if "h264_qsv" in available_encoders:
             qsv_result = _test_hardware_encoder(
-                "QSV", "h264_qsv", test_iphone_parameters=True, diagnostics=diagnostics,
+                "QSV",
+                "h264_qsv",
+                test_iphone_parameters=True,
+                diagnostics=diagnostics,
             )
             if qsv_result["success"]:
                 moviepy_params = {
@@ -1509,7 +1577,11 @@ def _test_hardware_encoder(
 
         # OPTIMIZATION: Reduced timeout 3s vs 15s for faster failure detection
         combined_result = subprocess.run(
-            combined_cmd, check=False, capture_output=True, text=True, timeout=3,
+            combined_cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
 
         if combined_result.returncode != 0:
@@ -1546,7 +1618,8 @@ def _test_hardware_encoder(
 
         # OPTIMIZATION: Quick format validation instead of comprehensive check
         format_valid = _validate_encoder_output_fast(
-            temp_output, expected_profile="Main",
+            temp_output,
+            expected_profile="Main",
         )
         result["iphone_compatible"] = format_valid
 
@@ -1595,7 +1668,6 @@ def _validate_transcoded_output_enhanced(video_path: str) -> bool:
         return False
 
     try:
-
         # OPTIMIZATION: Combined single-pass validation instead of 3 separate phases
         validation_result = _validate_combined_iphone_requirements(video_path)
 
@@ -1641,7 +1713,9 @@ def _validate_combined_iphone_requirements(video_path: str) -> Dict[str, Any]:
             video_path,
         ]
 
-        ffprobe_result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=5)
+        ffprobe_result = subprocess.run(
+            cmd, check=False, capture_output=True, text=True, timeout=5
+        )
         if ffprobe_result.returncode != 0:
             result["reason"] = f"FFprobe failed: {ffprobe_result.stderr[:100]}"
             return result
@@ -1755,7 +1829,9 @@ def _validate_video_format_detailed(video_path: str) -> Dict[str, Any]:
             video_path,
         ]
 
-        probe_result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=15)
+        probe_result = subprocess.run(
+            cmd, check=False, capture_output=True, text=True, timeout=15
+        )
 
         if probe_result.returncode != 0:
             result["reason"] = f"FFprobe failed: {probe_result.stderr[:100]}"
@@ -1817,7 +1893,8 @@ def _validate_video_format_detailed(video_path: str) -> Dict[str, Any]:
 
 
 def _test_moviepy_compatibility_enhanced(
-    video_path: str, timeout_seconds: float = 15.0,
+    video_path: str,
+    timeout_seconds: float = 15.0,
 ) -> Dict[str, Any]:
     """Enhanced MoviePy compatibility test with detailed diagnostics.
 
@@ -2016,7 +2093,8 @@ def _validate_encoder_output(video_path: str, expected_profile: str = "Main") ->
 
 
 def _validate_encoder_output_fast(
-    video_path: str, expected_profile: str = "Main",
+    video_path: str,
+    expected_profile: str = "Main",
 ) -> bool:
     """Fast encoder output validation for hardware detection testing.
 
@@ -2048,7 +2126,9 @@ def _validate_encoder_output_fast(
             video_path,
         ]
 
-        result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=2)
+        result = subprocess.run(
+            cmd, check=False, capture_output=True, text=True, timeout=2
+        )
         if result.returncode != 0:
             return False
 
@@ -2103,7 +2183,6 @@ def find_all_video_files(directory: str) -> List[str]:
     return sorted(set(video_files))
 
 
-
 # Configuration defaults
 DEFAULT_CONFIG = {
     "min_clip_duration": 0.5,  # Minimum clip duration in seconds (technical limit)
@@ -2119,6 +2198,3 @@ DEFAULT_CONFIG = {
 def get_config_value(key: str, default=None):
     """Get configuration value with fallback to default."""
     return DEFAULT_CONFIG.get(key, default)
-
-
-

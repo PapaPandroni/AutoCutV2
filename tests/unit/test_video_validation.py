@@ -45,10 +45,13 @@ class TestValidationResult:
     def test_has_warnings(self):
         """Test has_warnings property."""
         result_with_warnings = ValidationResult(
-            is_valid=True, validation_type="test", warnings=["warning1"],
+            is_valid=True,
+            validation_type="test",
+            warnings=["warning1"],
         )
         result_without_warnings = ValidationResult(
-            is_valid=True, validation_type="test",
+            is_valid=True,
+            validation_type="test",
         )
 
         assert result_with_warnings.has_warnings is True
@@ -57,7 +60,9 @@ class TestValidationResult:
     def test_has_errors(self):
         """Test has_errors property."""
         result_with_errors = ValidationResult(
-            is_valid=False, validation_type="test", errors=["error1"],
+            is_valid=False,
+            validation_type="test",
+            errors=["error1"],
         )
         result_without_errors = ValidationResult(is_valid=True, validation_type="test")
 
@@ -89,7 +94,10 @@ class TestVideoValidator:
         assert any("not found" in error.lower() for error in result.errors)
 
     def test_validate_basic_with_valid_file(
-        self, video_validator, test_helpers, temp_dir,
+        self,
+        video_validator,
+        test_helpers,
+        temp_dir,
     ):
         """Test basic validation with a valid file."""
         # Create a mock video file
@@ -104,7 +112,10 @@ class TestVideoValidator:
         assert "readable" in result.details
 
     def test_validate_basic_unreadable_file(
-        self, video_validator, test_helpers, temp_dir,
+        self,
+        video_validator,
+        test_helpers,
+        temp_dir,
     ):
         """Test validation of unreadable file."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "unreadable.mp4")
@@ -128,7 +139,10 @@ class TestVideoValidator:
         assert result.details["file_exists"] is True
 
     def test_validate_audio_file_invalid_extension(
-        self, video_validator, test_helpers, temp_dir,
+        self,
+        video_validator,
+        test_helpers,
+        temp_dir,
     ):
         """Test audio file validation with invalid extension."""
         invalid_audio = test_helpers.create_mock_audio_file(temp_dir, "test.txt")
@@ -141,7 +155,11 @@ class TestVideoValidator:
 
     @patch("src.video.validation.CodecDetector")
     def test_validate_iphone_compatibility(
-        self, mock_codec_detector, video_validator, test_helpers, temp_dir,
+        self,
+        mock_codec_detector,
+        video_validator,
+        test_helpers,
+        temp_dir,
     ):
         """Test iPhone H.265 compatibility validation."""
         video_file = test_helpers.create_mock_video_file(temp_dir, "iphone.mov")
@@ -164,14 +182,19 @@ class TestVideoValidator:
 
     @patch("src.video.validation.subprocess.run")
     def test_validate_transcoding_output(
-        self, mock_subprocess, video_validator, test_helpers, temp_dir,
+        self,
+        mock_subprocess,
+        video_validator,
+        test_helpers,
+        temp_dir,
     ):
         """Test transcoding output validation."""
         output_file = test_helpers.create_mock_video_file(temp_dir, "transcoded.mp4")
 
         # Mock successful ffprobe output
         mock_subprocess.return_value = MagicMock(
-            returncode=0, stdout='{"streams": [{"codec_name": "h264"}]}',
+            returncode=0,
+            stdout='{"streams": [{"codec_name": "h264"}]}',
         )
 
         result = video_validator.validate_transcoding_output(str(output_file))
@@ -190,7 +213,8 @@ class TestVideoValidator:
 
         with patch("src.video.validation.os.access", return_value=True):
             results = video_validator.validate_input_files(
-                video_files=[str(files[0]), str(files[1])], audio_file=str(files[2]),
+                video_files=[str(files[0]), str(files[1])],
+                audio_file=str(files[2]),
             )
 
         assert "video_results" in results

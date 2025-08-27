@@ -56,6 +56,7 @@ def check_moviepy_api_compatibility() -> Dict[str, Any]:
     """
     try:
         import moviepy
+
         version = getattr(moviepy, "__version__", "unknown")
 
         # Test for API method availability by creating a dummy clip
@@ -128,7 +129,9 @@ def check_moviepy_api_compatibility() -> Dict[str, Any]:
         }
 
 
-def subclip_safely(clip, start_time: float, end_time: float, compatibility_info: Dict[str, Any]):
+def subclip_safely(
+    clip, start_time: float, end_time: float, compatibility_info: Dict[str, Any]
+):
     """Create subclip using version-compatible method.
 
     Args:
@@ -149,7 +152,9 @@ def subclip_safely(clip, start_time: float, end_time: float, compatibility_info:
             return clip.subclip(start_time, end_time)
         except AttributeError:
             # If both fail, raise informative error
-            raise RuntimeError(f"Neither 'subclipped' nor 'subclip' methods available on {type(clip)}")
+            raise RuntimeError(
+                f"Neither 'subclipped' nor 'subclip' methods available on {type(clip)}"
+            )
     except Exception:
         # Re-raise other exceptions
         raise
@@ -175,13 +180,22 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info: Dict[str, An
             return video_clip.set_audio(audio_clip)
         except AttributeError:
             # If both fail, raise informative error
-            raise RuntimeError(f"Neither 'with_audio' nor 'set_audio' methods available on {type(video_clip)}")
+            raise RuntimeError(
+                f"Neither 'with_audio' nor 'set_audio' methods available on {type(video_clip)}"
+            )
     except Exception:
         # Re-raise other exceptions
         raise
 
 
-def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode="smart", compatibility_info: Optional[Dict[str, Any]] = None):
+def resize_clip_safely(
+    clip,
+    newsize=None,
+    width=None,
+    height=None,
+    scaling_mode="smart",
+    compatibility_info: Optional[Dict[str, Any]] = None,
+):
     """Resize clip using MoviePy 2.x effects system with content-aware smart scaling for optimal screen utilization.
 
     This function preserves aspect ratios and adds letterboxing/pillarboxing as needed,
@@ -216,6 +230,7 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         # Width only - height computed to maintain aspect ratio (no letterboxing needed)
         try:
             from moviepy.video.fx.Resize import Resize
+
             return clip.with_effects([Resize(width=width)])
         except ImportError:
             return clip.resized(width=width)
@@ -223,6 +238,7 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         # Height only - width computed to maintain aspect ratio (no letterboxing needed)
         try:
             from moviepy.video.fx.Resize import Resize
+
             return clip.with_effects([Resize(height=height)])
         except ImportError:
             return clip.resized(height=height)
@@ -251,9 +267,23 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         elif scaling_mode == "fill":
             # Aggressive: fill entire canvas (may crop content)
             scale = max(width_scale, height_scale)
-            content_type = "landscape" if current_aspect > 1.3 else "portrait" if current_aspect < 0.8 else "square"
-            canvas_type = "landscape" if target_aspect > 1.3 else "portrait" if target_aspect < 0.8 else "square"
-            scaling_reason = f"fill mode - maximizes screen usage ({content_type}→{canvas_type})"
+            content_type = (
+                "landscape"
+                if current_aspect > 1.3
+                else "portrait"
+                if current_aspect < 0.8
+                else "square"
+            )
+            canvas_type = (
+                "landscape"
+                if target_aspect > 1.3
+                else "portrait"
+                if target_aspect < 0.8
+                else "square"
+            )
+            scaling_reason = (
+                f"fill mode - maximizes screen usage ({content_type}→{canvas_type})"
+            )
 
         elif scaling_mode == "smart":
             # Enhanced Smart: content-aware and canvas-aware crop thresholds
@@ -265,10 +295,22 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
             crop_percentage = (crop_ratio - 1) * 100
 
             # Determine content type from aspect ratio
-            content_type = "landscape" if current_aspect > 1.3 else "portrait" if current_aspect < 0.8 else "square"
+            content_type = (
+                "landscape"
+                if current_aspect > 1.3
+                else "portrait"
+                if current_aspect < 0.8
+                else "square"
+            )
 
             # Determine canvas type from target aspect ratio
-            canvas_type = "landscape" if target_aspect > 1.3 else "portrait" if target_aspect < 0.8 else "square"
+            canvas_type = (
+                "landscape"
+                if target_aspect > 1.3
+                else "portrait"
+                if target_aspect < 0.8
+                else "square"
+            )
 
             # ADAPTIVE CROP THRESHOLDS based on content and canvas analysis
             if content_type == "landscape":
@@ -313,9 +355,13 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         new_height = int(current_height * scale)
 
         # Log scaling decision for transparency
-        logger.info(f"Scaling decision: {current_width}x{current_height} → {new_width}x{new_height}")
+        logger.info(
+            f"Scaling decision: {current_width}x{current_height} → {new_width}x{new_height}"
+        )
         logger.info(f"  Reason: {scaling_reason}")
-        logger.info(f"  Scale factor: {scale:.3f} (width: {width_scale:.3f}, height: {height_scale:.3f})")
+        logger.info(
+            f"  Scale factor: {scale:.3f} (width: {width_scale:.3f}, height: {height_scale:.3f})"
+        )
 
         # Try multiple resize approaches with robust fallbacks
         resized_clip = None
@@ -323,8 +369,11 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         # Approach 1: Modern MoviePy 2.x effects system
         try:
             from moviepy.video.fx.Resize import Resize
+
             resized_clip = clip.with_effects([Resize((new_width, new_height))])
-            logger.debug(f"Used modern MoviePy 2.x effects: {current_width}x{current_height} → {new_width}x{new_height}")
+            logger.debug(
+                f"Used modern MoviePy 2.x effects: {current_width}x{current_height} → {new_width}x{new_height}"
+            )
         except ImportError:
             pass
         except Exception as e:
@@ -334,7 +383,9 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         if resized_clip is None:
             try:
                 resized_clip = clip.resized((new_width, new_height))
-                logger.debug(f"Used legacy resize method: {current_width}x{current_height} → {new_width}x{new_height}")
+                logger.debug(
+                    f"Used legacy resize method: {current_width}x{current_height} → {new_width}x{new_height}"
+                )
             except Exception as e:
                 logger.warning(f"Legacy resize failed: {e}")
 
@@ -342,7 +393,9 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         if resized_clip is None:
             try:
                 resized_clip = clip.resize((new_width, new_height))
-                logger.debug(f"Used direct resize fallback: {current_width}x{current_height} → {new_width}x{new_height}")
+                logger.debug(
+                    f"Used direct resize fallback: {current_width}x{current_height} → {new_width}x{new_height}"
+                )
             except Exception as e:
                 logger.exception(f"All resize methods failed: {e}")
                 raise RuntimeError(f"Unable to resize clip: {e}")
@@ -350,20 +403,28 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
         # CRITICAL FIX: Check if letterboxing should be applied based on scaling mode
         if new_width == target_width and new_height == target_height:
             # Perfect fit, no letterboxing needed
-            logger.debug(f"Perfect fit: {new_width}x{new_height} matches target {target_width}x{target_height}")
+            logger.debug(
+                f"Perfect fit: {new_width}x{new_height} matches target {target_width}x{target_height}"
+            )
             return resized_clip
 
         # NEW: For fill mode, return resized clip directly without letterboxing
         # This eliminates cascading letterboxing that was causing black bars on all sides
         if scaling_mode == "fill":
-            logger.info("Fill mode: Returning resized clip without letterboxing to maximize screen utilization")
-            logger.info(f"  Dimensions: {new_width}x{new_height} (target: {target_width}x{target_height})")
+            logger.info(
+                "Fill mode: Returning resized clip without letterboxing to maximize screen utilization"
+            )
+            logger.info(
+                f"  Dimensions: {new_width}x{new_height} (target: {target_width}x{target_height})"
+            )
 
             # Calculate screen utilization for fill mode
             video_area = new_width * new_height
             target_area = target_width * target_height
             utilization = (video_area / target_area) * 100
-            logger.info(f"  Screen utilization (fill mode): {utilization:.1f}% - no letterboxing applied")
+            logger.info(
+                f"  Screen utilization (fill mode): {utilization:.1f}% - no letterboxing applied"
+            )
 
             return resized_clip
 
@@ -377,12 +438,18 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
             try:
                 from moviepy import ColorClip, CompositeVideoClip
             except ImportError:
-                logger.exception("Cannot import ColorClip and CompositeVideoClip for letterboxing")
-                logger.warning(f"Returning resized clip without letterboxing: {new_width}x{new_height}")
+                logger.exception(
+                    "Cannot import ColorClip and CompositeVideoClip for letterboxing"
+                )
+                logger.warning(
+                    f"Returning resized clip without letterboxing: {new_width}x{new_height}"
+                )
                 return resized_clip
 
         # Create black background for letterboxing/pillarboxing (fit/smart modes only)
-        logger.info(f"Applying letterboxing for '{scaling_mode}' mode to ensure proper aspect ratio")
+        logger.info(
+            f"Applying letterboxing for '{scaling_mode}' mode to ensure proper aspect ratio"
+        )
 
         try:
             background = ColorClip(
@@ -396,46 +463,68 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
             y_pos = (target_height - new_height) // 2
 
             # Create composite with centered resized clip
-            letterboxed_clip = CompositeVideoClip([
-                background,
-                resized_clip.with_position((x_pos, y_pos)),
-            ], size=(target_width, target_height))
+            letterboxed_clip = CompositeVideoClip(
+                [
+                    background,
+                    resized_clip.with_position((x_pos, y_pos)),
+                ],
+                size=(target_width, target_height),
+            )
 
             # Ensure the composite has the correct duration
             letterboxed_clip = letterboxed_clip.with_duration(resized_clip.duration)
 
             # Enhanced logging for letterboxing operations
             if new_width < target_width:
-                letterbox_type = "pillarbox" if new_height == target_height else "letterbox+pillarbox"
+                letterbox_type = (
+                    "pillarbox"
+                    if new_height == target_height
+                    else "letterbox+pillarbox"
+                )
                 bar_width = (target_width - new_width) // 2
                 logger.info(f"Applied {letterbox_type}: {bar_width}px bars on sides")
-                logger.info("  Reason: Content scaled to fit target width while preserving aspect ratio")
+                logger.info(
+                    "  Reason: Content scaled to fit target width while preserving aspect ratio"
+                )
             else:
                 bar_height = (target_height - new_height) // 2
                 logger.info(f"Applied letterbox: {bar_height}px bars on top/bottom")
-                logger.info("  Reason: Content scaled to fit target height while preserving aspect ratio")
+                logger.info(
+                    "  Reason: Content scaled to fit target height while preserving aspect ratio"
+                )
 
             # Calculate and log screen utilization
             video_area = new_width * new_height
             canvas_area = target_width * target_height
             utilization = (video_area / canvas_area) * 100
-            logger.info(f"  Screen utilization (with letterboxing): {utilization:.1f}% ({video_area}/{canvas_area} pixels)")
-            logger.info(f"  Mode: {scaling_mode} - letterboxing applied to preserve content and aspect ratio")
+            logger.info(
+                f"  Screen utilization (with letterboxing): {utilization:.1f}% ({video_area}/{canvas_area} pixels)"
+            )
+            logger.info(
+                f"  Mode: {scaling_mode} - letterboxing applied to preserve content and aspect ratio"
+            )
 
             return letterboxed_clip
 
         except Exception as letterbox_error:
             # Fallback: return resized clip without letterboxing if composition fails
-            logger.warning(f"Letterboxing failed ({letterbox_error!s}), returning resized clip without black bars")
-            logger.warning(f"Resized to: {new_width}x{new_height} (target: {target_width}x{target_height})")
+            logger.warning(
+                f"Letterboxing failed ({letterbox_error!s}), returning resized clip without black bars"
+            )
+            logger.warning(
+                f"Resized to: {new_width}x{new_height} (target: {target_width}x{target_height})"
+            )
             return resized_clip
 
     except Exception as e:
         logger.exception(f"Failed to resize clip with aspect ratio preservation: {e}")
         # Final fallback: attempt direct resize (old behavior)
-        logger.warning("Falling back to direct resize without aspect ratio preservation")
+        logger.warning(
+            "Falling back to direct resize without aspect ratio preservation"
+        )
         try:
             from moviepy.video.fx.Resize import Resize
+
             if newsize is not None:
                 return clip.with_effects([Resize(newsize)])
             return clip.with_effects([Resize((target_width, target_height))])
@@ -448,7 +537,10 @@ def resize_clip_safely(clip, newsize=None, width=None, height=None, scaling_mode
                 logger.exception(f"Even fallback resize failed: {fallback_error}")
                 raise
 
-def resize_with_aspect_preservation(clip, target_width: int, target_height: int, scaling_mode: str = "smart"):
+
+def resize_with_aspect_preservation(
+    clip, target_width: int, target_height: int, scaling_mode: str = "smart"
+):
     """Centralized function for resizing clips with content-aware intelligent scaling and optimal screen utilization.
 
     This function is specifically designed for AutoCut's enhanced video normalization pipeline,
@@ -470,11 +562,15 @@ def resize_with_aspect_preservation(clip, target_width: int, target_height: int,
         Resized and letterboxed clip optimized for target canvas with minimal black bars
     """
     try:
-        logger.info(f"Starting aspect ratio preservation: {clip.w}x{clip.h} → {target_width}x{target_height}")
+        logger.info(
+            f"Starting aspect ratio preservation: {clip.w}x{clip.h} → {target_width}x{target_height}"
+        )
         logger.info(f"Using scaling mode: {scaling_mode}")
 
         # Use the robust resize_clip_safely function with enhanced smart scaling
-        result = resize_clip_safely(clip, newsize=(target_width, target_height), scaling_mode=scaling_mode)
+        result = resize_clip_safely(
+            clip, newsize=(target_width, target_height), scaling_mode=scaling_mode
+        )
 
         logger.info("Aspect ratio preservation completed successfully")
         return result
@@ -485,14 +581,18 @@ def resize_with_aspect_preservation(clip, target_width: int, target_height: int,
 
         # Fallback to conservative fit mode
         try:
-            return resize_clip_safely(clip, newsize=(target_width, target_height), scaling_mode="fit")
+            return resize_clip_safely(
+                clip, newsize=(target_width, target_height), scaling_mode="fit"
+            )
         except Exception as fallback_error:
             logger.exception(f"Fallback to fit mode also failed: {fallback_error}")
             logger.warning("Returning original clip as final fallback")
             return clip
 
 
-def set_fps_safely(clip, fps: float, compatibility_info: Optional[Dict[str, Any]] = None):
+def set_fps_safely(
+    clip, fps: float, compatibility_info: Optional[Dict[str, Any]] = None
+):
     """Set FPS using version-compatible method.
 
     Note: In MoviePy 2.x, set_fps was removed. We try multiple approaches.
@@ -528,11 +628,24 @@ def set_fps_safely(clip, fps: float, compatibility_info: Optional[Dict[str, Any]
         pass
 
     # Final fallback: warning and return original
-    logger.warning(f"Could not set FPS to {fps} on {type(clip)} - FPS modification not supported in this MoviePy version")
+    logger.warning(
+        f"Could not set FPS to {fps} on {type(clip)} - FPS modification not supported in this MoviePy version"
+    )
     return clip  # Return original clip unchanged
 
 
-def crop_clip_safely(clip, x1=None, y1=None, x2=None, y2=None, width=None, height=None, x_center=None, y_center=None, compatibility_info: Optional[Dict[str, Any]] = None):
+def crop_clip_safely(
+    clip,
+    x1=None,
+    y1=None,
+    x2=None,
+    y2=None,
+    width=None,
+    height=None,
+    x_center=None,
+    y_center=None,
+    compatibility_info: Optional[Dict[str, Any]] = None,
+):
     """Crop clip using version-compatible method.
 
     Args:
@@ -547,19 +660,41 @@ def crop_clip_safely(clip, x1=None, y1=None, x2=None, y2=None, width=None, heigh
     """
     # Try modern MoviePy 2.x method first (cropped)
     try:
-        return clip.cropped(x1=x1, y1=y1, x2=x2, y2=y2, width=width, height=height, x_center=x_center, y_center=y_center)
+        return clip.cropped(
+            x1=x1,
+            y1=y1,
+            x2=x2,
+            y2=y2,
+            width=width,
+            height=height,
+            x_center=x_center,
+            y_center=y_center,
+        )
     except AttributeError:
         # Fallback to older MoviePy 1.x method (crop)
         try:
-            return clip.crop(x1=x1, y1=y1, x2=x2, y2=y2, width=width, height=height, x_center=x_center, y_center=y_center)
+            return clip.crop(
+                x1=x1,
+                y1=y1,
+                x2=x2,
+                y2=y2,
+                width=width,
+                height=height,
+                x_center=x_center,
+                y_center=y_center,
+            )
         except AttributeError:
-            raise RuntimeError(f"Neither 'cropped' nor 'crop' methods available on {type(clip)}")
+            raise RuntimeError(
+                f"Neither 'cropped' nor 'crop' methods available on {type(clip)}"
+            )
     except Exception:
         # Re-raise other exceptions
         raise
 
 
-def write_videofile_safely(video_clip, output_path: str, compatibility_info: Dict[str, Any], **kwargs):
+def write_videofile_safely(
+    video_clip, output_path: str, compatibility_info: Dict[str, Any], **kwargs
+):
     """Write video file using version-compatible parameters.
 
     Args:
@@ -574,9 +709,9 @@ def write_videofile_safely(video_clip, output_path: str, compatibility_info: Dic
 
         # MoviePy 2.x incompatible parameters that need to be removed
         moviepy2_unsupported_params = [
-            "logger",              # Causes issues in some versions
+            "logger",  # Causes issues in some versions
             "temp_audiofile_fps",  # Not supported in MoviePy 2.x - removed parameter
-            "verbose",             # Not supported as keyword argument in some MoviePy versions
+            "verbose",  # Not supported as keyword argument in some MoviePy versions
         ]
 
         for param in moviepy2_unsupported_params:
@@ -589,11 +724,15 @@ def write_videofile_safely(video_clip, output_path: str, compatibility_info: Dic
             audio_codec = safe_kwargs["audio_codec"]
             # Replace problematic audio codec profiles with safe defaults
             if audio_codec in ["aac_low", "aac_he", "aac_he_v2"]:
-                logger.debug(f"Replacing problematic audio codec '{audio_codec}' with 'aac'")
+                logger.debug(
+                    f"Replacing problematic audio codec '{audio_codec}' with 'aac'"
+                )
                 safe_kwargs["audio_codec"] = "aac"
 
         # Handle FFmpeg parameters that might contain problematic audio settings
-        if "ffmpeg_params" in safe_kwargs and isinstance(safe_kwargs["ffmpeg_params"], list):
+        if "ffmpeg_params" in safe_kwargs and isinstance(
+            safe_kwargs["ffmpeg_params"], list
+        ):
             ffmpeg_params = safe_kwargs["ffmpeg_params"]
             filtered_params = []
             skip_next = False
@@ -619,7 +758,9 @@ def write_videofile_safely(video_clip, output_path: str, compatibility_info: Dic
         video_clip.write_videofile(output_path, **safe_kwargs)
 
     except Exception as e:
-        logger.exception(f"Video writing failed with parameters {list(kwargs.keys())}: {e}")
+        logger.exception(
+            f"Video writing failed with parameters {list(kwargs.keys())}: {e}"
+        )
 
         # Try with minimal parameters as fallback
         try:
@@ -627,12 +768,14 @@ def write_videofile_safely(video_clip, output_path: str, compatibility_info: Dic
                 "codec": kwargs.get("codec", "libx264"),
                 "fps": kwargs.get("fps", 24),
                 "audio_codec": "aac",  # Use safe audio codec
-                "ffmpeg_params": [],    # Remove all FFmpeg parameters that might cause issues
+                "ffmpeg_params": [],  # Remove all FFmpeg parameters that might cause issues
             }
             logger.warning("Retrying with minimal parameters and safe audio codec")
             video_clip.write_videofile(output_path, **essential_params)
         except Exception as fallback_error:
-            raise RuntimeError(f"Video writing failed even with fallback parameters: {fallback_error}")
+            raise RuntimeError(
+                f"Video writing failed even with fallback parameters: {fallback_error}"
+            )
 
 
 # Legacy compatibility functions that may be needed

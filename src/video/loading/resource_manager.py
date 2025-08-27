@@ -24,10 +24,13 @@ try:
     from core.logging_config import get_logger, log_performance
 except ImportError:
     import logging
+
     def get_logger(name):
         return logging.getLogger(name)
+
     def log_performance(func):
         return func
+
     class VideoProcessingError(Exception):
         pass
 
@@ -71,7 +74,9 @@ class MemoryMonitor:
     """
 
     def __init__(
-        self, warning_threshold: float = 80.0, critical_threshold: float = 88.0,
+        self,
+        warning_threshold: float = 80.0,
+        critical_threshold: float = 88.0,
     ):
         """Initialize memory monitor with Phase 6E optimized safety thresholds.
 
@@ -107,8 +112,12 @@ class MemoryMonitor:
                 "psutil not available - memory monitoring will be limited",
             )
 
-        self.logger.info(f"Phase 6E optimized memory thresholds: warning={warning_threshold}%, critical={critical_threshold}%")
-        self.logger.info("Memory management optimized to reduce clip loading failures while maintaining system stability")
+        self.logger.info(
+            f"Phase 6E optimized memory thresholds: warning={warning_threshold}%, critical={critical_threshold}%"
+        )
+        self.logger.info(
+            "Memory management optimized to reduce clip loading failures while maintaining system stability"
+        )
 
     def get_system_resources(self) -> SystemResources:
         """Get current system resource information."""
@@ -191,7 +200,6 @@ class MemoryMonitor:
         )
 
 
-
 class VideoResourceManager:
     """Resource manager for video loading operations.
 
@@ -200,7 +208,9 @@ class VideoResourceManager:
     """
 
     def __init__(
-        self, max_memory_gb: Optional[float] = None, max_concurrent_clips: int = 10,
+        self,
+        max_memory_gb: Optional[float] = None,
+        max_concurrent_clips: int = 10,
     ):
         """Initialize resource manager.
 
@@ -248,7 +258,9 @@ class VideoResourceManager:
 
     @contextmanager
     def allocate_resources(
-        self, estimated_memory_mb: float, require_memory_check: bool = True,
+        self,
+        estimated_memory_mb: float,
+        require_memory_check: bool = True,
     ) -> Generator[ResourceAllocation, None, None]:
         """Allocate resources for video processing.
 
@@ -310,7 +322,9 @@ class VideoResourceManager:
                 self._stats["allocations"] += 1
 
                 # Update peak memory tracking
-                self._stats["peak_memory_mb"] = max(self._stats["peak_memory_mb"], self._allocated_memory_mb)
+                self._stats["peak_memory_mb"] = max(
+                    self._stats["peak_memory_mb"], self._allocated_memory_mb
+                )
 
                 self.logger.debug(
                     "Allocated resources",
@@ -460,7 +474,8 @@ class VideoResourceManager:
         self._perform_cleanup()
 
         self.logger.info(
-            "Forced cleanup completed", extra={"cleared_allocations": num_allocations},
+            "Forced cleanup completed",
+            extra={"cleared_allocations": num_allocations},
         )
 
     def configure_limits(

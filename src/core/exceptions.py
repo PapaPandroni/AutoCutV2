@@ -54,7 +54,6 @@ class VideoProcessingError(AutoCutError):
     """
 
 
-
 class iPhoneCompatibilityError(VideoProcessingError):
     """
     iPhone H.265 compatibility issues.
@@ -86,7 +85,9 @@ class iPhoneCompatibilityError(VideoProcessingError):
             details["platform"] = platform
 
         super().__init__(
-            message, error_code="IPHONE_COMPATIBILITY_ERROR", details=details,
+            message,
+            error_code="IPHONE_COMPATIBILITY_ERROR",
+            details=details,
         )
 
 
@@ -121,7 +122,9 @@ class HardwareAccelerationError(AutoCutError):
             details["hardware_info"] = hardware_info
 
         super().__init__(
-            message, error_code="HARDWARE_ACCELERATION_ERROR", details=details,
+            message,
+            error_code="HARDWARE_ACCELERATION_ERROR",
+            details=details,
         )
 
 
@@ -202,7 +205,6 @@ class ConfigurationError(AutoCutError):
     Raised when configuration files are invalid, required settings are missing,
     or configuration values are out of valid ranges.
     """
-
 
 
 class AudioProcessingError(AutoCutError):
@@ -302,7 +304,10 @@ def raise_iphone_error(
     details = additional_context or {}
 
     raise iPhoneCompatibilityError(
-        message=message, file_path=file_path, platform=platform, details=details,
+        message=message,
+        file_path=file_path,
+        platform=platform,
+        details=details,
     )
 
 
@@ -318,7 +323,9 @@ def raise_transcoding_error(
         details["error_output"] = error_output
 
     raise TranscodingError(
-        message=message, ffmpeg_command=ffmpeg_command, details=details,
+        message=message,
+        ffmpeg_command=ffmpeg_command,
+        details=details,
     )
 
 

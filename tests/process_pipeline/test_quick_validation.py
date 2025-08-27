@@ -45,17 +45,23 @@ class TestQuickValidation:
     def test_media_files_detected(self, sample_video_files, sample_audio_files):
         """Test that real media files are detected (not just metadata)."""
         # Filter out macOS metadata files
-        real_video_files = [f for f in sample_video_files if not f.name.startswith("._")]
-        real_audio_files = [f for f in sample_audio_files if not f.name.startswith("._")]
+        real_video_files = [
+            f for f in sample_video_files if not f.name.startswith("._")
+        ]
+        real_audio_files = [
+            f for f in sample_audio_files if not f.name.startswith("._")
+        ]
 
         assert len(real_video_files) > 0, "Should have real video files available"
         assert len(real_audio_files) > 0, "Should have real audio files available"
 
-        print(f"✅ Found {len(real_video_files)} video files and {len(real_audio_files)} audio files")
+        print(
+            f"✅ Found {len(real_video_files)} video files and {len(real_audio_files)} audio files"
+        )
         for video in real_video_files[:3]:
-            print(f"  📹 {video.name} ({video.stat().st_size / (1024*1024):.1f} MB)")
+            print(f"  📹 {video.name} ({video.stat().st_size / (1024 * 1024):.1f} MB)")
         for audio in real_audio_files[:1]:
-            print(f"  🎵 {audio.name} ({audio.stat().st_size / (1024*1024):.1f} MB)")
+            print(f"  🎵 {audio.name} ({audio.stat().st_size / (1024 * 1024):.1f} MB)")
 
     def test_input_validation_errors(self, api_client: AutoCutAPI, temp_dir):
         """Test that input validation properly rejects invalid inputs."""
@@ -67,7 +73,7 @@ class TestQuickValidation:
                 video_files=["nonexistent_video.mp4"],
                 audio_file="nonexistent_audio.mp3",
                 output_path=output_path,
-                pattern="balanced"
+                pattern="balanced",
             )
         print("✅ Input validation correctly rejects invalid files")
 
@@ -77,7 +83,7 @@ class TestQuickValidation:
                 video_files=[],
                 audio_file="nonexistent_audio.mp3",
                 output_path=output_path,
-                pattern="balanced"
+                pattern="balanced",
             )
         print("✅ Input validation correctly rejects empty file list")
 
@@ -94,14 +100,15 @@ class TestQuickValidation:
                     video_files=["fake.mp4"],
                     audio_file="fake.mp3",
                     output_path="fake.mp4",
-                    pattern=pattern
+                    pattern=pattern,
                 )
             except (ValueError, RuntimeError) as e:
                 # Should fail on file validation, not pattern validation
                 error_msg = str(e).lower()
                 assert "pattern" not in error_msg, f"Pattern {pattern} should be valid"
-                assert any(word in error_msg for word in ["file", "not", "found", "exist"]), \
-                    f"Should fail on file issues, not pattern for {pattern}"
+                assert any(
+                    word in error_msg for word in ["file", "not", "found", "exist"]
+                ), f"Should fail on file issues, not pattern for {pattern}"
 
         print("✅ All valid patterns accepted: " + ", ".join(patterns))
 
@@ -109,7 +116,9 @@ class TestQuickValidation:
     def test_audio_analysis_basic(self, sample_audio_files):
         """Test basic audio analysis functionality."""
         # Filter out metadata files
-        real_audio_files = [f for f in sample_audio_files if not f.name.startswith("._")]
+        real_audio_files = [
+            f for f in sample_audio_files if not f.name.startswith("._")
+        ]
 
         if not real_audio_files:
             pytest.skip("No real audio files available")

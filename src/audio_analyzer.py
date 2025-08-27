@@ -14,7 +14,10 @@ import numpy as np
 
 
 def detect_musical_start(
-    y: np.ndarray, sr: int, tempo: float, beats: np.ndarray,
+    y: np.ndarray,
+    sr: int,
+    tempo: float,
+    beats: np.ndarray,
 ) -> Tuple[float, float]:
     """Detect the start of significant musical content using onset detection and energy analysis.
 
@@ -50,12 +53,16 @@ def detect_musical_start(
     hop_length = 512
     frame_length = 2048
     rms_energy = librosa.feature.rms(
-        y=y, frame_length=frame_length, hop_length=hop_length,
+        y=y,
+        frame_length=frame_length,
+        hop_length=hop_length,
     )[0]
 
     # Convert RMS frame indices to time
     rms_times = librosa.frames_to_time(
-        np.arange(len(rms_energy)), sr=sr, hop_length=hop_length,
+        np.arange(len(rms_energy)),
+        sr=sr,
+        hop_length=hop_length,
     )
 
     # Find significant energy increase (musical content start)
@@ -72,7 +79,8 @@ def detect_musical_start(
 
             # Check if energy stays high for sustained_duration
             end_idx = min(
-                i + int(sustained_duration * sr / hop_length), len(rms_energy),
+                i + int(sustained_duration * sr / hop_length),
+                len(rms_energy),
             )
 
             if np.mean(rms_energy[i:end_idx]) >= energy_threshold * 0.8:
@@ -125,7 +133,9 @@ def detect_intro_duration(
 
     # Time axis for features
     times = librosa.frames_to_time(
-        np.arange(len(rms_energy)), sr=sr, hop_length=hop_length,
+        np.arange(len(rms_energy)),
+        sr=sr,
+        hop_length=hop_length,
     )
 
     # Normalize features
@@ -161,9 +171,10 @@ def detect_intro_duration(
     return max(min_intro, min(intro_end_time, max_intro))
 
 
-
 def create_beat_hierarchy(
-    beats: np.ndarray, tempo: float, sr: int,
+    beats: np.ndarray,
+    tempo: float,
+    sr: int,
 ) -> Dict[str, List[float]]:
     """Create hierarchical beat structure with downbeats, half-beats, and measures.
 
@@ -247,7 +258,9 @@ def filter_weak_beats_in_intro(
     hop_length = 512
     onset_envelope = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
     onset_times = librosa.frames_to_time(
-        np.arange(len(onset_envelope)), sr=sr, hop_length=hop_length,
+        np.arange(len(onset_envelope)),
+        sr=sr,
+        hop_length=hop_length,
     )
 
     filtered_beats = []
@@ -322,7 +335,10 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
 
         # 1. Detect musical start and intro duration
         musical_start_time, intro_duration = detect_musical_start(
-            y, sr, tempo, beat_frames,
+            y,
+            sr,
+            tempo,
+            beat_frames,
         )
 
         # 2. Apply systematic offset compensation for librosa latency
@@ -330,7 +346,11 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
 
         # 3. Filter weak beats during intro sections
         filtered_beats = filter_weak_beats_in_intro(
-            compensated_beats, y, sr, intro_duration, strength_threshold=0.3,
+            compensated_beats,
+            y,
+            sr,
+            intro_duration,
+            strength_threshold=0.3,
         )
 
         # 4. Create beat hierarchy structure
@@ -338,7 +358,12 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
 
         # 5. Enhanced intro detection with configurable thresholds
         refined_intro_duration = detect_intro_duration(
-            y, sr, tempo, energy_threshold=0.3, min_intro=0.5, max_intro=8.0,
+            y,
+            sr,
+            tempo,
+            energy_threshold=0.3,
+            min_intro=0.5,
+            max_intro=8.0,
         )
 
         # Validate BPM range
@@ -450,7 +475,6 @@ def get_cut_points(beats: List[float], song_duration: float) -> List[float]:
     return [cp for cp in cut_points if cp <= song_duration]
 
 
-
 def test_audio_analyzer():
     """Test the audio analyzer with sample data."""
 
@@ -475,5 +499,3 @@ def test_audio_analyzer():
 
     # Test with empty beats
     empty_cuts = get_cut_points([], 5.0)
-
-

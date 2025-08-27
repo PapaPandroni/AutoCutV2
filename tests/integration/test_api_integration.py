@@ -43,11 +43,7 @@ class TestAPIIntegration:
         api = AutoCutAPI()
 
         # Verify required methods exist
-        required_methods = [
-            "process_videos",
-            "validate_video",
-            "get_system_info"
-        ]
+        required_methods = ["process_videos", "validate_video", "get_system_info"]
 
         for method in required_methods:
             assert hasattr(api, method), f"API should have {method} method"
@@ -61,7 +57,9 @@ class TestAPIIntegration:
 
         print("✅ API initialization contract validated")
 
-    def test_process_videos_parameter_validation(self, api_client: AutoCutAPI, temp_dir: Path):
+    def test_process_videos_parameter_validation(
+        self, api_client: AutoCutAPI, temp_dir: Path
+    ):
         """Test comprehensive parameter validation for process_videos method."""
         print("\n🔍 Testing process_videos parameter validation")
 
@@ -87,15 +85,15 @@ class TestAPIIntegration:
                     video_files=invalid_input,
                     audio_file="dummy.mp3",
                     output_path=output_path,
-                    pattern="balanced"
+                    pattern="balanced",
                 )
             print(f"   ✅ Invalid video_files {type(invalid_input).__name__} rejected")
 
         # Test audio_file parameter validation
         invalid_audio_files = [
             None,  # None value
-            123,   # Integer instead of string
-            [],    # List instead of string
+            123,  # Integer instead of string
+            [],  # List instead of string
         ]
 
         for invalid_input in invalid_audio_files:
@@ -104,15 +102,15 @@ class TestAPIIntegration:
                     video_files=["dummy.mp4"],
                     audio_file=invalid_input,
                     output_path=output_path,
-                    pattern="balanced"
+                    pattern="balanced",
                 )
             print(f"   ✅ Invalid audio_file {type(invalid_input).__name__} rejected")
 
         # Test output_path parameter validation
         invalid_output_paths = [
             None,  # None value
-            123,   # Integer instead of string
-            "",    # Empty string
+            123,  # Integer instead of string
+            "",  # Empty string
         ]
 
         for invalid_input in invalid_output_paths:
@@ -121,15 +119,15 @@ class TestAPIIntegration:
                     video_files=["dummy.mp4"],
                     audio_file="dummy.mp3",
                     output_path=invalid_input,
-                    pattern="balanced"
+                    pattern="balanced",
                 )
             print(f"   ✅ Invalid output_path {type(invalid_input).__name__} rejected")
 
         # Test pattern parameter validation
         invalid_patterns = [
             "invalid_pattern",  # Unknown pattern
-            123,               # Integer instead of string
-            None,              # None value
+            123,  # Integer instead of string
+            None,  # None value
         ]
 
         for invalid_input in invalid_patterns:
@@ -138,13 +136,15 @@ class TestAPIIntegration:
                     video_files=["dummy.mp4"],
                     audio_file="dummy.mp3",
                     output_path=output_path,
-                    pattern=invalid_input
+                    pattern=invalid_input,
                 )
             print(f"   ✅ Invalid pattern {invalid_input} rejected")
 
         print("✅ Parameter validation comprehensive")
 
-    def test_process_videos_valid_patterns(self, api_client: AutoCutAPI, temp_dir: Path):
+    def test_process_videos_valid_patterns(
+        self, api_client: AutoCutAPI, temp_dir: Path
+    ):
         """Test that all valid patterns are accepted by the API."""
         print("\n🎯 Testing valid pattern acceptance")
 
@@ -158,19 +158,26 @@ class TestAPIIntegration:
                     video_files=["nonexistent.mp4"],
                     audio_file="nonexistent.mp3",
                     output_path=output_path,
-                    pattern=pattern
+                    pattern=pattern,
                 )
             except (ValueError, RuntimeError, FileNotFoundError) as e:
                 # Should fail on file issues, not pattern validation
                 error_msg = str(e).lower()
-                assert "pattern" not in error_msg, f"Valid pattern {pattern} should not cause pattern error"
-                assert any(word in error_msg for word in ["file", "not", "found", "exist"]), \
-                    f"Should fail on file issues for pattern {pattern}"
-                print(f"   ✅ Pattern {pattern} accepted (failed on missing files as expected)")
+                assert "pattern" not in error_msg, (
+                    f"Valid pattern {pattern} should not cause pattern error"
+                )
+                assert any(
+                    word in error_msg for word in ["file", "not", "found", "exist"]
+                ), f"Should fail on file issues for pattern {pattern}"
+                print(
+                    f"   ✅ Pattern {pattern} accepted (failed on missing files as expected)"
+                )
 
         print("✅ All valid patterns accepted")
 
-    def test_process_videos_optional_parameters(self, api_client: AutoCutAPI, temp_dir: Path):
+    def test_process_videos_optional_parameters(
+        self, api_client: AutoCutAPI, temp_dir: Path
+    ):
         """Test optional parameters are handled correctly."""
         print("\n⚙️ Testing optional parameters")
 
@@ -183,7 +190,7 @@ class TestAPIIntegration:
                 audio_file="nonexistent.mp3",
                 output_path=output_path,
                 pattern="balanced",
-                memory_safe=True
+                memory_safe=True,
             )
         except (ValueError, RuntimeError, FileNotFoundError):
             print("   ✅ memory_safe=True parameter accepted")
@@ -194,7 +201,7 @@ class TestAPIIntegration:
                 audio_file="nonexistent.mp3",
                 output_path=output_path,
                 pattern="balanced",
-                memory_safe=False
+                memory_safe=False,
             )
         except (ValueError, RuntimeError, FileNotFoundError):
             print("   ✅ memory_safe=False parameter accepted")
@@ -206,7 +213,7 @@ class TestAPIIntegration:
                 audio_file="nonexistent.mp3",
                 output_path=output_path,
                 pattern="balanced",
-                verbose=True
+                verbose=True,
             )
         except (ValueError, RuntimeError, FileNotFoundError):
             print("   ✅ verbose=True parameter accepted")
@@ -217,7 +224,7 @@ class TestAPIIntegration:
                 audio_file="nonexistent.mp3",
                 output_path=output_path,
                 pattern="balanced",
-                verbose=False
+                verbose=False,
             )
         except (ValueError, RuntimeError, FileNotFoundError):
             print("   ✅ verbose=False parameter accepted")
@@ -253,7 +260,9 @@ class TestAPIIntegration:
         print("✅ validate_video method contract validated")
 
     @pytest.mark.media_required
-    def test_validate_video_with_real_files(self, api_client: AutoCutAPI, sample_video_files):
+    def test_validate_video_with_real_files(
+        self, api_client: AutoCutAPI, sample_video_files
+    ):
         """Test validate_video with actual media files."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
 
@@ -317,7 +326,9 @@ class TestAPIIntegration:
 
         print("✅ get_system_info method contract validated")
 
-    def test_error_propagation_and_handling(self, api_client: AutoCutAPI, temp_dir: Path):
+    def test_error_propagation_and_handling(
+        self, api_client: AutoCutAPI, temp_dir: Path
+    ):
         """Test that API properly propagates and handles errors."""
         print("\\n🚫 Testing error propagation and handling")
 
@@ -329,25 +340,32 @@ class TestAPIIntegration:
                 video_files=["definitely_does_not_exist.mp4"],
                 audio_file="also_does_not_exist.mp3",
                 output_path=output_path,
-                pattern="balanced"
+                pattern="balanced",
             )
 
         error_msg = str(exc_info.value).lower()
-        assert any(word in error_msg for word in ["file", "not", "found", "exist"]), \
+        assert any(word in error_msg for word in ["file", "not", "found", "exist"]), (
             f"Error message should mention file issues: {exc_info.value}"
-        print(f"   ✅ File not found error properly propagated: {type(exc_info.value).__name__}")
+        )
+        print(
+            f"   ✅ File not found error properly propagated: {type(exc_info.value).__name__}"
+        )
 
         # Test with invalid output directory
         invalid_output = "/root/cannot_create_here/output.mp4"
 
-        with pytest.raises((ValueError, RuntimeError, OSError, PermissionError)) as exc_info:
+        with pytest.raises(
+            (ValueError, RuntimeError, OSError, PermissionError)
+        ) as exc_info:
             api_client.process_videos(
                 video_files=["fake.mp4"],
                 audio_file="fake.mp3",
                 output_path=invalid_output,
-                pattern="balanced"
+                pattern="balanced",
             )
-        print(f"   ✅ Permission/path error properly propagated: {type(exc_info.value).__name__}")
+        print(
+            f"   ✅ Permission/path error properly propagated: {type(exc_info.value).__name__}"
+        )
 
         # Test that errors are informative
         try:
@@ -355,7 +373,7 @@ class TestAPIIntegration:
                 video_files=["missing.mp4"],
                 audio_file="missing.mp3",
                 output_path=output_path,
-                pattern="balanced"
+                pattern="balanced",
             )
         except Exception as e:
             error_msg = str(e)
@@ -371,7 +389,7 @@ class TestAPIIntegration:
         api_client: AutoCutAPI,
         sample_video_files,
         sample_audio_files,
-        api_output_dir: Path
+        api_output_dir: Path,
     ):
         """Test that API methods return values according to their contracts."""
         real_videos = [f for f in sample_video_files if not f.name.startswith("._")]
@@ -384,7 +402,10 @@ class TestAPIIntegration:
 
         # Test process_videos return value
         output_path = str(api_output_dir / "contract_test.mp4")
-        small_video = next((f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024), real_videos[0])
+        small_video = next(
+            (f for f in real_videos if f.stat().st_size < 50 * 1024 * 1024),
+            real_videos[0],
+        )
 
         try:
             result = api_client.process_videos(
@@ -393,12 +414,14 @@ class TestAPIIntegration:
                 output_path=output_path,
                 pattern="balanced",
                 memory_safe=True,
-                verbose=False
+                verbose=False,
             )
 
             # Validate return value contract
             assert result is not None, "process_videos should return a value"
-            assert isinstance(result, str), f"process_videos should return string path, got {type(result)}"
+            assert isinstance(result, str), (
+                f"process_videos should return string path, got {type(result)}"
+            )
             assert result == output_path, "Returned path should match requested path"
 
             # Validate that the returned path exists
@@ -406,7 +429,7 @@ class TestAPIIntegration:
             assert os.path.getsize(result) > 0, "Output file should not be empty"
 
             print("   ✅ process_videos return contract validated")
-            print(f"   📹 Output: {os.path.getsize(result) / (1024*1024):.1f}MB")
+            print(f"   📹 Output: {os.path.getsize(result) / (1024 * 1024):.1f}MB")
 
         except Exception as e:
             print(f"   ⚠️ process_videos failed: {e}")
@@ -439,7 +462,7 @@ class TestAPIIntegration:
                         video_files=["fake.mp4"],
                         audio_file="fake.mp3",
                         output_path="fake_output.mp4",
-                        pattern="balanced"
+                        pattern="balanced",
                     )
                 except Exception:
                     # Expected to fail - we just want to test thread safety
@@ -492,7 +515,9 @@ class TestAPIIntegration:
         required_params = ["video_files", "audio_file", "output_path", "pattern"]
 
         for param in required_params:
-            assert param in process_sig.parameters, f"Required parameter {param} missing from process_videos"
+            assert param in process_sig.parameters, (
+                f"Required parameter {param} missing from process_videos"
+            )
             print(f"   ✅ {param} parameter present")
 
         # Check that optional parameters have defaults
@@ -507,16 +532,22 @@ class TestAPIIntegration:
 
         # Test validate_video signature
         validate_sig = inspect.signature(api_client.validate_video)
-        assert "video_path" in validate_sig.parameters or len(validate_sig.parameters) >= 1, \
-            "validate_video should accept video path parameter"
+        assert (
+            "video_path" in validate_sig.parameters or len(validate_sig.parameters) >= 1
+        ), "validate_video should accept video path parameter"
         print("   ✅ validate_video signature compatible")
 
         # Test get_system_info signature
         system_sig = inspect.signature(api_client.get_system_info)
         # Should accept no required parameters
-        required_system_params = [p for p in system_sig.parameters.values()
-                                if p.default is inspect.Parameter.empty]
-        assert len(required_system_params) == 0, "get_system_info should not require parameters"
+        required_system_params = [
+            p
+            for p in system_sig.parameters.values()
+            if p.default is inspect.Parameter.empty
+        ]
+        assert len(required_system_params) == 0, (
+            "get_system_info should not require parameters"
+        )
         print("   ✅ get_system_info signature compatible")
 
         print("✅ Backwards compatibility simulation passed")
@@ -529,6 +560,7 @@ class TestAPIIntegration:
         try:
             # This tests that the API can access audio analysis
             from audio_analyzer import analyze_audio
+
             print("   ✅ Audio analyzer integration available")
         except ImportError as e:
             print(f"   ⚠️ Audio analyzer integration issue: {e}")
@@ -536,6 +568,7 @@ class TestAPIIntegration:
         try:
             # This tests that the API can access video analysis
             from video_analyzer import VideoAnalyzer
+
             print("   ✅ Video analyzer integration available")
         except ImportError as e:
             print(f"   ⚠️ Video analyzer integration issue: {e}")
@@ -543,6 +576,7 @@ class TestAPIIntegration:
         try:
             # This tests that the API can access clip assembly
             from clip_assembler import ClipAssembler
+
             print("   ✅ Clip assembler integration available")
         except ImportError as e:
             print(f"   ⚠️ Clip assembler integration issue: {e}")

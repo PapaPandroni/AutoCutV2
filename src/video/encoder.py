@@ -54,8 +54,12 @@ class VideoEncoder:
         except Exception as e:
             raise RuntimeError(f"Codec detection failed: {e!s}")
 
-    def detect_optimal_codec_settings_with_diagnostics(self) -> Tuple[
-        Dict[str, Any], List[str], Dict[str, str],
+    def detect_optimal_codec_settings_with_diagnostics(
+        self,
+    ) -> Tuple[
+        Dict[str, Any],
+        List[str],
+        Dict[str, str],
     ]:
         """Enhanced codec settings detection with full diagnostic information.
 
@@ -97,15 +101,21 @@ class VideoEncoder:
         }
 
         ffmpeg_params = [
-            "-preset", "medium",
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            "-movflags", "+faststart",
+            "-preset",
+            "medium",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
         ]
 
         return moviepy_params, ffmpeg_params
 
-    def prepare_encoding_parameters(self, target_format: Dict[str, Any]) -> Dict[str, Any]:
+    def prepare_encoding_parameters(
+        self, target_format: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Prepare encoding parameters optimized for target format.
 
         Args:
@@ -123,13 +133,14 @@ class VideoEncoder:
 
             # Adjust quality based on memory pressure
             if memory_percent > 80.0:
-
                 # Lower quality settings for memory safety
                 if "bitrate" in moviepy_params:
                     current_bitrate = moviepy_params["bitrate"]
                     if current_bitrate.endswith("k"):
                         bitrate_val = int(current_bitrate[:-1])
-                        reduced_bitrate = max(2000, int(bitrate_val * 0.6))  # Minimum 2Mbps
+                        reduced_bitrate = max(
+                            2000, int(bitrate_val * 0.6)
+                        )  # Minimum 2Mbps
                         moviepy_params["bitrate"] = f"{reduced_bitrate}k"
 
         except Exception as e:
@@ -137,47 +148,64 @@ class VideoEncoder:
 
         # Enhanced FFmpeg parameters for format consistency
         format_consistency_params = [
-            "-pix_fmt", "yuv420p",  # Consistent color format
-            "-vsync", "cfr",        # Constant frame rate conversion
-            "-async", "1",          # Audio sync parameter
+            "-pix_fmt",
+            "yuv420p",  # Consistent color format
+            "-vsync",
+            "cfr",  # Constant frame rate conversion
+            "-async",
+            "1",  # Audio sync parameter
         ]
 
         # Add FPS parameters if normalization was applied
         if target_format.get("requires_normalization", False):
-            format_consistency_params.extend([
-                "-r", str(target_format["target_fps"]),  # Force target frame rate
-            ])
+            format_consistency_params.extend(
+                [
+                    "-r",
+                    str(target_format["target_fps"]),  # Force target frame rate
+                ]
+            )
 
         # Mac-specific AAC audio parameters for QuickTime compatibility
         mac_audio_compatibility_params = [
-            "-profile:a", "aac_low",
-            "-ar", "44100",
-            "-channel_layout", "stereo",
-            "-ac", "2",
-            "-aac_coder", "twoloop",
-            "-cutoff", "18000",
+            "-profile:a",
+            "aac_low",
+            "-ar",
+            "44100",
+            "-channel_layout",
+            "stereo",
+            "-ac",
+            "2",
+            "-aac_coder",
+            "twoloop",
+            "-cutoff",
+            "18000",
         ]
 
         # Stability parameters
         stability_params = [
-            "-threads", "2",
-            "-max_muxing_queue_size", "1024",
-            "-fflags", "+genpts",
+            "-threads",
+            "2",
+            "-max_muxing_queue_size",
+            "1024",
+            "-fflags",
+            "+genpts",
         ]
 
         # MP4 container optimization
         container_optimization_params = [
-            "-movflags", "+faststart",
-            "-f", "mp4",
+            "-movflags",
+            "+faststart",
+            "-f",
+            "mp4",
         ]
 
         # Combine all FFmpeg parameters in proper order
         enhanced_ffmpeg_params = (
-            ffmpeg_params +
-            format_consistency_params +
-            mac_audio_compatibility_params +
-            stability_params +
-            container_optimization_params
+            ffmpeg_params
+            + format_consistency_params
+            + mac_audio_compatibility_params
+            + stability_params
+            + container_optimization_params
         )
 
         # Prepare comprehensive parameters
@@ -192,7 +220,6 @@ class VideoEncoder:
             "audio_bitrate": "160k",
             "write_logfile": False,
         }
-
 
     def encode_video(
         self,
@@ -225,10 +252,19 @@ class VideoEncoder:
                     )
                 except ImportError:
                     # Fallback if compatibility module not available
-                    def write_videofile_safely(video, path, compatibility_info, **kwargs):
+                    def write_videofile_safely(
+                        video, path, compatibility_info, **kwargs
+                    ):
                         video.write_videofile(path, **kwargs)
+
                     def check_moviepy_api_compatibility():
-                        return {"version_detected": "unknown", "method_mappings": {"subclip": "subclip", "set_audio": "set_audio"}}
+                        return {
+                            "version_detected": "unknown",
+                            "method_mappings": {
+                                "subclip": "subclip",
+                                "set_audio": "set_audio",
+                            },
+                        }
 
             # Get compatibility info if not cached
             if not self.compatibility_info:
@@ -236,7 +272,6 @@ class VideoEncoder:
 
             # Create output directory if needed
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
 
             encoding_start_time = time.time()
 
@@ -274,7 +309,9 @@ def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
 
 
 def detect_optimal_codec_settings_with_diagnostics() -> Tuple[
-    Dict[str, Any], List[str], Dict[str, str],
+    Dict[str, Any],
+    List[str],
+    Dict[str, str],
 ]:
     """Legacy function for backward compatibility."""
     encoder = VideoEncoder()

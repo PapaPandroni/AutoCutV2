@@ -46,14 +46,15 @@ def find_all_video_files(directory: str) -> list:
     return sorted(set(video_files))
 
 
-
 def main():
     parser = argparse.ArgumentParser(
         description="AutoCut Demo - Create beat-synced videos",
     )
     parser.add_argument("--audio", help="Specific audio file to use")
     parser.add_argument(
-        "--videos", type=int, help="Number of videos to use (default: all)",
+        "--videos",
+        type=int,
+        help="Number of videos to use (default: all)",
     )
     parser.add_argument(
         "--pattern",
@@ -65,7 +66,6 @@ def main():
 
     args = parser.parse_args()
 
-
     # Find all video files using enhanced format support
 
     video_files = find_all_video_files("test_media")
@@ -76,13 +76,11 @@ def main():
     if args.videos:
         video_files = video_files[: args.videos]
 
-
     # Group by file extension for better display
     format_counts = {}
     for vf in video_files:
         ext = Path(vf).suffix.lower()
         format_counts[ext] = format_counts.get(ext, 0) + 1
-
 
     for _i, vf in enumerate(video_files, 1):
         name = Path(vf).name
@@ -104,14 +102,12 @@ def main():
             return False
         audio_file = audio_files[0]  # Use first one
 
-
     # Generate output filename
     if args.output:
         output_file = args.output
     else:
         timestamp = int(time.time())
         output_file = f"output/autocut_demo_{args.pattern}_{timestamp}.mp4"
-
 
     # Create output directory
     os.makedirs("output", exist_ok=True)
@@ -121,7 +117,6 @@ def main():
         bar_length = 30
         filled = int(bar_length * progress)
         bar = "█" * filled + "░" * (bar_length - filled)
-
 
     try:
         start_time = time.time()
@@ -144,7 +139,6 @@ def main():
             timeline_json = result_path.replace(".mp4", "_timeline.json")
             if os.path.exists(timeline_json):
                 pass
-
 
         return True
 

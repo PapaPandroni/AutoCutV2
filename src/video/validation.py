@@ -184,7 +184,9 @@ class ValidationResult:
     ) -> "ValidationResult":
         """Create a successful validation result."""
         result = cls(
-            is_valid=True, validation_type=validation_type, file_path=file_path,
+            is_valid=True,
+            validation_type=validation_type,
+            file_path=file_path,
         )
         result.metadata.update(metadata)
         return result
@@ -200,7 +202,9 @@ class ValidationResult:
     ) -> "ValidationResult":
         """Create a failed validation result."""
         result = cls(
-            is_valid=False, validation_type=validation_type, file_path=file_path,
+            is_valid=False,
+            validation_type=validation_type,
+            file_path=file_path,
         )
         result.add_error(error_message, error_code, **context)
         return result
@@ -327,7 +331,9 @@ class VideoValidator:
         return result
 
     def validate_iphone_compatibility(
-        self, file_path: str, quick_mode: bool = False,
+        self,
+        file_path: str,
+        quick_mode: bool = False,
     ) -> ValidationResult:
         """
         Comprehensive iPhone H.265 compatibility validation.
@@ -413,7 +419,9 @@ class VideoValidator:
         return self.validate_iphone_compatibility(file_path, quick_mode=False)
 
     def validate_input_files(
-        self, video_files: List[str], audio_file: str,
+        self,
+        video_files: List[str],
+        audio_file: str,
     ) -> ValidationResult:
         """
         Validate all input files for AutoCut processing.
@@ -513,7 +521,11 @@ class VideoValidator:
 
         try:
             ffprobe_result = subprocess.run(
-                cmd, check=False, capture_output=True, text=True, timeout=10,
+                cmd,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
 
             if ffprobe_result.returncode != 0:
@@ -569,7 +581,9 @@ class VideoValidator:
             raise VideoProcessingError(f"Codec analysis failed: {e}")
 
     def _check_codec_compatibility(
-        self, codec_info: Dict[str, Any], result: ValidationResult,
+        self,
+        codec_info: Dict[str, Any],
+        result: ValidationResult,
     ) -> None:
         """Check H.264 codec and profile requirements for iPhone compatibility."""
         codec_name = codec_info.get("codec_name", "")
@@ -615,7 +629,9 @@ class VideoValidator:
             )
 
     def _check_resolution_limits(
-        self, codec_info: Dict[str, Any], result: ValidationResult,
+        self,
+        codec_info: Dict[str, Any],
+        result: ValidationResult,
     ) -> None:
         """Check resolution limits for iPhone compatibility."""
         width = codec_info.get("width", 0)
@@ -644,7 +660,9 @@ class VideoValidator:
             )
 
     def _check_frame_rate_limits(
-        self, codec_info: Dict[str, Any], result: ValidationResult,
+        self,
+        codec_info: Dict[str, Any],
+        result: ValidationResult,
     ) -> None:
         """Check frame rate limits for iPhone compatibility."""
         fps = codec_info.get("fps", 0)
@@ -663,7 +681,9 @@ class VideoValidator:
             result.add_info(f"Frame rate: {fps:.1f}fps", "FRAME_RATE_INFO", fps=fps)
 
     def _check_container_compatibility(
-        self, codec_info: Dict[str, Any], result: ValidationResult,
+        self,
+        codec_info: Dict[str, Any],
+        result: ValidationResult,
     ) -> None:
         """Check container format compatibility for iPhone."""
         container = codec_info.get("container", "").lower()
@@ -680,11 +700,15 @@ class VideoValidator:
             )
         elif container:
             result.add_info(
-                f"Container: {container}", "CONTAINER_INFO", container=container,
+                f"Container: {container}",
+                "CONTAINER_INFO",
+                container=container,
             )
 
     def _check_moviepy_compatibility(
-        self, file_path: str, result: ValidationResult,
+        self,
+        file_path: str,
+        result: ValidationResult,
     ) -> None:
         """Test MoviePy compatibility - expensive operation."""
         try:

@@ -41,7 +41,9 @@ class CodecDetector:
         self._cache_timeout = cache_timeout
 
     def detect_video_codec(
-        self, file_path: str, use_cache: bool = True,
+        self,
+        file_path: str,
+        use_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         Detect video codec and format information using FFprobe with enhanced compatibility checking.
@@ -93,7 +95,11 @@ class CodecDetector:
             ]
 
             result = subprocess.run(
-                cmd, capture_output=True, text=True, check=True, timeout=15,
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=15,
             )
             data = json.loads(result.stdout)
 
@@ -116,7 +122,11 @@ class CodecDetector:
 
             # Calculate compatibility score and warnings
             compatibility_score, warnings = self._calculate_compatibility_score(
-                standard_codec, container, format_name, video_stream, format_info,
+                standard_codec,
+                container,
+                format_name,
+                video_stream,
+                format_info,
             )
 
             codec_info = {

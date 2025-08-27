@@ -131,7 +131,11 @@ class SystemProfiler:
 
         # Performance scoring
         performance_score = self._calculate_performance_score(
-            cpu_cores, cpu_frequency_ghz, memory_total_gb, has_hw_accel, apple_silicon,
+            cpu_cores,
+            cpu_frequency_ghz,
+            memory_total_gb,
+            has_hw_accel,
+            apple_silicon,
         )
 
         return SystemCapabilities(
@@ -176,7 +180,9 @@ class SystemProfiler:
         return min(100.0, total_score)
 
     def estimate_video_memory_usage(
-        self, video_files: List[str], sample_count: int = 3,
+        self,
+        video_files: List[str],
+        sample_count: int = 3,
     ) -> VideoMemoryProfile:
         """Estimate memory usage per video based on file analysis"""
 
@@ -322,7 +328,8 @@ class SystemProfiler:
         # Apply safety bounds
         min_workers = 1
         max_workers_absolute = min(
-            12, capabilities.cpu_cores * 2,
+            12,
+            capabilities.cpu_cores * 2,
         )  # Never exceed 2x CPU cores or 12
         optimal_workers = max(min_workers, min(adjusted_workers, max_workers_absolute))
 
@@ -347,7 +354,6 @@ class SystemProfiler:
     ):
         """Print detailed system analysis for user visibility"""
 
-
         if capabilities.has_hardware_acceleration:
             pass
         else:
@@ -355,8 +361,6 @@ class SystemProfiler:
 
         if capabilities.apple_silicon:
             pass
-
-
 
         reasoning = worker_analysis["reasoning"]
 
@@ -368,7 +372,6 @@ class SystemProfiler:
         memory_usage_percent = (
             predicted_memory_gb / capabilities.memory_available_gb
         ) * 100
-
 
         if memory_usage_percent > 80 or memory_usage_percent > 60:
             pass

@@ -154,7 +154,10 @@ def process(video_files, audio, output, pattern, max_videos, memory_safe, verbos
 @cli.command()
 @click.argument("video_path", type=click.Path(exists=True))
 @click.option(
-    "--detailed", "-d", is_flag=True, help="Show detailed validation information",
+    "--detailed",
+    "-d",
+    is_flag=True,
+    help="Show detailed validation information",
 )
 def validate(video_path, detailed):
     """
@@ -276,7 +279,9 @@ def demo(quick, pattern):
 
         # Use the API's demo functionality
         result = api.run_demo(
-            quick=quick, pattern=pattern, test_media_dir=str(test_media_dir),
+            quick=quick,
+            pattern=pattern,
+            test_media_dir=str(test_media_dir),
         )
 
         if result.success:

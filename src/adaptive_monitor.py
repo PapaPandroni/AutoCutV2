@@ -40,7 +40,9 @@ class AdaptiveWorkerMonitor:
         self.min_time_between_adjustments = 30.0  # seconds
 
     def set_scale_callbacks(
-        self, scale_down_cb: Callable[[int], None], scale_up_cb: Callable[[int], None],
+        self,
+        scale_down_cb: Callable[[int], None],
+        scale_up_cb: Callable[[int], None],
     ):
         """Set callbacks for scaling workers up/down"""
         self.scale_down_callback = scale_down_cb
@@ -56,7 +58,9 @@ class AdaptiveWorkerMonitor:
 
         self.monitoring = True
         self.monitor_thread = threading.Thread(
-            target=self._monitoring_loop, daemon=True, name="AdaptiveWorkerMonitor",
+            target=self._monitoring_loop,
+            daemon=True,
+            name="AdaptiveWorkerMonitor",
         )
         self.monitor_thread.start()
 
@@ -91,7 +95,8 @@ class AdaptiveWorkerMonitor:
                 if self.current_workers > 1:
                     new_workers = max(1, self.current_workers // 2)
                     self._scale_down(
-                        new_workers, f"CRITICAL memory usage: {memory_percent:.1f}%",
+                        new_workers,
+                        f"CRITICAL memory usage: {memory_percent:.1f}%",
                     )
 
             # Warning threshold - gradual scaling
@@ -123,7 +128,8 @@ class AdaptiveWorkerMonitor:
                 ):
                     new_workers = min(self.initial_workers, self.current_workers + 1)
                     self._scale_up(
-                        new_workers, f"Memory recovered: {memory_percent:.1f}%",
+                        new_workers,
+                        f"Memory recovered: {memory_percent:.1f}%",
                     )
 
             # Normal range
@@ -142,7 +148,6 @@ class AdaptiveWorkerMonitor:
         self.current_workers = new_workers
         self.last_scale_down_time = time.time()
 
-
         if self.scale_down_callback:
             with contextlib.suppress(Exception):
                 self.scale_down_callback(new_workers)
@@ -154,7 +159,6 @@ class AdaptiveWorkerMonitor:
 
         old_workers = self.current_workers
         self.current_workers = new_workers
-
 
         if self.scale_up_callback:
             with contextlib.suppress(Exception):

@@ -68,13 +68,19 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
     # -: Output to stdout for capture
     base_cmd = [
         "ffmpeg",
-        "-i", audio_file,  # Input file
-        "-f", "s16le",     # Output format: signed 16-bit little endian
-        "-acodec", "pcm_s16le",  # Audio codec: PCM 16-bit
-        "-ac", "2",        # Audio channels: stereo
-        "-ar", "44100",    # Audio sample rate: 44.1kHz
-        "-v", "quiet",     # Suppress FFmpeg output
-        "-",               # Output to stdout
+        "-i",
+        audio_file,  # Input file
+        "-f",
+        "s16le",  # Output format: signed 16-bit little endian
+        "-acodec",
+        "pcm_s16le",  # Audio codec: PCM 16-bit
+        "-ac",
+        "2",  # Audio channels: stereo
+        "-ar",
+        "44100",  # Audio sample rate: 44.1kHz
+        "-v",
+        "quiet",  # Suppress FFmpeg output
+        "-",  # Output to stdout
     ]
 
     # WAV-specific optimizations
@@ -82,15 +88,24 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
         # Add WAV-optimized parameters to prevent common WAV processing issues
         wav_cmd = [
             "ffmpeg",
-            "-i", audio_file,
-            "-f", "s16le",
-            "-acodec", "pcm_s16le",
-            "-ac", "2",
-            "-ar", "44100",
-            "-sample_fmt", "s16",  # Explicit sample format for WAV
-            "-channel_layout", "stereo",  # Explicit channel layout
-            "-avoid_negative_ts", "make_zero",  # Fix timestamp issues
-            "-v", "quiet",
+            "-i",
+            audio_file,
+            "-f",
+            "s16le",
+            "-acodec",
+            "pcm_s16le",
+            "-ac",
+            "2",
+            "-ar",
+            "44100",
+            "-sample_fmt",
+            "s16",  # Explicit sample format for WAV
+            "-channel_layout",
+            "stereo",  # Explicit channel layout
+            "-avoid_negative_ts",
+            "make_zero",  # Fix timestamp issues
+            "-v",
+            "quiet",
             "-",
         ]
         cmd = wav_cmd
@@ -131,9 +146,13 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
             error_msg += f": {stderr_text}"
 
             # WAV-specific error handling and fallback strategies
-            if is_wav_file and ("At least one output file must be specified" in stderr_text or
-                               "Invalid data found" in stderr_text):
-                logger.warning("⚠️ WAV-specific error detected, trying fallback approach...")
+            if is_wav_file and (
+                "At least one output file must be specified" in stderr_text
+                or "Invalid data found" in stderr_text
+            ):
+                logger.warning(
+                    "⚠️ WAV-specific error detected, trying fallback approach..."
+                )
                 return _fallback_wav_processing(audio_file)
 
         logger.exception(f"❌ {error_msg}")
@@ -179,7 +198,9 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
     """
     from moviepy.audio.AudioClip import AudioArrayClip
 
-    logger.info(f"🔄 Attempting WAV fallback processing for {os.path.basename(audio_file)}")
+    logger.info(
+        f"🔄 Attempting WAV fallback processing for {os.path.basename(audio_file)}"
+    )
 
     # Strategy 1: Use simplified FFmpeg command for WAV files
     try:
@@ -187,16 +208,24 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
 
         # Ultra-simple FFmpeg command that avoids complex parameter parsing
         simple_cmd = [
-            "ffmpeg", "-y",  # Overwrite output
-            "-i", audio_file,
-            "-f", "wav",     # Explicit WAV output format
-            "-acodec", "pcm_s16le",
-            "-ar", "44100",
-            "-ac", "2",
-            "pipe:1",         # Output to stdout as pipe
+            "ffmpeg",
+            "-y",  # Overwrite output
+            "-i",
+            audio_file,
+            "-f",
+            "wav",  # Explicit WAV output format
+            "-acodec",
+            "pcm_s16le",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            "pipe:1",  # Output to stdout as pipe
         ]
 
-        process = subprocess.run(simple_cmd, capture_output=True, check=True, timeout=30)
+        process = subprocess.run(
+            simple_cmd, capture_output=True, check=True, timeout=30
+        )
 
         # Parse WAV data from stdout
         import io
@@ -230,7 +259,9 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
 
             # Create clip with original sample rate
             audio_clip = AudioArrayClip(audio_data, fps=sample_rate)
-            logger.info(f"✅ WAV Fallback Strategy 1 successful: {len(audio_data)/sample_rate:.2f}s")
+            logger.info(
+                f"✅ WAV Fallback Strategy 1 successful: {len(audio_data) / sample_rate:.2f}s"
+            )
             return audio_clip
 
     except Exception as e1:
@@ -259,15 +290,19 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
 
         # Create AudioArrayClip
         audio_clip = AudioArrayClip(audio_data, fps=sample_rate)
-        logger.info(f"✅ WAV Fallback Strategy 2 (librosa) successful: {len(audio_data)/sample_rate:.2f}s")
+        logger.info(
+            f"✅ WAV Fallback Strategy 2 (librosa) successful: {len(audio_data) / sample_rate:.2f}s"
+        )
         return audio_clip
 
     except Exception as e2:
         logger.warning(f"⚠️ Fallback Strategy 2 failed: {e2}")
 
     # All strategies failed
-    error_msg = (f"All WAV fallback strategies failed for {audio_file}. "
-                f"This WAV file may be corrupted or use an unsupported format.")
+    error_msg = (
+        f"All WAV fallback strategies failed for {audio_file}. "
+        f"This WAV file may be corrupted or use an unsupported format."
+    )
     logger.error(f"❌ {error_msg}")
     raise RuntimeError(error_msg)
 
@@ -366,7 +401,9 @@ def get_audio_info(audio_file: str) -> dict:
             "-show_streams",
             audio_file,
         ]
-        result = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            cmd, check=False, capture_output=True, text=True, timeout=10
+        )
         if result.returncode == 0:
             import json
 
@@ -447,9 +484,13 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
 
             # Enhanced error diagnostics for common FFMPEG_AudioReader issues
             if _is_ffmpeg_audioreader_error(error_str):
-                diagnostic = _diagnose_ffmpeg_audioreader_error(error_str, audio_file, is_wav_file)
+                diagnostic = _diagnose_ffmpeg_audioreader_error(
+                    error_str, audio_file, is_wav_file
+                )
                 error_diagnostics.append(f"{strategy_name}: {diagnostic}")
-                logger.warning(f"⚠️ FFMPEG_AudioReader issue detected in {strategy_name}: {diagnostic}")
+                logger.warning(
+                    f"⚠️ FFMPEG_AudioReader issue detected in {strategy_name}: {diagnostic}"
+                )
             else:
                 error_diagnostics.append(f"{strategy_name}: {error_str}")
                 logger.warning(f"⚠️ {strategy_name} failed: {error_str}")
@@ -457,7 +498,9 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
             continue
 
     # All strategies failed - provide comprehensive error report
-    error_msg = f"All audio loading strategies failed for {os.path.basename(audio_file)}"
+    error_msg = (
+        f"All audio loading strategies failed for {os.path.basename(audio_file)}"
+    )
 
     if error_diagnostics:
         error_msg += "\n\nDiagnostic Details:"
@@ -513,7 +556,9 @@ def _is_ffmpeg_audioreader_error(error_str: str) -> bool:
     return any(indicator in error_lower for indicator in ffmpeg_audioreader_indicators)
 
 
-def _diagnose_ffmpeg_audioreader_error(error_str: str, audio_file: str, is_wav_file: bool) -> str:
+def _diagnose_ffmpeg_audioreader_error(
+    error_str: str, audio_file: str, is_wav_file: bool
+) -> str:
     """
     Provide specific diagnostic information for FFMPEG_AudioReader errors.
 
@@ -530,36 +575,52 @@ def _diagnose_ffmpeg_audioreader_error(error_str: str, audio_file: str, is_wav_f
 
     # Specific error pattern matching and diagnostics
     if "at least one output file must be specified" in error_lower:
-        return (f"FFMPEG command construction failed for {filename}. "
-                f"MoviePy's FFMPEG_AudioReader built an incomplete command. "
-                f"{'WAV files commonly trigger this due to parameter parsing issues.' if is_wav_file else 'This indicates MoviePy version compatibility issues.'}")
+        return (
+            f"FFMPEG command construction failed for {filename}. "
+            f"MoviePy's FFMPEG_AudioReader built an incomplete command. "
+            f"{'WAV files commonly trigger this due to parameter parsing issues.' if is_wav_file else 'This indicates MoviePy version compatibility issues.'}"
+        )
 
     if "object has no attribute 'proc'" in error_lower:
-        return (f"FFMPEG_AudioReader cleanup race condition in {filename}. "
-                f"The subprocess handle was not properly initialized before cleanup. "
-                f"This is a known MoviePy 2.2.1 resource management bug.")
+        return (
+            f"FFMPEG_AudioReader cleanup race condition in {filename}. "
+            f"The subprocess handle was not properly initialized before cleanup. "
+            f"This is a known MoviePy 2.2.1 resource management bug."
+        )
 
     if "invalid data found" in error_lower:
-        return (f"FFmpeg could not parse audio data in {filename}. "
-                f"{'WAV file may have unusual encoding, metadata, or corruption.' if is_wav_file else 'Audio format may not be supported or file is corrupted.'}")
+        return (
+            f"FFmpeg could not parse audio data in {filename}. "
+            f"{'WAV file may have unusual encoding, metadata, or corruption.' if is_wav_file else 'Audio format may not be supported or file is corrupted.'}"
+        )
 
     if "could not find codec parameters" in error_lower:
-        return (f"FFmpeg could not detect audio codec in {filename}. "
-                f"{'WAV file may have non-standard header or missing metadata.' if is_wav_file else 'Audio codec may be unsupported or file is corrupted.'}")
+        return (
+            f"FFmpeg could not detect audio codec in {filename}. "
+            f"{'WAV file may have non-standard header or missing metadata.' if is_wav_file else 'Audio codec may be unsupported or file is corrupted.'}"
+        )
 
     if "moov atom not found" in error_lower:
-        return (f"Missing metadata container in {filename}. "
-                f"This typically indicates a truncated or corrupted audio file.")
+        return (
+            f"Missing metadata container in {filename}. "
+            f"This typically indicates a truncated or corrupted audio file."
+        )
 
     if "pipe" in error_lower and "ffmpeg" in error_lower:
-        return (f"FFmpeg subprocess communication failure with {filename}. "
-                f"Data transfer between MoviePy and FFmpeg was interrupted.")
+        return (
+            f"FFmpeg subprocess communication failure with {filename}. "
+            f"Data transfer between MoviePy and FFmpeg was interrupted."
+        )
 
     if "readers.py" in error_lower or "__del__" in error_lower:
-        return (f"MoviePy audio reader destructor error for {filename}. "
-                f"This is a known cleanup timing issue in MoviePy 2.2.1's FFMPEG_AudioReader.")
+        return (
+            f"MoviePy audio reader destructor error for {filename}. "
+            f"This is a known cleanup timing issue in MoviePy 2.2.1's FFMPEG_AudioReader."
+        )
 
     # Generic FFMPEG_AudioReader error
-    return (f"FFMPEG_AudioReader processing failed for {filename}. "
-            f"{'WAV files are particularly susceptible to these MoviePy issues.' if is_wav_file else 'This indicates a MoviePy internal error.'} "
-            f"Error details: {error_str[:100]}{'...' if len(error_str) > 100 else ''}")
+    return (
+        f"FFMPEG_AudioReader processing failed for {filename}. "
+        f"{'WAV files are particularly susceptible to these MoviePy issues.' if is_wav_file else 'This indicates a MoviePy internal error.'} "
+        f"Error details: {error_str[:100]}{'...' if len(error_str) > 100 else ''}"
+    )

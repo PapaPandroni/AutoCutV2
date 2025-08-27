@@ -143,7 +143,9 @@ class AutoCutAPI:
             raise RuntimeError(f"Video processing failed: {e!s}")
 
     def validate_video(
-        self, video_path: str, detailed: bool = False,
+        self,
+        video_path: str,
+        detailed: bool = False,
     ) -> ValidationResult:
         """
         Check video compatibility and quality
@@ -207,7 +209,11 @@ class AutoCutAPI:
             import subprocess
 
             result = subprocess.run(
-                ["ffmpeg", "-version"], check=False, capture_output=True, text=True, timeout=5,
+                ["ffmpeg", "-version"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             ffmpeg_available = result.returncode == 0
         except:
@@ -244,7 +250,11 @@ class AutoCutAPI:
         ffmpeg_version = "Not available"
         try:
             result = subprocess.run(
-                ["ffmpeg", "-version"], check=False, capture_output=True, text=True, timeout=5,
+                ["ffmpeg", "-version"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
                 # Extract version from first line

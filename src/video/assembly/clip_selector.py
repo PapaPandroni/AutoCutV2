@@ -33,18 +33,20 @@ except ImportError:
 
 class SelectionStrategy(Enum):
     """Available clip selection strategies."""
-    QUALITY_FOCUSED = "quality_focused"      # Prioritize highest quality clips
-    VARIETY_FOCUSED = "variety_focused"      # Maximize video source diversity
-    BALANCED = "balanced"                    # Balance quality and variety
+
+    QUALITY_FOCUSED = "quality_focused"  # Prioritize highest quality clips
+    VARIETY_FOCUSED = "variety_focused"  # Maximize video source diversity
+    BALANCED = "balanced"  # Balance quality and variety
     DURATION_OPTIMIZED = "duration_optimized"  # Optimize for target durations
 
 
 class OverlapResolution(Enum):
     """Strategies for resolving clip overlaps."""
-    SKIP_OVERLAPPING = "skip_overlapping"    # Skip clips that overlap
+
+    SKIP_OVERLAPPING = "skip_overlapping"  # Skip clips that overlap
     PREFER_HIGHER_QUALITY = "prefer_higher_quality"  # Keep higher quality clip
-    PREFER_EARLIER = "prefer_earlier"        # Keep clip with earlier timestamp
-    ALLOW_OVERLAPS = "allow_overlaps"        # Allow overlapping clips
+    PREFER_EARLIER = "prefer_earlier"  # Keep clip with earlier timestamp
+    ALLOW_OVERLAPS = "allow_overlaps"  # Allow overlapping clips
 
 
 @dataclass
@@ -81,6 +83,7 @@ class SelectionCriteria:
 @dataclass
 class VideoChunk:
     """Represents a video chunk for selection (enhanced compatibility)."""
+
     video_path: str
     start_time: float
     end_time: float
@@ -108,6 +111,7 @@ class VideoChunk:
 
     def __str__(self) -> str:
         from pathlib import Path
+
         return f"VideoChunk({Path(self.video_path).name}, {self.duration:.1f}s, score={self.score:.1f})"
 
 
@@ -208,10 +212,12 @@ class ClipSelector:
         }
 
     @log_performance("clip_selection")
-    def select_clips(self,
-                    candidates: List[VideoChunk],
-                    target_count: int,
-                    target_durations: Optional[List[float]] = None) -> SelectionResult:
+    def select_clips(
+        self,
+        candidates: List[VideoChunk],
+        target_count: int,
+        target_durations: Optional[List[float]] = None,
+    ) -> SelectionResult:
         """Select best clips from candidates using configured strategy.
 
         Args:
@@ -235,7 +241,9 @@ class ClipSelector:
 
             # Filter candidates by quality threshold
             qualified_clips = self._filter_by_quality(candidates)
-            ctx.log(f"Quality filtering: {len(qualified_clips)}/{len(candidates)} clips passed")
+            ctx.log(
+                f"Quality filtering: {len(qualified_clips)}/{len(candidates)} clips passed"
+            )
 
             if not qualified_clips:
                 # Return empty result if no clips meet quality threshold
@@ -243,13 +251,17 @@ class ClipSelector:
 
             # Apply selection strategy
             selected_clips = self._apply_selection_strategy(
-                qualified_clips, target_count, target_durations,
+                qualified_clips,
+                target_count,
+                target_durations,
             )
 
             # Create comprehensive result
             processing_time = time.time() - start_time
             result = self._create_selection_result(
-                candidates, selected_clips, processing_time,
+                candidates,
+                selected_clips,
+                processing_time,
             )
 
             ctx.log(
@@ -266,10 +278,12 @@ class ClipSelector:
 
             return result
 
-    def select_best_clips(self,
-                         video_chunks: List[VideoChunk],
-                         target_count: int,
-                         variety_factor: float = 0.3) -> List[VideoChunk]:
+    def select_best_clips(
+        self,
+        video_chunks: List[VideoChunk],
+        target_count: int,
+        variety_factor: float = 0.3,
+    ) -> List[VideoChunk]:
         """Legacy interface for backward compatibility.
 
         Args:
@@ -305,7 +319,9 @@ class ClipSelector:
         finally:
             self.criteria = original_criteria
 
-    def _validate_selection_inputs(self, candidates: List[VideoChunk], target_count: int) -> None:
+    def _validate_selection_inputs(
+        self, candidates: List[VideoChunk], target_count: int
+    ) -> None:
         """Validate selection inputs."""
         if not candidates:
             raise_validation_error(
@@ -347,7 +363,9 @@ class ClipSelector:
                         video_path=chunk.video_path,
                         start_time=chunk.start_time,
                         end_time=chunk.end_time,
-                        score=min(100, chunk.score * self.criteria.quality_boost_factor),
+                        score=min(
+                            100, chunk.score * self.criteria.quality_boost_factor
+                        ),
                         motion_score=chunk.motion_score,
                         face_score=chunk.face_score,
                         brightness_score=chunk.brightness_score,
@@ -361,10 +379,12 @@ class ClipSelector:
 
         return qualified
 
-    def _apply_selection_strategy(self,
-                                 candidates: List[VideoChunk],
-                                 target_count: int,
-                                 target_durations: Optional[List[float]]) -> List[VideoChunk]:
+    def _apply_selection_strategy(
+        self,
+        candidates: List[VideoChunk],
+        target_count: int,
+        target_durations: Optional[List[float]],
+    ) -> List[VideoChunk]:
         """Apply the configured selection strategy."""
         strategy = self.criteria.strategy
 
@@ -383,7 +403,9 @@ class ClipSelector:
         self.logger.warning(f"Unknown strategy {strategy}, using balanced")
         return self._select_balanced(candidates, target_count)
 
-    def _select_by_quality(self, candidates: List[VideoChunk], target_count: int) -> List[VideoChunk]:
+    def _select_by_quality(
+        self, candidates: List[VideoChunk], target_count: int
+    ) -> List[VideoChunk]:
         """Select clips prioritizing quality above all else."""
         # Sort by quality score (descending)
         sorted_candidates = sorted(candidates, key=lambda x: x.score, reverse=True)
@@ -401,7 +423,9 @@ class ClipSelector:
 
         return selected
 
-    def _select_by_variety(self, candidates: List[VideoChunk], target_count: int) -> List[VideoChunk]:
+    def _select_by_variety(
+        self, candidates: List[VideoChunk], target_count: int
+    ) -> List[VideoChunk]:
         """Select clips maximizing video source variety."""
         # Group by video file
         clips_by_video = {}
@@ -427,7 +451,9 @@ class ClipSelector:
 
             # Find next non-overlapping clip from this video
             for clip in available_clips:
-                if clip not in selected and not self._has_unacceptable_overlap(clip, selected):
+                if clip not in selected and not self._has_unacceptable_overlap(
+                    clip, selected
+                ):
                     selected.append(clip)
                     self._stats["variety_adjustments"] += 1
                     break
@@ -437,7 +463,9 @@ class ClipSelector:
 
         return selected
 
-    def _select_balanced(self, candidates: List[VideoChunk], target_count: int) -> List[VideoChunk]:
+    def _select_balanced(
+        self, candidates: List[VideoChunk], target_count: int
+    ) -> List[VideoChunk]:
         """Select clips balancing quality and variety."""
         # Group by video file
         clips_by_video = {}
@@ -474,10 +502,13 @@ class ClipSelector:
             remaining_clips = []
             for video_path in clips_by_video:
                 # Get clips beyond the base allocation
-                remaining_clips.extend([
-                    clip for clip in clips_by_video[video_path]
-                    if clip not in selected
-                ])
+                remaining_clips.extend(
+                    [
+                        clip
+                        for clip in clips_by_video[video_path]
+                        if clip not in selected
+                    ]
+                )
 
             # Sort by quality and add remaining clips
             remaining_clips.sort(key=lambda x: x.score, reverse=True)
@@ -490,10 +521,12 @@ class ClipSelector:
 
         return selected[:target_count]
 
-    def _select_by_duration(self,
-                           candidates: List[VideoChunk],
-                           target_count: int,
-                           target_durations: Optional[List[float]]) -> List[VideoChunk]:
+    def _select_by_duration(
+        self,
+        candidates: List[VideoChunk],
+        target_count: int,
+        target_durations: Optional[List[float]],
+    ) -> List[VideoChunk]:
         """Select clips optimizing for target durations."""
         if not target_durations:
             # Fall back to balanced selection if no target durations
@@ -512,7 +545,9 @@ class ClipSelector:
                     continue
 
                 # Calculate duration fit score
-                duration_fit = self._calculate_duration_fit(candidate.duration, target_duration)
+                duration_fit = self._calculate_duration_fit(
+                    candidate.duration, target_duration
+                )
                 if duration_fit < 0:
                     continue
 
@@ -522,8 +557,10 @@ class ClipSelector:
 
                 # Combined score: quality + duration fit
                 quality_score = candidate.score / 100.0
-                combined_score = (self.criteria.quality_weight * quality_score +
-                                (1 - self.criteria.quality_weight) * duration_fit)
+                combined_score = (
+                    self.criteria.quality_weight * quality_score
+                    + (1 - self.criteria.quality_weight) * duration_fit
+                )
 
                 if combined_score > best_score:
                     best_score = combined_score
@@ -535,7 +572,9 @@ class ClipSelector:
 
         return selected
 
-    def _calculate_duration_fit(self, clip_duration: float, target_duration: float) -> float:
+    def _calculate_duration_fit(
+        self, clip_duration: float, target_duration: float
+    ) -> float:
         """Calculate how well clip duration fits target duration."""
         min_dur, max_dur = self.criteria.preferred_duration_range
 
@@ -558,7 +597,9 @@ class ClipSelector:
         fit_score = 1.0 - (difference / max_acceptable_diff)
         return max(0.0, fit_score)
 
-    def _has_unacceptable_overlap(self, candidate: VideoChunk, selected: List[VideoChunk]) -> bool:
+    def _has_unacceptable_overlap(
+        self, candidate: VideoChunk, selected: List[VideoChunk]
+    ) -> bool:
         """Check if candidate has unacceptable overlap with selected clips."""
         resolution = self.criteria.overlap_resolution
 
@@ -580,7 +621,7 @@ class ClipSelector:
                 abs(selected_clip.start_time - candidate.end_time),
             )
 
-            if (overlap_duration > 0 or gap < self.criteria.min_gap_between_clips):
+            if overlap_duration > 0 or gap < self.criteria.min_gap_between_clips:
                 if resolution == OverlapResolution.SKIP_OVERLAPPING:
                     return True
                 if resolution == OverlapResolution.PREFER_HIGHER_QUALITY:
@@ -590,7 +631,9 @@ class ClipSelector:
 
         return False
 
-    def _create_empty_result(self, candidates: List[VideoChunk], start_time: float) -> SelectionResult:
+    def _create_empty_result(
+        self, candidates: List[VideoChunk], start_time: float
+    ) -> SelectionResult:
         """Create empty selection result."""
         processing_time = time.time() - start_time
 
@@ -612,10 +655,12 @@ class ClipSelector:
             criteria_used=self.criteria,
         )
 
-    def _create_selection_result(self,
-                               candidates: List[VideoChunk],
-                               selected: List[VideoChunk],
-                               processing_time: float) -> SelectionResult:
+    def _create_selection_result(
+        self,
+        candidates: List[VideoChunk],
+        selected: List[VideoChunk],
+        processing_time: float,
+    ) -> SelectionResult:
         """Create comprehensive selection result."""
         if not selected:
             return self._create_empty_result(candidates, time.time() - processing_time)
@@ -628,7 +673,9 @@ class ClipSelector:
         # Variety analysis
         clips_per_video = {}
         for clip in selected:
-            clips_per_video[clip.video_path] = clips_per_video.get(clip.video_path, 0) + 1
+            clips_per_video[clip.video_path] = (
+                clips_per_video.get(clip.video_path, 0) + 1
+            )
 
         unique_videos = len(clips_per_video)
         variety_score = unique_videos / len(selected) if selected else 0.0

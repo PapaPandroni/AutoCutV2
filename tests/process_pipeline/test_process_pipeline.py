@@ -40,12 +40,16 @@ class TestProcessPipeline:
         api_client: AutoCutAPI,
         sample_video_files: List[Path],
         sample_audio_files: List[Path],
-        output_dir: Path
+        output_dir: Path,
     ):
         """Test basic process workflow: videos + audio → output video."""
         # Filter out macOS metadata files (._*) and hidden files
-        real_video_files = [f for f in sample_video_files if not f.name.startswith("._")]
-        real_audio_files = [f for f in sample_audio_files if not f.name.startswith("._")]
+        real_video_files = [
+            f for f in sample_video_files if not f.name.startswith("._")
+        ]
+        real_audio_files = [
+            f for f in sample_audio_files if not f.name.startswith("._")
+        ]
 
         # Skip if no test media
         if not real_video_files or not real_audio_files:
@@ -71,7 +75,7 @@ class TestProcessPipeline:
             audio_file=audio_file,
             output_path=output_path,
             pattern="balanced",
-            verbose=True
+            verbose=True,
         )
 
         # Validate results
@@ -81,7 +85,7 @@ class TestProcessPipeline:
         # Check file size (should be > 0)
         file_size = os.path.getsize(result_path)
         assert file_size > 0, "Output video should not be empty"
-        print(f"✅ Created video: {file_size / (1024*1024):.1f} MB")
+        print(f"✅ Created video: {file_size / (1024 * 1024):.1f} MB")
 
     @pytest.mark.media_required
     def test_process_all_patterns(
@@ -89,18 +93,24 @@ class TestProcessPipeline:
         api_client: AutoCutAPI,
         sample_video_files: List[Path],
         sample_audio_files: List[Path],
-        output_dir: Path
+        output_dir: Path,
     ):
         """Test all editing patterns work correctly."""
         # Filter out macOS metadata files
-        real_video_files = [f for f in sample_video_files if not f.name.startswith("._")]
-        real_audio_files = [f for f in sample_audio_files if not f.name.startswith("._")]
+        real_video_files = [
+            f for f in sample_video_files if not f.name.startswith("._")
+        ]
+        real_audio_files = [
+            f for f in sample_audio_files if not f.name.startswith("._")
+        ]
 
         if not real_video_files or not real_audio_files:
             pytest.skip("No real media files available")
 
         patterns = ["energetic", "balanced", "dramatic", "buildup"]
-        video_files = [str(f) for f in real_video_files[:2]]  # Use fewer files for speed
+        video_files = [
+            str(f) for f in real_video_files[:2]
+        ]  # Use fewer files for speed
         audio_file = str(real_audio_files[0])
 
         results = {}
@@ -114,16 +124,18 @@ class TestProcessPipeline:
                 audio_file=audio_file,
                 output_path=output_path,
                 pattern=pattern,
-                verbose=False  # Reduce noise for multiple patterns
+                verbose=False,  # Reduce noise for multiple patterns
             )
 
             # Validate each pattern creates a valid output
-            assert os.path.exists(result_path), f"Pattern {pattern} should create output"
+            assert os.path.exists(result_path), (
+                f"Pattern {pattern} should create output"
+            )
             file_size = os.path.getsize(result_path)
             assert file_size > 0, f"Pattern {pattern} should create non-empty output"
 
             results[pattern] = file_size
-            print(f"✅ {pattern}: {file_size / (1024*1024):.1f} MB")
+            print(f"✅ {pattern}: {file_size / (1024 * 1024):.1f} MB")
 
         # All patterns should produce valid results
         assert len(results) == 4, "All 4 patterns should produce outputs"
@@ -135,12 +147,16 @@ class TestProcessPipeline:
         api_client: AutoCutAPI,
         sample_video_files: List[Path],
         sample_audio_files: List[Path],
-        output_dir: Path
+        output_dir: Path,
     ):
         """Test memory-safe processing mode."""
         # Filter out macOS metadata files
-        real_video_files = [f for f in sample_video_files if not f.name.startswith("._")]
-        real_audio_files = [f for f in sample_audio_files if not f.name.startswith("._")]
+        real_video_files = [
+            f for f in sample_video_files if not f.name.startswith("._")
+        ]
+        real_audio_files = [
+            f for f in sample_audio_files if not f.name.startswith("._")
+        ]
 
         if not real_video_files or not real_audio_files:
             pytest.skip("No real media files available")
@@ -158,14 +174,14 @@ class TestProcessPipeline:
             output_path=output_path,
             pattern="balanced",
             memory_safe=True,
-            verbose=True
+            verbose=True,
         )
 
         # Validate memory-safe mode works
         assert os.path.exists(result_path), "Memory-safe mode should create output"
         file_size = os.path.getsize(result_path)
         assert file_size > 0, "Memory-safe output should not be empty"
-        print(f"✅ Memory-safe processing: {file_size / (1024*1024):.1f} MB")
+        print(f"✅ Memory-safe processing: {file_size / (1024 * 1024):.1f} MB")
 
     @pytest.mark.media_required
     def test_process_max_videos_limit(
@@ -173,12 +189,16 @@ class TestProcessPipeline:
         api_client: AutoCutAPI,
         sample_video_files: List[Path],
         sample_audio_files: List[Path],
-        output_dir: Path
+        output_dir: Path,
     ):
         """Test max-videos limiting functionality."""
         # Filter out macOS metadata files
-        real_video_files = [f for f in sample_video_files if not f.name.startswith("._")]
-        real_audio_files = [f for f in sample_audio_files if not f.name.startswith("._")]
+        real_video_files = [
+            f for f in sample_video_files if not f.name.startswith("._")
+        ]
+        real_audio_files = [
+            f for f in sample_audio_files if not f.name.startswith("._")
+        ]
 
         if len(real_video_files) < 3 or not real_audio_files:
             pytest.skip("Need at least 3 real video files for max-videos test")
@@ -199,13 +219,13 @@ class TestProcessPipeline:
             audio_file=audio_file,
             output_path=output_path,
             pattern="balanced",
-            verbose=True
+            verbose=True,
         )
 
         assert os.path.exists(result_path), "Max-videos limiting should create output"
         file_size = os.path.getsize(result_path)
         assert file_size > 0, "Limited videos output should not be empty"
-        print(f"✅ Max videos limit working: {file_size / (1024*1024):.1f} MB")
+        print(f"✅ Max videos limit working: {file_size / (1024 * 1024):.1f} MB")
 
     def test_process_input_validation(self, api_client: AutoCutAPI, temp_dir: Path):
         """Test input validation and error handling."""
@@ -217,7 +237,7 @@ class TestProcessPipeline:
                 video_files=["non_existent_video.mp4"],
                 audio_file="non_existent_audio.mp3",
                 output_path=output_path,
-                pattern="balanced"
+                pattern="balanced",
             )
 
         print(f"✅ Input validation works: {exc_info.value}")
@@ -228,7 +248,7 @@ class TestProcessPipeline:
                 video_files=[],
                 audio_file="non_existent_audio.mp3",
                 output_path=output_path,
-                pattern="balanced"
+                pattern="balanced",
             )
         print("✅ Empty video list validation works")
 
@@ -238,12 +258,16 @@ class TestProcessPipeline:
         api_client: AutoCutAPI,
         sample_video_files: List[Path],
         sample_audio_files: List[Path],
-        output_dir: Path
+        output_dir: Path,
     ):
         """Test processing mixed video formats (MP4, MOV, etc.)."""
         # Filter out macOS metadata files
-        real_video_files = [f for f in sample_video_files if not f.name.startswith("._")]
-        real_audio_files = [f for f in sample_audio_files if not f.name.startswith("._")]
+        real_video_files = [
+            f for f in sample_video_files if not f.name.startswith("._")
+        ]
+        real_audio_files = [
+            f for f in sample_audio_files if not f.name.startswith("._")
+        ]
 
         if not real_video_files or not real_audio_files:
             pytest.skip("No real media files available")
@@ -269,13 +293,13 @@ class TestProcessPipeline:
             audio_file=audio_file,
             output_path=output_path,
             pattern="balanced",
-            verbose=True
+            verbose=True,
         )
 
         assert os.path.exists(result_path), "Mixed formats should create output"
         file_size = os.path.getsize(result_path)
         assert file_size > 0, "Mixed formats output should not be empty"
-        print(f"✅ Mixed formats processing: {file_size / (1024*1024):.1f} MB")
+        print(f"✅ Mixed formats processing: {file_size / (1024 * 1024):.1f} MB")
 
     @pytest.mark.media_required
     def test_process_portrait_and_landscape(
@@ -283,12 +307,16 @@ class TestProcessPipeline:
         api_client: AutoCutAPI,
         sample_video_files: List[Path],
         sample_audio_files: List[Path],
-        output_dir: Path
+        output_dir: Path,
     ):
         """Test processing mixed aspect ratios (portrait + landscape)."""
         # Filter out macOS metadata files
-        real_video_files = [f for f in sample_video_files if not f.name.startswith("._")]
-        real_audio_files = [f for f in sample_audio_files if not f.name.startswith("._")]
+        real_video_files = [
+            f for f in sample_video_files if not f.name.startswith("._")
+        ]
+        real_audio_files = [
+            f for f in sample_audio_files if not f.name.startswith("._")
+        ]
 
         if not real_video_files or not real_audio_files:
             pytest.skip("No real media files available")
@@ -316,11 +344,11 @@ class TestProcessPipeline:
             audio_file=audio_file,
             output_path=output_path,
             pattern="balanced",
-            verbose=True
+            verbose=True,
         )
 
         assert os.path.exists(result_path), "Mixed aspect ratios should create output"
         file_size = os.path.getsize(result_path)
         assert file_size > 0, "Mixed aspects output should not be empty"
-        print(f"✅ Mixed aspect ratios: {file_size / (1024*1024):.1f} MB")
+        print(f"✅ Mixed aspect ratios: {file_size / (1024 * 1024):.1f} MB")
         print("   (Should have proper letterboxing/pillarboxing)")

@@ -19,7 +19,9 @@ class VideoNormalizationPipeline:
         self.format_analyzer = format_analyzer
 
     def normalize_video_clips(
-        self, video_clips: List[Any], target_format: Dict[str, Any],
+        self,
+        video_clips: List[Any],
+        target_format: Dict[str, Any],
     ) -> List[Any]:
         """Normalize all clips to consistent format to prevent artifacts.
 
@@ -32,7 +34,6 @@ class VideoNormalizationPipeline:
         """
         if not target_format.get("requires_normalization", False):
             return video_clips
-
 
         normalized_clips = []
 
@@ -69,7 +70,10 @@ class VideoNormalizationPipeline:
         return normalized_clip
 
     def _resize_with_aspect_preservation_modern(
-        self, clip, target_width: int, target_height: int,
+        self,
+        clip,
+        target_width: int,
+        target_height: int,
     ):
         """Modern MoviePy 2.2+ letterboxing implementation with intelligent aspect ratio preservation.
 
@@ -85,13 +89,19 @@ class VideoNormalizationPipeline:
                 from .compatibility.moviepy import resize_with_aspect_preservation
 
             # NEW APPROACH: Use fit mode to preserve all video content without cropping
-            return resize_with_aspect_preservation(clip, target_width, target_height, scaling_mode="fit")
+            return resize_with_aspect_preservation(
+                clip, target_width, target_height, scaling_mode="fit"
+            )
 
         except ImportError:
             # Fallback to local implementation if compatibility module not available
-            return self._resize_with_local_fallback(clip, target_width, target_height, scaling_mode="fit")
+            return self._resize_with_local_fallback(
+                clip, target_width, target_height, scaling_mode="fit"
+            )
 
-    def _resize_with_local_fallback(self, clip, target_width: int, target_height: int, scaling_mode: str = "fit"):
+    def _resize_with_local_fallback(
+        self, clip, target_width: int, target_height: int, scaling_mode: str = "fit"
+    ):
         """Resize clip to target dimensions with intelligent letterboxing to maximize content.
 
         NEW APPROACH: Always preserve all video content (no cropping) while maximizing
@@ -113,13 +123,18 @@ class VideoNormalizationPipeline:
                 VideoFileClip,
                 concatenate_videoclips,
             )
+
             def import_moviepy_safely():
-                return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+                return (
+                    VideoFileClip,
+                    AudioFileClip,
+                    concatenate_videoclips,
+                    CompositeVideoClip,
+                )
 
         # Calculate aspect ratios
         clip_aspect = clip.w / clip.h
         target_aspect = target_width / target_height
-
 
         # Calculate scaling to maximize video size while preserving all content
         # Always use "fit" scaling to preserve all video content (no cropping)
@@ -129,20 +144,21 @@ class VideoNormalizationPipeline:
         # Use the smaller scale to ensure all content fits (fit mode)
         scale = min(width_scale, height_scale)
 
-
         # Calculate new dimensions (maintain aspect ratio)
         new_width = int(clip.w * scale)
         new_height = int(clip.h * scale)
 
-
         # Resize the video using MoviePy
         try:
-            VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = import_moviepy_safely()
+            VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = (
+                import_moviepy_safely()
+            )
             from moviepy.editor import ColorClip
 
             # Try modern MoviePy 2.x resize with effects first
             try:
                 from moviepy.video.fx.Resize import Resize
+
                 resized_clip = clip.with_effects([Resize((new_width, new_height))])
             except (ImportError, AttributeError):
                 resized_clip = clip.resized((new_width, new_height))
@@ -150,6 +166,7 @@ class VideoNormalizationPipeline:
         except ImportError:
             try:
                 from moviepy.editor import ColorClip, CompositeVideoClip
+
                 resized_clip = clip.resized((new_width, new_height))
             except Exception as fallback_error:
                 return clip
@@ -183,10 +200,12 @@ class VideoNormalizationPipeline:
             y_pos = (target_height - new_height) // 2
 
             # Create composite with centered video
-            letterboxed_clip = CompositeVideoClip([
-                background,
-                resized_clip.with_position((x_pos, y_pos)),
-            ])
+            letterboxed_clip = CompositeVideoClip(
+                [
+                    background,
+                    resized_clip.with_position((x_pos, y_pos)),
+                ]
+            )
 
             letterboxed_clip = letterboxed_clip.with_duration(resized_clip.duration)
 
@@ -202,7 +221,6 @@ class VideoNormalizationPipeline:
             else:
                 # More height padding needed (letterbox)
                 bar_height = height_difference // 2
-
 
             # Warn if utilization is very low
             if utilization < 50 or utilization > 80:

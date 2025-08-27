@@ -83,7 +83,9 @@ class ClipTimeline:
             ),
         }
 
-    def validate_timeline(self, song_duration: Optional[float] = None) -> Dict[str, Any]:
+    def validate_timeline(
+        self, song_duration: Optional[float] = None
+    ) -> Dict[str, Any]:
         """Validate timeline for common issues.
 
         Args:
@@ -203,7 +205,9 @@ class TimelineRenderer:
 
         except ImportError as import_err:
             # Log the import issue for debugging
-            raise RuntimeError(f"New rendering system not available - import failed: {import_err}")
+            raise RuntimeError(
+                f"New rendering system not available - import failed: {import_err}"
+            )
         except Exception as e:
             # Maintain backward compatibility with RuntimeError
             raise RuntimeError(f"Video rendering failed: {e!s}")

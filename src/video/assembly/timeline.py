@@ -30,6 +30,7 @@ except ImportError:
 @dataclass
 class TimelinePosition:
     """Position information for a clip in the timeline."""
+
     beat_position: float
     beat_index: int
     beat_multiplier: int
@@ -43,6 +44,7 @@ class TimelineEntry:
     Represents a single video clip with its positioning,
     timing, and quality information.
     """
+
     # Video information
     video_file: str
     start_time: float
@@ -163,8 +165,9 @@ class ClipTimeline:
         """
         # Validate entry doesn't conflict with existing entries
         for existing in self.entries:
-            if (existing.video_file == entry.video_file and
-                self._entries_overlap(existing, entry)):
+            if existing.video_file == entry.video_file and self._entries_overlap(
+                existing, entry
+            ):
                 raise_validation_error(
                     "Timeline entry conflicts with existing entry",
                     validation_type="timeline_conflict",
@@ -174,15 +177,17 @@ class ClipTimeline:
         self.entries.append(entry)
         self.logger.debug(f"Added timeline entry: {entry}")
 
-    def add_clip(self,
-                 video_file: str,
-                 start_time: float,
-                 end_time: float,
-                 beat_position: float,
-                 beat_index: int,
-                 beat_multiplier: int,
-                 quality_score: float,
-                 selection_reason: str = "quality") -> None:
+    def add_clip(
+        self,
+        video_file: str,
+        start_time: float,
+        end_time: float,
+        beat_position: float,
+        beat_index: int,
+        beat_multiplier: int,
+        quality_score: float,
+        selection_reason: str = "quality",
+    ) -> None:
         """Add a clip to the timeline (legacy interface).
 
         Args:
@@ -268,7 +273,9 @@ class ClipTimeline:
 
         sorted_entries = self.get_clips_sorted_by_beat()
         start_time = sorted_entries[0].position.beat_position
-        end_time = sorted_entries[-1].position.beat_position + sorted_entries[-1].duration
+        end_time = (
+            sorted_entries[-1].position.beat_position + sorted_entries[-1].duration
+        )
 
         return (start_time, end_time)
 
@@ -328,10 +335,12 @@ class ClipTimeline:
         }
 
     @log_performance("timeline_validation")
-    def validate_timeline(self,
-                         song_duration: Optional[float] = None,
-                         min_coverage: float = 0.8,
-                         min_quality: float = 50.0) -> Dict[str, Any]:
+    def validate_timeline(
+        self,
+        song_duration: Optional[float] = None,
+        min_coverage: float = 0.8,
+        min_quality: float = 50.0,
+    ) -> Dict[str, Any]:
         """Validate timeline for common issues.
 
         Args:
@@ -379,7 +388,9 @@ class ClipTimeline:
         if song_duration and song_duration > 0:
             coverage_ratio = stats["coverage_duration"] / song_duration
             if coverage_ratio < min_coverage:
-                warnings.append(f"Timeline covers only {coverage_ratio * 100:.1f}% of song")
+                warnings.append(
+                    f"Timeline covers only {coverage_ratio * 100:.1f}% of song"
+                )
 
         # Check for overlapping clips from same video
         overlaps = self._find_overlapping_clips()
@@ -390,7 +401,10 @@ class ClipTimeline:
         sorted_entries = self.get_clips_sorted_by_beat()
         beat_gaps = []
         for i in range(1, len(sorted_entries)):
-            current_end = sorted_entries[i-1].position.beat_position + sorted_entries[i-1].duration
+            current_end = (
+                sorted_entries[i - 1].position.beat_position
+                + sorted_entries[i - 1].duration
+            )
             next_start = sorted_entries[i].position.beat_position
             gap = next_start - current_end
             beat_gaps.append(gap)
@@ -398,7 +412,9 @@ class ClipTimeline:
         if beat_gaps:
             large_gaps = [g for g in beat_gaps if g > 2.0]
             if large_gaps:
-                warnings.append(f"Found {len(large_gaps)} large gaps between clips (>2s)")
+                warnings.append(
+                    f"Found {len(large_gaps)} large gaps between clips (>2s)"
+                )
 
         return {
             "valid": len(issues) == 0,
@@ -408,7 +424,9 @@ class ClipTimeline:
             "validation_details": {
                 "overlapping_clips": len(overlaps),
                 "large_gaps": len(large_gaps) if beat_gaps else 0,
-                "coverage_ratio": stats["coverage_duration"] / song_duration if song_duration else None,
+                "coverage_ratio": stats["coverage_duration"] / song_duration
+                if song_duration
+                else None,
             },
         }
 
@@ -456,10 +474,13 @@ class ClipTimeline:
             entry = TimelineEntry.from_dict(entry_data)
             self.add_entry(entry)
 
-        self.logger.info(f"Imported timeline from {file_path}: {len(self.entries)} entries")
+        self.logger.info(
+            f"Imported timeline from {file_path}: {len(self.entries)} entries"
+        )
 
-    def _entries_overlap(self, entry1: TimelineEntry, entry2: TimelineEntry,
-                        min_gap: float = 1.0) -> bool:
+    def _entries_overlap(
+        self, entry1: TimelineEntry, entry2: TimelineEntry, min_gap: float = 1.0
+    ) -> bool:
         """Check if two timeline entries overlap.
 
         Args:
@@ -470,8 +491,10 @@ class ClipTimeline:
         Returns:
             True if entries overlap or are too close
         """
-        return (entry1.start_time < entry2.end_time + min_gap and
-                entry1.end_time > entry2.start_time - min_gap)
+        return (
+            entry1.start_time < entry2.end_time + min_gap
+            and entry1.end_time > entry2.start_time - min_gap
+        )
 
     def _find_overlapping_clips(self) -> List[Tuple[TimelineEntry, TimelineEntry]]:
         """Find all pairs of overlapping clips from the same video.
@@ -482,9 +505,10 @@ class ClipTimeline:
         overlaps = []
 
         for i, entry1 in enumerate(self.entries):
-            for entry2 in self.entries[i+1:]:
-                if (entry1.video_file == entry2.video_file and
-                    self._entries_overlap(entry1, entry2)):
+            for entry2 in self.entries[i + 1 :]:
+                if entry1.video_file == entry2.video_file and self._entries_overlap(
+                    entry1, entry2
+                ):
                     overlaps.append((entry1, entry2))
 
         return overlaps
@@ -513,8 +537,10 @@ class ClipTimeline:
 
     def __str__(self) -> str:
         stats = self.get_summary_stats()
-        return (f"ClipTimeline('{self.name}', {stats['total_clips']} clips, "
-                f"{stats['total_duration']:.1f}s, {stats['unique_videos']} videos)")
+        return (
+            f"ClipTimeline('{self.name}', {stats['total_clips']} clips, "
+            f"{stats['total_duration']:.1f}s, {stats['unique_videos']} videos)"
+        )
 
 
 # Convenience functions for timeline creation
@@ -523,7 +549,9 @@ def create_empty_timeline(name: str = "AutoCut Timeline") -> ClipTimeline:
     return ClipTimeline(name=name)
 
 
-def merge_timelines(timelines: List[ClipTimeline], name: str = "Merged Timeline") -> ClipTimeline:
+def merge_timelines(
+    timelines: List[ClipTimeline], name: str = "Merged Timeline"
+) -> ClipTimeline:
     """Merge multiple timelines into one.
 
     Args:

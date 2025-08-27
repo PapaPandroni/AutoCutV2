@@ -22,8 +22,10 @@ try:
     from core.logging_config import get_logger, log_performance
 except ImportError:
     import logging
+
     def get_logger(name):
         return logging.getLogger(name)
+
     def log_performance(func):
         return func
 
@@ -158,7 +160,10 @@ class VideoCache:
             return None
 
     def put(
-        self, cache_key: str, video_clip: VideoFileClip, estimated_size_mb: float = 50.0,
+        self,
+        cache_key: str,
+        video_clip: VideoFileClip,
+        estimated_size_mb: float = 50.0,
     ) -> bool:
         """Put video clip into cache.
 
@@ -313,7 +318,8 @@ class VideoCache:
             lru_entry.video_clip.close()
         except Exception as e:
             self.logger.warning(
-                f"Error closing evicted video clip: {e}", extra={"cache_key": lru_key},
+                f"Error closing evicted video clip: {e}",
+                extra={"cache_key": lru_key},
             )
 
         if self.enable_stats:
@@ -353,16 +359,17 @@ class VideoCache:
                 "max_size_mb": self.max_size_mb,
                 "max_entries": self.max_entries,
                 "size_utilization_percent": round(
-                    self._current_size_mb / self.max_size_mb * 100, 1,
+                    self._current_size_mb / self.max_size_mb * 100,
+                    1,
                 ),
                 "count_utilization_percent": round(
-                    len(self._cache) / self.max_entries * 100, 1,
+                    len(self._cache) / self.max_entries * 100,
+                    1,
                 ),
                 "hit_rate_percent": round(hit_rate, 2),
                 "avg_access_time_ms": round(avg_access_time, 2),
                 **self._stats.copy(),
             }
-
 
     def get_cache_info(self) -> Dict[str, Any]:
         """Get detailed cache information.
@@ -439,13 +446,16 @@ class VideoCache:
 
             if stale_removed > 0:
                 self.logger.info(
-                    "Cache maintenance completed", extra=maintenance_report,
+                    "Cache maintenance completed",
+                    extra=maintenance_report,
                 )
 
             return maintenance_report
 
     def configure(
-        self, max_size_mb: Optional[float] = None, max_entries: Optional[int] = None,
+        self,
+        max_size_mb: Optional[float] = None,
+        max_entries: Optional[int] = None,
     ) -> None:
         """Update cache configuration.
 
@@ -471,7 +481,8 @@ class VideoCache:
 
             if changes:
                 self.logger.info(
-                    "Cache configuration updated", extra={"changes": changes},
+                    "Cache configuration updated",
+                    extra={"changes": changes},
                 )
 
     def __len__(self) -> int:

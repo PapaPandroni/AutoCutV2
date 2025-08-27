@@ -40,14 +40,15 @@ except ImportError:
 # Variety patterns for dynamic clip pacing
 VARIETY_PATTERNS = {
     "energetic": [1, 1, 2, 1, 1, 4],  # Mostly fast with occasional pause
-    "buildup": [4, 2, 2, 1, 1, 1],   # Start slow, increase pace
-    "balanced": [2, 1, 2, 4, 2, 1],   # Mixed pacing
-    "dramatic": [1, 1, 1, 1, 8],     # Fast cuts then long hold
+    "buildup": [4, 2, 2, 1, 1, 1],  # Start slow, increase pace
+    "balanced": [2, 1, 2, 4, 2, 1],  # Mixed pacing
+    "dramatic": [1, 1, 1, 1, 8],  # Fast cuts then long hold
 }
 
 
 class VarietyPattern(Enum):
     """Available variety patterns for clip assembly."""
+
     ENERGETIC = "energetic"
     BUILDUP = "buildup"
     BALANCED = "balanced"
@@ -70,7 +71,9 @@ class BeatSyncSettings:
     # Duration constraints
     min_clip_duration: float = 0.5
     max_clip_duration: float = 8.0
-    preferred_durations: List[float] = field(default_factory=lambda: [0.5, 1.0, 2.0, 4.0])
+    preferred_durations: List[float] = field(
+        default_factory=lambda: [0.5, 1.0, 2.0, 4.0]
+    )
 
     # Quality vs variety balance
     quality_weight: float = 0.7
@@ -165,10 +168,12 @@ class BeatMatcher:
         }
 
     @log_performance("beat_matching")
-    def match_clips_to_beats(self,
-                            video_chunks: List[VideoChunk],
-                            beats: List[float],
-                            timeline_name: str = "Beat-Matched Timeline") -> BeatMatchResult:
+    def match_clips_to_beats(
+        self,
+        video_chunks: List[VideoChunk],
+        beats: List[float],
+        timeline_name: str = "Beat-Matched Timeline",
+    ) -> BeatMatchResult:
         """Match video chunks to beat grid with musical intelligence.
 
         Args:
@@ -191,7 +196,9 @@ class BeatMatcher:
             ctx.log(f"Matching {len(video_chunks)} clips to {len(beats)} beats")
 
             # Apply musical intelligence to filter beats
-            effective_beats, musical_start_time = self._filter_beats_for_musical_content(beats)
+            effective_beats, musical_start_time = (
+                self._filter_beats_for_musical_content(beats)
+            )
 
             if len(effective_beats) < 2:
                 ctx.log("Insufficient effective beats after filtering", level="WARNING")
@@ -216,14 +223,24 @@ class BeatMatcher:
             # Create timeline and match clips
             timeline = ClipTimeline(name=timeline_name)
             match_stats = self._perform_beat_matching(
-                timeline, video_chunks, effective_beats, target_durations, beat_multipliers,
+                timeline,
+                video_chunks,
+                effective_beats,
+                target_durations,
+                beat_multipliers,
             )
 
             # Calculate final statistics
             processing_time = time.time() - start_time
             result = self._create_match_result(
-                timeline, video_chunks, beats, effective_beats,
-                musical_start_time, beat_analysis, match_stats, processing_time,
+                timeline,
+                video_chunks,
+                beats,
+                effective_beats,
+                musical_start_time,
+                beat_analysis,
+                match_stats,
+                processing_time,
             )
 
             ctx.log(
@@ -233,7 +250,9 @@ class BeatMatcher:
 
             return result
 
-    def _validate_inputs(self, video_chunks: List[VideoChunk], beats: List[float]) -> None:
+    def _validate_inputs(
+        self, video_chunks: List[VideoChunk], beats: List[float]
+    ) -> None:
         """Validate beat matching inputs."""
         if not video_chunks:
             raise_validation_error(
@@ -255,9 +274,9 @@ class BeatMatcher:
 
         # Validate beats are in ascending order
         for i in range(1, len(beats)):
-            if beats[i] <= beats[i-1]:
+            if beats[i] <= beats[i - 1]:
                 raise_validation_error(
-                    f"Beats must be in ascending order: {beats[i-1]} >= {beats[i]} at index {i}",
+                    f"Beats must be in ascending order: {beats[i - 1]} >= {beats[i]} at index {i}",
                     validation_type="beat_timing",
                 )
 
@@ -270,7 +289,9 @@ class BeatMatcher:
                     file_path=chunk.video_path,
                 )
 
-    def _filter_beats_for_musical_content(self, beats: List[float]) -> Tuple[List[float], float]:
+    def _filter_beats_for_musical_content(
+        self, beats: List[float]
+    ) -> Tuple[List[float], float]:
         """Apply musical intelligence to filter beats.
 
         Args:
@@ -284,7 +305,7 @@ class BeatMatcher:
 
         # Find the first significant musical beat (skip intro/buildup)
         # Look for consistent beat intervals after initial variation
-        beat_intervals = [beats[i+1] - beats[i] for i in range(len(beats)-1)]
+        beat_intervals = [beats[i + 1] - beats[i] for i in range(len(beats) - 1)]
 
         if len(beat_intervals) < 3:
             return beats, beats[0]
@@ -298,10 +319,12 @@ class BeatMatcher:
         consistency_window = 3
 
         for i in range(len(beat_intervals) - consistency_window):
-            window_intervals = beat_intervals[i:i + consistency_window]
+            window_intervals = beat_intervals[i : i + consistency_window]
             consistent_count = sum(
-                1 for interval in window_intervals
-                if abs(interval - median_interval) / median_interval < self.settings.musical_start_threshold
+                1
+                for interval in window_intervals
+                if abs(interval - median_interval) / median_interval
+                < self.settings.musical_start_threshold
             )
 
             if consistent_count >= consistency_window - 1:  # Allow one outlier
@@ -336,11 +359,13 @@ class BeatMatcher:
         if len(beats) < 2:
             return {"avg_interval": 1.0, "interval_variance": 0.0, "tempo_bpm": 60.0}
 
-        intervals = [beats[i+1] - beats[i] for i in range(len(beats)-1)]
+        intervals = [beats[i + 1] - beats[i] for i in range(len(beats) - 1)]
         avg_interval = sum(intervals) / len(intervals)
 
         # Calculate variance
-        variance = sum((interval - avg_interval) ** 2 for interval in intervals) / len(intervals)
+        variance = sum((interval - avg_interval) ** 2 for interval in intervals) / len(
+            intervals
+        )
 
         # Estimate BPM
         tempo_bpm = 60.0 / avg_interval if avg_interval > 0 else 60.0
@@ -352,7 +377,9 @@ class BeatMatcher:
             "interval_range": (min(intervals), max(intervals)),
         }
 
-    def _apply_variety_pattern(self, pattern: VarietyPattern, beat_count: int) -> List[int]:
+    def _apply_variety_pattern(
+        self, pattern: VarietyPattern, beat_count: int
+    ) -> List[int]:
         """Apply variety pattern to determine clip lengths.
 
         Args:
@@ -392,12 +419,14 @@ class BeatMatcher:
 
         return result
 
-    def _perform_beat_matching(self,
-                              timeline: ClipTimeline,
-                              video_chunks: List[VideoChunk],
-                              effective_beats: List[float],
-                              target_durations: List[float],
-                              beat_multipliers: List[int]) -> Dict[str, Any]:
+    def _perform_beat_matching(
+        self,
+        timeline: ClipTimeline,
+        video_chunks: List[VideoChunk],
+        effective_beats: List[float],
+        target_durations: List[float],
+        beat_multipliers: List[int],
+    ) -> Dict[str, Any]:
         """Perform the actual beat matching process.
 
         Args:
@@ -433,11 +462,15 @@ class BeatMatcher:
 
             # Find best matching clip for this target duration
             best_clip, fit_score = self._find_best_clip_for_duration(
-                selected_clips, target_duration, used_clips,
+                selected_clips,
+                target_duration,
+                used_clips,
             )
 
             if best_clip is None:
-                self.logger.debug(f"No suitable clip found for duration {target_duration:.2f}s")
+                self.logger.debug(
+                    f"No suitable clip found for duration {target_duration:.2f}s"
+                )
                 current_beat_index += beat_multipliers[i]
                 clips_skipped += 1
                 continue
@@ -449,7 +482,8 @@ class BeatMatcher:
             # Determine actual clip timing
             beat_position = effective_beats[current_beat_index]
             clip_start, clip_end, actual_duration = self._fit_clip_to_duration(
-                best_clip, target_duration,
+                best_clip,
+                target_duration,
             )
 
             # Create timeline position
@@ -481,11 +515,15 @@ class BeatMatcher:
         return {
             "clips_matched": clips_matched,
             "clips_skipped": clips_skipped,
-            "average_fit_score": sum(fit_scores) / len(fit_scores) if fit_scores else 0.0,
+            "average_fit_score": sum(fit_scores) / len(fit_scores)
+            if fit_scores
+            else 0.0,
             "clips_used": len(used_clips),
         }
 
-    def _select_clips_for_variety(self, video_chunks: List[VideoChunk], count: int) -> List[VideoChunk]:
+    def _select_clips_for_variety(
+        self, video_chunks: List[VideoChunk], count: int
+    ) -> List[VideoChunk]:
         """Select clips ensuring variety in source videos.
 
         Args:
@@ -567,10 +605,9 @@ class BeatMatcher:
 
         return selected[:count]
 
-    def _find_best_clip_for_duration(self,
-                                    clips: List[VideoChunk],
-                                    target_duration: float,
-                                    used_clips: set) -> Tuple[Optional[VideoChunk], float]:
+    def _find_best_clip_for_duration(
+        self, clips: List[VideoChunk], target_duration: float, used_clips: set
+    ) -> Tuple[Optional[VideoChunk], float]:
         """Find the best clip for a target duration.
 
         Args:
@@ -595,8 +632,10 @@ class BeatMatcher:
 
             # Combined score: quality + duration fit
             quality_score = clip.score / 100.0  # Normalize to 0-1
-            fit_score = (self.settings.quality_weight * quality_score +
-                        self.settings.duration_fit_weight * duration_fit)
+            fit_score = (
+                self.settings.quality_weight * quality_score
+                + self.settings.duration_fit_weight * duration_fit
+            )
 
             if fit_score > best_score:
                 best_score = fit_score
@@ -604,7 +643,9 @@ class BeatMatcher:
 
         return best_clip, best_score
 
-    def _calculate_duration_fit(self, clip_duration: float, target_duration: float) -> float:
+    def _calculate_duration_fit(
+        self, clip_duration: float, target_duration: float
+    ) -> float:
         """Calculate how well a clip duration fits the target.
 
         Args:
@@ -624,14 +665,19 @@ class BeatMatcher:
             return -1  # Target not musically appropriate
 
         # Perfect match
-        if abs(clip_duration - target_duration) < self.settings.beat_alignment_tolerance:
+        if (
+            abs(clip_duration - target_duration)
+            < self.settings.beat_alignment_tolerance
+        ):
             return 1.0
 
         # Clip longer than target - can trim
         if clip_duration > target_duration:
             excess = clip_duration - target_duration
             if excess <= self.settings.max_trim_seconds:
-                return 1.0 - (excess / (self.settings.max_trim_seconds * 2))  # Gentle penalty
+                return 1.0 - (
+                    excess / (self.settings.max_trim_seconds * 2)
+                )  # Gentle penalty
             return 0.3  # Heavy penalty for excessive trimming
 
         # Clip shorter than target
@@ -640,7 +686,9 @@ class BeatMatcher:
             return 0.8 - (shortage / 1.0)
         return -1  # Too short
 
-    def _fit_clip_to_duration(self, clip: VideoChunk, target_duration: float) -> Tuple[float, float, float]:
+    def _fit_clip_to_duration(
+        self, clip: VideoChunk, target_duration: float
+    ) -> Tuple[float, float, float]:
         """Fit clip to target duration by trimming if necessary.
 
         Args:
@@ -669,8 +717,9 @@ class BeatMatcher:
         self._stats["clips_trimmed"] += 1
         return new_start_time, clip.end_time, actual_duration
 
-    def _clips_overlap(self, clip: VideoChunk, existing_clips: List[VideoChunk],
-                      min_gap: float = 1.0) -> bool:
+    def _clips_overlap(
+        self, clip: VideoChunk, existing_clips: List[VideoChunk], min_gap: float = 1.0
+    ) -> bool:
         """Check if clip overlaps with existing clips from same video.
 
         Args:
@@ -683,20 +732,24 @@ class BeatMatcher:
         """
         for existing in existing_clips:
             if existing.video_path == clip.video_path:
-                if (clip.start_time < existing.end_time + min_gap and
-                    clip.end_time > existing.start_time - min_gap):
+                if (
+                    clip.start_time < existing.end_time + min_gap
+                    and clip.end_time > existing.start_time - min_gap
+                ):
                     return True
         return False
 
-    def _create_match_result(self,
-                            timeline: ClipTimeline,
-                            original_chunks: List[VideoChunk],
-                            original_beats: List[float],
-                            effective_beats: List[float],
-                            musical_start_time: float,
-                            beat_analysis: Dict[str, Any],
-                            match_stats: Dict[str, Any],
-                            processing_time: float) -> BeatMatchResult:
+    def _create_match_result(
+        self,
+        timeline: ClipTimeline,
+        original_chunks: List[VideoChunk],
+        original_beats: List[float],
+        effective_beats: List[float],
+        musical_start_time: float,
+        beat_analysis: Dict[str, Any],
+        match_stats: Dict[str, Any],
+        processing_time: float,
+    ) -> BeatMatchResult:
         """Create comprehensive beat match result.
 
         Returns:
@@ -713,7 +766,9 @@ class BeatMatcher:
         if original_beats:
             timeline_span = timeline_stats["coverage_duration"]
             total_song_span = original_beats[-1] - original_beats[0]
-            coverage_ratio = timeline_span / total_song_span if total_song_span > 0 else 0.0
+            coverage_ratio = (
+                timeline_span / total_song_span if total_song_span > 0 else 0.0
+            )
         else:
             coverage_ratio = 0.0
 

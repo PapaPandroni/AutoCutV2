@@ -62,7 +62,8 @@ class TestiPhoneH265Workflow:
                 # Transcode the file
                 output_path = temp_dir / "transcoded_iphone.mp4"
                 transcoding_result = transcoding_service.transcode_h265_to_h264(
-                    str(iphone_h265_file_path), str(output_path),
+                    str(iphone_h265_file_path),
+                    str(output_path),
                 )
 
                 if transcoding_result.success:
@@ -124,7 +125,8 @@ class TestiPhoneH265Workflow:
         output_path = temp_dir / f"transcoded_{capabilities.best_encoder}.mp4"
 
         result = transcoding_service.transcode_h265_to_h264(
-            str(iphone_h265_file_path), str(output_path),
+            str(iphone_h265_file_path),
+            str(output_path),
         )
 
         if capabilities.has_gpu_acceleration:
@@ -214,7 +216,9 @@ class TestiPhoneH265ErrorScenarios:
         """Test transcoding behavior with insufficient disk space."""
         # Create a large mock file
         large_input = test_helpers.create_mock_video_file(
-            temp_dir, "large_input.mov", 100.0,
+            temp_dir,
+            "large_input.mov",
+            100.0,
         )
 
         transcoding_service = TranscodingService()
@@ -224,7 +228,8 @@ class TestiPhoneH265ErrorScenarios:
         output_path = temp_dir / "large_output.mp4"
 
         result = transcoding_service.transcode_h265_to_h264(
-            str(large_input), str(output_path),
+            str(large_input),
+            str(output_path),
         )
 
         # Should handle the error gracefully
@@ -242,7 +247,8 @@ class TestiPhoneH265ErrorScenarios:
 
         transcoding_service = TranscodingService()
         result = transcoding_service.transcode_h265_to_h264(
-            str(input_file), restricted_output,
+            str(input_file),
+            restricted_output,
         )
 
         # Should handle permission errors gracefully
@@ -268,7 +274,8 @@ class TestiPhoneH265ErrorScenarios:
 
             output_path = temp_dir / "output.mp4"
             result = transcoding_service.transcode_h265_to_h264(
-                str(iphone_h265_file_path), str(output_path),
+                str(iphone_h265_file_path),
+                str(output_path),
             )
 
             assert result.success is False
@@ -345,7 +352,9 @@ class TestiPhoneH265RealWorldScenarios:
             print(f"{format_key}: {info}")
 
     def test_iphone_transcoding_quality_verification(
-        self, iphone_h265_file_path, temp_dir,
+        self,
+        iphone_h265_file_path,
+        temp_dir,
     ):
         """Test that transcoded iPhone videos maintain acceptable quality."""
         if not iphone_h265_file_path.exists():
@@ -362,7 +371,8 @@ class TestiPhoneH265RealWorldScenarios:
             # Transcode the file
             output_path = temp_dir / "quality_test_output.mp4"
             result = transcoding_service.transcode_h265_to_h264(
-                str(iphone_h265_file_path), str(output_path),
+                str(iphone_h265_file_path),
+                str(output_path),
             )
 
             if result.success:
