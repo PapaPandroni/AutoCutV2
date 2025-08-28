@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 # Add src directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.clip_assembler import assemble_clips
 from src.utils import SUPPORTED_VIDEO_FORMATS
@@ -88,7 +88,7 @@ def main():
 
     # Find audio file
     if args.audio:
-        if not os.path.exists(args.audio):
+        if not Path(args.audio).exists():
             return False
         audio_file = args.audio
     else:
@@ -110,7 +110,7 @@ def main():
         output_file = f"output/autocut_demo_{args.pattern}_{timestamp}.mp4"
 
     # Create output directory
-    os.makedirs("output", exist_ok=True)
+    Path("output").mkdir(exist_ok=True)
 
     # Progress callback
     def progress_callback(step, progress):
@@ -132,12 +132,13 @@ def main():
         elapsed = time.time() - start_time
 
         # Show file info
-        if os.path.exists(result_path):
-            file_size = os.path.getsize(result_path) / (1024 * 1024)  # MB
+        result_path_obj = Path(result_path)
+        if result_path_obj.exists():
+            file_size = result_path_obj.stat().st_size / (1024 * 1024)  # MB
 
             # Check for timeline JSON
             timeline_json = result_path.replace(".mp4", "_timeline.json")
-            if os.path.exists(timeline_json):
+            if Path(timeline_json).exists():
                 pass
 
         return True

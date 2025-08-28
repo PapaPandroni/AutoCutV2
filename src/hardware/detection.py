@@ -11,6 +11,7 @@ import os
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # Import our custom exceptions with dual import pattern
@@ -442,7 +443,7 @@ class HardwareDetector:
         Returns:
             True if output meets basic iPhone compatibility, False otherwise
         """
-        if not os.path.exists(video_path):
+        if not Path(video_path).exists():
             return False
 
         try:

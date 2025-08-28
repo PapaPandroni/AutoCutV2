@@ -9,6 +9,7 @@ and video file characteristics.
 import os
 import platform
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List
 
 try:
@@ -250,7 +251,7 @@ class SystemProfiler:
         """Analyze a single video file for memory estimation"""
 
         # Get file size
-        file_size_mb = os.path.getsize(video_file) / (1024 * 1024)
+        file_size_mb = Path(video_file).stat().st_size / (1024 * 1024)
 
         # Codec analysis
         codec_factor = 1.0

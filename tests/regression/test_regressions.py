@@ -16,7 +16,7 @@ from typing import List
 import pytest
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from api import AutoCutAPI
 from audio_analyzer import analyze_audio
@@ -74,14 +74,14 @@ class TestRegressions:
             )
 
             # Validate successful processing
-            assert os.path.exists(result_path), (
+            assert Path(result_path).exists(), (
                 "MoviePy should handle video formats correctly"
             )
-            assert os.path.getsize(result_path) > 0, "Output should not be empty"
+            assert Path(result_path).stat().st_size > 0, "Output should not be empty"
 
             print("   ✅ MoviePy compatibility maintained")
             print(f"   📹 Processed: {Path(test_video).name}")
-            print(f"   💾 Output: {os.path.getsize(result_path) / (1024 * 1024):.1f}MB")
+            print(f"   💾 Output: {Path(result_path).stat().st_size / (1024 * 1024):.1f}MB")
 
         except Exception as e:
             error_msg = str(e).lower()
@@ -209,7 +209,7 @@ class TestRegressions:
                 print(f"   Iteration {i + 1}: {current_memory:.1f}MB")
 
                 # Clean up output to prevent disk space issues
-                if os.path.exists(result_path):
+                if Path(result_path).exists():
                     os.remove(result_path)
 
             except Exception as e:
@@ -275,7 +275,7 @@ class TestRegressions:
                 )
 
                 # Clean up output file
-                if os.path.exists(result_path):
+                if Path(result_path).exists():
                     os.remove(result_path)
 
                 print(f"   ✅ Iteration {i + 1} completed")
@@ -332,13 +332,13 @@ class TestRegressions:
             )
 
             # Validate output exists and is valid
-            assert os.path.exists(result_path), "Canvas sizing should produce output"
-            assert os.path.getsize(result_path) > 0, (
+            assert Path(result_path).exists(), "Canvas sizing should produce output"
+            assert Path(result_path).stat().st_size > 0, (
                 "Canvas sizing output should not be empty"
             )
 
             print("   ✅ Canvas sizing and letterboxing working")
-            print(f"   📹 Output: {os.path.getsize(result_path) / (1024 * 1024):.1f}MB")
+            print(f"   📹 Output: {Path(result_path).stat().st_size / (1024 * 1024):.1f}MB")
 
         except Exception as e:
             error_msg = str(e).lower()
@@ -390,8 +390,8 @@ class TestRegressions:
                     verbose=False,
                 )
 
-                if os.path.exists(result_path):
-                    file_size = os.path.getsize(result_path)
+                if Path(result_path).exists():
+                    file_size = Path(result_path).stat().st_size
                     pattern_results.append((pattern, file_size))
                     print(f"     ✅ {pattern}: {file_size / (1024 * 1024):.1f}MB")
                 else:
@@ -454,10 +454,10 @@ class TestRegressions:
             )
 
             # If it succeeds, should have processed valid files only
-            if os.path.exists(result_path):
+            if Path(result_path).exists():
                 print("   ✅ Error recovery succeeded - processed valid files")
                 print(
-                    f"   📹 Output: {os.path.getsize(result_path) / (1024 * 1024):.1f}MB"
+                    f"   📹 Output: {Path(result_path).stat().st_size / (1024 * 1024):.1f}MB"
                 )
             else:
                 print("   ⚠️ Error recovery succeeded but no output created")
@@ -512,7 +512,7 @@ class TestRegressions:
                     verbose=False,
                 )
 
-                if os.path.exists(result_path):
+                if Path(result_path).exists():
                     print("   ✅ Metadata files handled correctly")
                 else:
                     print("   ⚠️ Processing completed but no output created")
@@ -539,7 +539,7 @@ class TestRegressions:
                 verbose=False,
             )
 
-            if os.path.exists(result_path):
+            if Path(result_path).exists():
                 print("   ✅ Paths with spaces handled correctly")
             else:
                 print("   ⚠️ Path with spaces test completed but no output")
@@ -585,8 +585,8 @@ class TestRegressions:
                 verbose=False,
             )
 
-            if os.path.exists(result_path):
-                file_size = os.path.getsize(result_path)
+            if Path(result_path).exists():
+                file_size = Path(result_path).stat().st_size
 
                 # Basic integrity checks
                 assert file_size > 1000, (

@@ -70,12 +70,12 @@ class CodecDetector:
             VideoProcessingError: If codec detection fails
             FileNotFoundError: If file doesn't exist or FFprobe not available
         """
-        if not os.path.exists(file_path):
+        if not Path(file_path).exists():
             raise FileNotFoundError(f"Video file not found: {file_path}")
 
         # Check cache first
         if use_cache:
-            cache_key = f"{file_path}:{os.path.getmtime(file_path)}"
+            cache_key = f"{file_path}:{Path(file_path).stat().st_mtime}"
             if cache_key in self._codec_cache:
                 return self._codec_cache[cache_key]
 

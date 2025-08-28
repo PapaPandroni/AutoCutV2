@@ -98,7 +98,7 @@ class ClipSpec:
             self.metadata = {}
 
         # Validate clip specification
-        if not os.path.exists(self.file_path):
+        if not Path(self.file_path).exists():
             raise_validation_error(
                 f"Video file does not exist: {self.file_path}",
                 validation_type="file_existence",
