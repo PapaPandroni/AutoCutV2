@@ -1984,7 +1984,7 @@ def load_video_clips_with_robust_error_handling(
                     )
                     failed_indices.append(original_index)
 
-            except Exception as e:
+            except Exception:
                 # Use original_index from grouped clips to maintain timeline alignment
                 original_index = clip_data.get("original_index", total_clips_processed)
                 failed_indices.append(original_index)
@@ -2122,7 +2122,7 @@ def load_video_clips_parallel(
                     else:
                         failed_indices.append(index)
 
-                except Exception as e:
+                except Exception:
                     failed_indices.append(index)
 
                 # Update progress
@@ -2275,7 +2275,7 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
 
                 return result
 
-            except Exception as e:
+            except Exception:
                 continue
 
     # If all methods fail, this is a critical error
