@@ -785,5 +785,5 @@ def test_independent_subclip_creation():
         VideoFileClip, _, _, _ = import_moviepy_safely()
         # This is a placeholder - actual implementation would test subclip creation
         return True
-    except:
+    except Exception:
         return False

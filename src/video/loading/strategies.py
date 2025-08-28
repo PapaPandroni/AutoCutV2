@@ -498,7 +498,7 @@ class VideoLoadingStrategy(ABC):
                 if hasattr(moviepy.editor, "VideoFileClip"):
                     # Clear any class-level caches if they exist
                     pass
-            except:
+            except Exception:
                 pass  # Ignore cache clearing errors
 
             # Log cleanup results

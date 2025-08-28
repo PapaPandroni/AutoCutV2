@@ -268,8 +268,8 @@ class VideoEncoder:
             try:
                 current_process = psutil.Process()
                 current_process.nice(10)  # Lower priority
-            except:
-                pass
+            except Exception:
+                pass  # Process priority setting is optional
 
             # Render with version-compatible parameter checking
             write_videofile_safely(
