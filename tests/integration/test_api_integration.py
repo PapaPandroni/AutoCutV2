@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from api import AutoCutAPI
 
@@ -425,11 +425,11 @@ class TestAPIIntegration:
             assert result == output_path, "Returned path should match requested path"
 
             # Validate that the returned path exists
-            assert os.path.exists(result), f"Returned path should exist: {result}"
-            assert os.path.getsize(result) > 0, "Output file should not be empty"
+            assert Path(result).exists(), f"Returned path should exist: {result}"
+            assert Path(result).stat().st_size > 0, "Output file should not be empty"
 
             print("   ✅ process_videos return contract validated")
-            print(f"   📹 Output: {os.path.getsize(result) / (1024 * 1024):.1f}MB")
+            print(f"   📹 Output: {Path(result).stat().st_size / (1024 * 1024):.1f}MB")
 
         except Exception as e:
             print(f"   ⚠️ process_videos failed: {e}")

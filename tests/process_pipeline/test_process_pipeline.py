@@ -14,7 +14,7 @@ from typing import List
 import pytest
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from api import AutoCutAPI
 
@@ -80,10 +80,10 @@ class TestProcessPipeline:
 
         # Validate results
         assert result_path == output_path, "Result path should match requested path"
-        assert os.path.exists(result_path), "Output video file should exist"
+        assert Path(result_path).exists(), "Output video file should exist"
 
         # Check file size (should be > 0)
-        file_size = os.path.getsize(result_path)
+        file_size = Path(result_path).stat().st_size
         assert file_size > 0, "Output video should not be empty"
         print(f"✅ Created video: {file_size / (1024 * 1024):.1f} MB")
 
@@ -128,10 +128,10 @@ class TestProcessPipeline:
             )
 
             # Validate each pattern creates a valid output
-            assert os.path.exists(result_path), (
+            assert Path(result_path).exists(), (
                 f"Pattern {pattern} should create output"
             )
-            file_size = os.path.getsize(result_path)
+            file_size = Path(result_path).stat().st_size
             assert file_size > 0, f"Pattern {pattern} should create non-empty output"
 
             results[pattern] = file_size
@@ -178,8 +178,8 @@ class TestProcessPipeline:
         )
 
         # Validate memory-safe mode works
-        assert os.path.exists(result_path), "Memory-safe mode should create output"
-        file_size = os.path.getsize(result_path)
+        assert Path(result_path).exists(), "Memory-safe mode should create output"
+        file_size = Path(result_path).stat().st_size
         assert file_size > 0, "Memory-safe output should not be empty"
         print(f"✅ Memory-safe processing: {file_size / (1024 * 1024):.1f} MB")
 
@@ -222,8 +222,8 @@ class TestProcessPipeline:
             verbose=True,
         )
 
-        assert os.path.exists(result_path), "Max-videos limiting should create output"
-        file_size = os.path.getsize(result_path)
+        assert Path(result_path).exists(), "Max-videos limiting should create output"
+        file_size = Path(result_path).stat().st_size
         assert file_size > 0, "Limited videos output should not be empty"
         print(f"✅ Max videos limit working: {file_size / (1024 * 1024):.1f} MB")
 
@@ -296,8 +296,8 @@ class TestProcessPipeline:
             verbose=True,
         )
 
-        assert os.path.exists(result_path), "Mixed formats should create output"
-        file_size = os.path.getsize(result_path)
+        assert Path(result_path).exists(), "Mixed formats should create output"
+        file_size = Path(result_path).stat().st_size
         assert file_size > 0, "Mixed formats output should not be empty"
         print(f"✅ Mixed formats processing: {file_size / (1024 * 1024):.1f} MB")
 
@@ -347,8 +347,8 @@ class TestProcessPipeline:
             verbose=True,
         )
 
-        assert os.path.exists(result_path), "Mixed aspect ratios should create output"
-        file_size = os.path.getsize(result_path)
+        assert Path(result_path).exists(), "Mixed aspect ratios should create output"
+        file_size = Path(result_path).stat().st_size
         assert file_size > 0, "Mixed aspects output should not be empty"
         print(f"✅ Mixed aspect ratios: {file_size / (1024 * 1024):.1f} MB")
         print("   (Should have proper letterboxing/pillarboxing)")
