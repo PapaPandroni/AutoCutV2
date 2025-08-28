@@ -1361,8 +1361,8 @@ def test_moviepy_h265_compatibility(
         try:
             if "video_clip" in locals():
                 video_clip.close()
-        except:
-            pass
+        except Exception:
+            pass  # Ignore cleanup errors
 
 
 # Enhanced hardware detection cache for performance
@@ -2045,8 +2045,8 @@ def _test_moviepy_compatibility_enhanced(
         try:
             if "video_clip" in locals():
                 video_clip.close()
-        except:
-            pass
+        except Exception:
+            pass  # Ignore cleanup errors
 
 
 def _validate_iphone_specific_requirements(video_path: str) -> Dict[str, Any]:

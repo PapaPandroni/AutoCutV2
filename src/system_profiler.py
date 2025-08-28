@@ -99,7 +99,7 @@ class SystemProfiler:
                 cpu_frequency_ghz = (
                     cpu_freq.max / 1000.0 if cpu_freq and cpu_freq.max else 2.0
                 )
-            except:
+            except Exception:
                 cpu_frequency_ghz = 2.0  # Fallback
         else:
             import multiprocessing
@@ -120,8 +120,8 @@ class SystemProfiler:
                 hw_info = self.hardware_detector.detect_optimal_settings("fast")
                 has_hw_accel = hw_info.get("encoder_type", "CPU") != "CPU"
                 hw_encoder_type = hw_info.get("encoder_type", "CPU")
-            except:
-                pass
+            except Exception:
+                pass  # Hardware detection failed
 
         # Apple Silicon detection
         apple_silicon = platform_name == "Darwin" and (

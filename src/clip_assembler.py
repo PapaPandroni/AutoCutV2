@@ -1719,8 +1719,8 @@ class RobustVideoLoader:
                     reduced_file.unlink()
                 if Path(temp_dir).exists():
                     Path(temp_dir).rmdir()
-            except:
-                pass
+            except Exception:
+                pass  # Ignore cleanup errors
             raise RuntimeError(f"Quality reduction failed: {e}") from e
 
         except subprocess.TimeoutExpired as timeout_error:
@@ -1844,8 +1844,8 @@ class RobustVideoLoader:
                     minimal_file.unlink()
                 if Path(temp_dir).exists():
                     Path(temp_dir).rmdir()
-            except:
-                pass
+            except Exception:
+                pass  # Ignore cleanup errors
             raise RuntimeError(f"Emergency loading failed: {e}") from e
 
         except subprocess.TimeoutExpired as timeout_error:
@@ -2237,7 +2237,7 @@ def check_moviepy_api_compatibility():
     try:
         write_sig = inspect.signature(video_dummy.write_videofile)
         compatibility["write_videofile_params"] = list(write_sig.parameters.keys())
-    except:
+    except Exception:
         compatibility["write_videofile_params"] = ["filename"]
 
     return compatibility
@@ -2386,8 +2386,8 @@ def test_independent_subclip_creation(video_path: Optional[str] = None) -> bool:
                 old_subclip.close()
             if "new_subclip" in locals():
                 new_subclip.close()
-        except:
-            pass
+        except Exception:
+            pass  # Ignore cleanup errors
 
 
 def import_moviepy_safely():
@@ -3079,7 +3079,7 @@ def render_video(
         try:
             encoder = VideoEncoder()
             moviepy_params, ffmpeg_params = encoder.detect_optimal_codec_settings()
-        except:
+        except Exception:
             # Fallback encoding settings
             moviepy_params = {
                 "codec": "libx264",
@@ -3774,7 +3774,7 @@ def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
         # Try to use the extracted VideoEncoder class
         encoder = VideoEncoder()
         return encoder.detect_optimal_codec_settings()
-    except:
+    except Exception:
         # Fallback to safe default settings
         moviepy_params = {
             "codec": "libx264",
@@ -3814,7 +3814,7 @@ def detect_optimal_codec_settings_with_diagnostics() -> Tuple[
         # Try to use the extracted VideoEncoder class
         encoder = VideoEncoder()
         return encoder.detect_optimal_codec_settings_with_diagnostics()
-    except:
+    except Exception:
         # Fallback with basic diagnostics
         moviepy_params, ffmpeg_params = detect_optimal_codec_settings()
         diagnostics = {
