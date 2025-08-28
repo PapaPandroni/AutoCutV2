@@ -125,7 +125,7 @@ class AutoCutAPI:
                 # Use automatic detection (None = dynamic profiling)
                 max_workers = None
 
-            result_path = assemble_clips(
+            result_path: str = assemble_clips(
                 video_files=video_files,
                 audio_file=audio_file,
                 output_path=output_path,
@@ -353,7 +353,7 @@ class AutoCutAPI:
 
             # Find audio file
             audio_extensions = ["*.mp3", "*.wav", "*.m4a", "*.flac", "*.aac", "*.ogg"]
-            audio_files = []
+            audio_files: List[str] = []
             for ext in audio_extensions:
                 audio_files.extend(str(p) for p in Path(test_media_dir).glob(ext))
 
@@ -406,7 +406,8 @@ class AutoCutAPI:
         Returns:
             List of supported video file paths
         """
-        return find_all_video_files(directory)
+        video_files: List[str] = find_all_video_files(directory)
+        return video_files
 
     def get_supported_formats(self) -> Dict[str, Union[List[str], int]]:
         """

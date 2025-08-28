@@ -93,7 +93,7 @@ class ValidationResult:
     # Performance tracking
     validation_time_ms: Optional[float] = None
 
-    def add_error(self, message: str, code: str, **context) -> None:
+    def add_error(self, message: str, code: str, **context: Any) -> None:
         """Add an error issue to the validation result."""
         self.issues.append(
             ValidationIssue(
@@ -105,7 +105,7 @@ class ValidationResult:
         )
         self.is_valid = False
 
-    def add_warning(self, message: str, code: str, **context) -> None:
+    def add_warning(self, message: str, code: str, **context: Any) -> None:
         """Add a warning issue to the validation result."""
         self.issues.append(
             ValidationIssue(
