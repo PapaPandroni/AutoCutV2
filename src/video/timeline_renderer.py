@@ -41,7 +41,7 @@ class ClipTimeline:
 
     def export_json(self, file_path: str):
         """Export timeline as JSON for debugging."""
-        with open(file_path, "w") as f:
+        with Path(file_path).open("w") as f:
             json.dump(self.clips, f, indent=2)
 
     def get_total_duration(self) -> float:
