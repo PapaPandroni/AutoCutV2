@@ -145,8 +145,6 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
         duration = len(audio_data) / 44100.0
         logger.info(f"✅ FFmpeg subprocess success: {duration:.2f}s duration")
 
-        return audio_clip
-
     except subprocess.CalledProcessError as e:
         error_msg = f"FFmpeg subprocess failed (exit code {e.returncode})"
         if e.stderr:
@@ -184,6 +182,8 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
 
         logger.exception(f"❌ {error_msg}")
         raise RuntimeError(error_msg) from e
+    else:
+        return audio_clip
 
 
 def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
@@ -270,10 +270,11 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
             logger.info(
                 f"✅ WAV Fallback Strategy 1 successful: {len(audio_data) / sample_rate:.2f}s"
             )
-            return audio_clip
 
     except Exception as e1:
         logger.warning(f"⚠️ Fallback Strategy 1 failed: {e1}")
+    else:
+        return audio_clip
 
     # Strategy 2: Use librosa as ultimate fallback
     try:
@@ -301,10 +302,11 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
         logger.info(
             f"✅ WAV Fallback Strategy 2 (librosa) successful: {len(audio_data) / sample_rate:.2f}s"
         )
-        return audio_clip
 
     except Exception as e2:
         logger.warning(f"⚠️ Fallback Strategy 2 failed: {e2}")
+    else:
+        return audio_clip
 
     # All strategies failed
     error_msg = (
@@ -370,12 +372,12 @@ def load_audio_with_librosa(audio_file: str) -> "AudioArrayClip":
         duration = len(audio_data) / sample_rate
         logger.info(f"✅ Librosa success: {duration:.2f}s duration, {sample_rate}Hz")
 
-        return audio_clip
-
     except Exception as e:
         error_msg = f"Librosa loading failed: {e!s}"
         logger.exception(f"❌ {error_msg}")
         raise RuntimeError(error_msg) from e
+    else:
+        return audio_clip
 
 
 def get_audio_info(audio_file: str) -> dict:
@@ -484,7 +486,6 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
             logger.info(f"🔄 Attempting: {strategy_name}")
             result = loader_func(audio_file)
             logger.info(f"✅ Audio loading successful with {strategy_name}")
-            return result, None
         except Exception as e:
             error_str = str(e)
 
@@ -502,6 +503,8 @@ def load_audio_robust(audio_file: str) -> "AudioArrayClip":
                 logger.warning(f"⚠️ {strategy_name} failed: {error_str}")
 
             return None, e
+        else:
+            return result, None
 
     # Try each strategy in order
     for strategy_name, loader_func in strategies:

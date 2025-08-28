@@ -137,10 +137,10 @@ class AutoCutAPI:
             if verbose:
                 pass
 
-            return result_path
-
         except Exception as e:
             raise RuntimeError(f"Video processing failed: {e!s}") from e
+        else:
+            return result_path
 
     def validate_video(
         self,

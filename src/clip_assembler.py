@@ -280,10 +280,10 @@ def load_video_segment(
         # Extract the specific segment using safe compatibility method
         segment = subclip_safely(source_video, clip_data["start"], clip_data["end"])
 
-        return (clip_data, segment)
-
     except Exception:
         return None
+    else:
+        return (clip_data, segment)
 
 
 # ============================================================================
@@ -390,10 +390,10 @@ class VideoResourceManager:
             self.delayed_cleanup_videos[video_path] = video
             self.active_videos.add(id(video))
 
-            return video
-
         except Exception as e:
             raise RuntimeError(f"Failed to load video {video_path}: {e!s}") from e
+        else:
+            return video
 
     def cleanup_delayed_videos(self) -> None:
         """Clean up all videos that were loaded with delayed cleanup.

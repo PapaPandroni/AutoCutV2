@@ -87,10 +87,11 @@ class AdaptiveWorkerMonitor:
         """Safe wrapper for _check_and_adjust that handles exceptions outside the loop."""
         try:
             self._check_and_adjust()
-            return True
         except Exception:
             self.logger.exception("Monitoring check failed")
             return False
+        else:
+            return True
 
     def _check_and_adjust(self):
         """Check memory usage and adjust workers if needed"""
