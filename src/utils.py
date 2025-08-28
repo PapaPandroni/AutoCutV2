@@ -2202,8 +2202,6 @@ def find_all_video_files(directory: str) -> List[str]:
     Returns:
         List of video file paths, sorted and deduplicated
     """
-    import glob
-
     video_files = []
     search_patterns = []
 

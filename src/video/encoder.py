@@ -10,7 +10,6 @@ Extracted from clip_assembler.py as part of system consolidation.
 """
 
 import logging
-import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 

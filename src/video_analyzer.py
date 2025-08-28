@@ -5,7 +5,6 @@ Handles video processing including scene detection, quality scoring,
 motion analysis, and face detection.
 """
 
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 

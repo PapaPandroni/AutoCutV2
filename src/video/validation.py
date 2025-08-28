@@ -7,7 +7,6 @@ reporting and comprehensive iPhone H.265 compatibility checking.
 """
 
 import json
-import os
 import subprocess
 from dataclasses import dataclass, field
 from enum import Enum

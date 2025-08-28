@@ -7,7 +7,6 @@ compatibility checking and detailed metadata extraction.
 """
 
 import json
-import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
