@@ -114,6 +114,7 @@ class AutoCutAPI:
                 bar_length = 30
                 filled = int(bar_length * progress)
                 bar = "█" * filled + "░" * (bar_length - filled)
+                print(f"\r{step}: [{bar}] {progress:.1%}", end="", flush=True)
 
         try:
             # Call core assembler function with dynamic or memory-optimized workers

@@ -187,7 +187,6 @@ def create_beat_hierarchy(
         Dictionary with beat hierarchy
     """
     beat_times = librosa.frames_to_time(beats, sr=sr)
-    beat_duration = 60.0 / tempo
 
     # Generate half-beats (between main beats)
     half_beats = []

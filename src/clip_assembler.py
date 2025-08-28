@@ -74,7 +74,7 @@ try:
     from video.format_analyzer import VideoFormatAnalyzer
     from video.normalization import VideoNormalizationPipeline
     from video.timeline_renderer import ClipTimeline, TimelineRenderer
-except ImportError as e:
+except ImportError:
     # Classes will be defined inline below for backward compatibility
     try:
         from video_analyzer import VideoChunk
@@ -282,7 +282,7 @@ def load_video_segment(
 
         return (clip_data, segment)
 
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -548,7 +548,7 @@ def load_video_clips_sequential(
                     clip_results[original_index] = segment
                     file_clips_loaded += 1
 
-                except Exception as e:
+                except Exception:
                     # Use original_index from grouped clips to maintain timeline alignment
                     original_index = clip_data.get(
                         "original_index",
@@ -569,7 +569,7 @@ def load_video_clips_sequential(
                 progress,
             )
 
-        except Exception as e:
+        except Exception:
             # Mark all clips from this file as failed using original indices
             for clip_data in file_clips:
                 original_index = clip_data.get("original_index", total_clips_processed)
