@@ -202,7 +202,7 @@ class AutoCutGUI:
         for file in files:
             if file not in self.video_files:
                 self.video_files.append(file)
-                self.video_listbox.insert(tk.END, os.path.basename(file))
+                self.video_listbox.insert(tk.END, Path(file).name)
 
     def remove_video(self):
         """Remove selected video from list."""
@@ -224,7 +224,7 @@ class AutoCutGUI:
 
         if file:
             self.music_file = file
-            self.music_var.set(os.path.basename(file))
+            self.music_var.set(Path(file).name)
 
     def select_output(self):
         """Open file dialog to select output location."""
@@ -236,7 +236,7 @@ class AutoCutGUI:
 
         if file:
             self.output_path = file
-            self.output_var.set(os.path.basename(file))
+            self.output_var.set(Path(file).name)
 
     def validate_inputs(self) -> bool:
         """Validate that all required inputs are provided."""

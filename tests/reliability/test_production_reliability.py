@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from api import AutoCutAPI
 
@@ -73,12 +73,12 @@ class TestProductionReliability:
 
             processing_time = time.time() - start_time
 
-            assert os.path.exists(result_path), "Memory-safe mode should create output"
-            assert os.path.getsize(result_path) > 0, "Output should not be empty"
+            assert Path(result_path).exists(), "Memory-safe mode should create output"
+            assert Path(result_path).stat().st_size > 0, "Output should not be empty"
 
             print(f"✅ Memory-safe processing completed in {processing_time:.1f}s")
             print(
-                f"   Output size: {os.path.getsize(result_path) / (1024 * 1024):.1f} MB"
+                f"   Output size: {Path(result_path).stat().st_size / (1024 * 1024):.1f} MB"
             )
 
         except Exception as e:
@@ -241,9 +241,9 @@ class TestProductionReliability:
             # If it succeeds, it should have processed only the good files
             print("   ✅ Processing succeeded with partial files")
 
-            if os.path.exists(result_path):
+            if Path(result_path).exists():
                 print(
-                    f"   📹 Output created: {os.path.getsize(result_path) / (1024 * 1024):.1f} MB"
+                    f"   📹 Output created: {Path(result_path).stat().st_size / (1024 * 1024):.1f} MB"
                 )
 
         except Exception as e:
@@ -403,8 +403,8 @@ class TestProductionReliability:
 
             processing_time = time.time() - start_time
 
-            if os.path.exists(result_path):
-                file_size = os.path.getsize(result_path) / (1024 * 1024)
+            if Path(result_path).exists():
+                file_size = Path(result_path).stat().st_size / (1024 * 1024)
                 print(f"   ✅ Batch processing completed in {processing_time:.1f}s")
                 print(
                     f"   📹 Output: {file_size:.1f} MB from {len(video_files)} input videos"
@@ -466,7 +466,7 @@ class TestProductionReliability:
                     verbose=False,
                 )
 
-                if os.path.exists(result_path) and os.path.getsize(result_path) > 0:
+                if Path(result_path).exists() and Path(result_path).stat().st_size > 0:
                     success_count += 1
                     print(f"   ✅ Iteration {i + 1} successful")
                 else:

@@ -15,7 +15,7 @@ from pathlib import Path
 import click
 
 # Add src directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Import the API - no src. prefix needed since src is in path
 from api import AutoCutAPI
@@ -83,11 +83,11 @@ def process(video_files, audio, output, pattern, max_videos, memory_safe, verbos
         for pattern_or_file in video_files:
             # Handle glob patterns and individual files
             if "*" in pattern_or_file:
-                import glob
+                from pathlib import Path as PathlibPath
 
-                matched_files = glob.glob(pattern_or_file)
+                matched_files = [str(p) for p in PathlibPath().glob(pattern_or_file)]
                 video_list.extend(matched_files)
-            elif os.path.exists(pattern_or_file):
+            elif Path(pattern_or_file).exists():
                 video_list.append(pattern_or_file)
             else:
                 click.echo(f"❌ File not found: {pattern_or_file}", err=True)
@@ -113,7 +113,8 @@ def process(video_files, audio, output, pattern, max_videos, memory_safe, verbos
             output = f"output/autocut_{pattern}_{timestamp}.mp4"
 
         # Create output directory
-        os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
+        output_dir = Path(output).parent if Path(output).parent != Path() else Path()
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         if verbose:
             click.echo(f"📄 Output: {output}")
@@ -136,8 +137,8 @@ def process(video_files, audio, output, pattern, max_videos, memory_safe, verbos
         # Show results
         click.echo(f"\n✅ Success! Created: {result_path}")
 
-        if os.path.exists(result_path):
-            file_size = os.path.getsize(result_path) / (1024 * 1024)  # MB
+        if Path(result_path).exists():
+            file_size = Path(result_path).stat().st_size / (1024 * 1024)  # MB
             click.echo(f"   Size: {file_size:.1f} MB")
 
         click.echo("\n🎬 Your beat-synced video is ready to watch!")
