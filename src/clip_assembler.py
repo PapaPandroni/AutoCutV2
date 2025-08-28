@@ -2778,13 +2778,11 @@ def _clips_overlap(
         True if clip overlaps with any existing clip from same video
     """
     for existing in existing_clips:
-        if existing.video_path == clip.video_path:
-            # Check for overlap or too close proximity
-            if (
-                clip.start_time < existing.end_time + min_gap
-                and clip.end_time > existing.start_time - min_gap
-            ):
-                return True
+        # Check for overlap or too close proximity from same video
+        if (existing.video_path == clip.video_path
+            and clip.start_time < existing.end_time + min_gap
+            and clip.end_time > existing.start_time - min_gap):
+            return True
     return False
 
 

@@ -304,15 +304,14 @@ class TranscodingService:
                 return result
 
             # Determine processing strategy
-            if not codec_info["is_hevc"]:
-                # Not H.265 - check if additional processing needed
-                if compatibility_score >= 80:
-                    result["success"] = True
-                    result["diagnostic_message"] = (
-                        f"Native {codec_info['codec']} compatibility (score: {compatibility_score})"
-                    )
-                    result["processing_time"] = time.time() - start_time
-                    return result
+            # Not H.265 - check if additional processing needed
+            if not codec_info["is_hevc"] and compatibility_score >= 80:
+                result["success"] = True
+                result["diagnostic_message"] = (
+                    f"Native {codec_info['codec']} compatibility (score: {compatibility_score})"
+                )
+                result["processing_time"] = time.time() - start_time
+                return result
 
             # H.265 processing
 

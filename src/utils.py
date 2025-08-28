@@ -1081,16 +1081,15 @@ def preprocess_video_if_needed_enhanced(
             return result
 
         # Phase 2: Determine processing strategy
-        if not codec_info["is_hevc"]:
-            # Not H.265 - check if additional processing needed
-            if compatibility_score >= 80:
-                result["success"] = True
-                result["diagnostic_message"] = (
-                    f"Native {codec_info['codec']} compatibility (score: {compatibility_score})"
-                )
-                result["processing_time"] = time.time() - start_time
-                return result
-                # Could add non-H.265 transcoding here if needed
+        # Not H.265 - check if additional processing needed
+        if not codec_info["is_hevc"] and compatibility_score >= 80:
+            result["success"] = True
+            result["diagnostic_message"] = (
+                f"Native {codec_info['codec']} compatibility (score: {compatibility_score})"
+            )
+            result["processing_time"] = time.time() - start_time
+            return result
+            # Could add non-H.265 transcoding here if needed
 
         # Phase 3: H.265 processing
 

@@ -731,12 +731,10 @@ class BeatMatcher:
             True if clip overlaps with any existing clip
         """
         for existing in existing_clips:
-            if existing.video_path == clip.video_path:
-                if (
-                    clip.start_time < existing.end_time + min_gap
-                    and clip.end_time > existing.start_time - min_gap
-                ):
-                    return True
+            if (existing.video_path == clip.video_path
+                and clip.start_time < existing.end_time + min_gap
+                and clip.end_time > existing.start_time - min_gap):
+                return True
         return False
 
     def _create_match_result(

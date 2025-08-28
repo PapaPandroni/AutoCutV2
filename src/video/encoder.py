@@ -123,17 +123,15 @@ class VideoEncoder:
         try:
             memory_percent = psutil.virtual_memory().percent
 
-            # Adjust quality based on memory pressure
-            if memory_percent > 80.0:
-                # Lower quality settings for memory safety
-                if "bitrate" in moviepy_params:
-                    current_bitrate = moviepy_params["bitrate"]
-                    if current_bitrate.endswith("k"):
-                        bitrate_val = int(current_bitrate[:-1])
-                        reduced_bitrate = max(
-                            2000, int(bitrate_val * 0.6)
-                        )  # Minimum 2Mbps
-                        moviepy_params["bitrate"] = f"{reduced_bitrate}k"
+            # Adjust quality based on memory pressure and lower quality settings for memory safety
+            if memory_percent > 80.0 and "bitrate" in moviepy_params:
+                current_bitrate = moviepy_params["bitrate"]
+                if current_bitrate.endswith("k"):
+                    bitrate_val = int(current_bitrate[:-1])
+                    reduced_bitrate = max(
+                        2000, int(bitrate_val * 0.6)
+                    )  # Minimum 2Mbps
+                    moviepy_params["bitrate"] = f"{reduced_bitrate}k"
 
         except Exception as e:
             # Log memory monitoring failure but continue encoding
