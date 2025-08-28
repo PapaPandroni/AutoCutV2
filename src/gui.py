@@ -5,7 +5,6 @@ Provides a simple Tkinter-based interface for non-technical users
 to create beat-synced highlight videos.
 """
 
-import os
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk

@@ -4,7 +4,6 @@ Quick validation tests for core pipeline functionality.
 Fast tests to validate the system is working without long processing times.
 """
 
-import os
 import sys
 from pathlib import Path
 

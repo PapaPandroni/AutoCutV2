@@ -8,10 +8,7 @@ This is a simplified version that focuses on testing the current API
 without complex mocking or outdated method calls.
 """
 
-import pytest
-
 from src.video.validation import (
-    ValidationError,
     ValidationIssue,
     ValidationResult,
     ValidationSeverity,

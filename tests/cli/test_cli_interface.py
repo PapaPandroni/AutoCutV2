@@ -6,7 +6,6 @@ These tests validate the `autocut.py` commands that power the production system.
 """
 
 import os
-import shutil
 import subprocess
 import sys
 import tempfile

@@ -5,9 +5,7 @@ Tests the main production pipeline that powers the `autocut.py process` command.
 These tests validate the end-to-end workflow that users will experience in v1.0.
 """
 
-import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import List
 

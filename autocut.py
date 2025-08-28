@@ -7,7 +7,6 @@ It analyzes video quality, detects music rhythm, and intelligently assembles cli
 that match the beat - all without requiring video editing knowledge.
 """
 
-import os
 import sys
 import time
 from pathlib import Path

@@ -6,12 +6,8 @@ These tests validate that resolved problems don't reoccur in future versions.
 """
 
 import os
-import shutil
 import sys
-import tempfile
-import time
 from pathlib import Path
-from typing import List
 
 import pytest
 

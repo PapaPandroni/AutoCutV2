@@ -73,7 +73,7 @@ try:
     )
     from video.format_analyzer import VideoFormatAnalyzer
     from video.normalization import VideoNormalizationPipeline
-    from video.timeline_renderer import ClipTimeline, TimelineRenderer
+    from video.timeline_renderer import ClipTimeline
 except ImportError:
     # Classes will be defined inline below for backward compatibility
     try:

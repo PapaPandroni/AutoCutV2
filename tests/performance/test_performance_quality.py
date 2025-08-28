@@ -8,10 +8,8 @@ These tests ensure the system meets v1.0 performance and quality requirements.
 import os
 import statistics
 import sys
-import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List
 
 import psutil
 import pytest
