@@ -12,10 +12,10 @@ import pytest
 
 from src.video.validation import (
     ValidationError,
-    ValidationResult,
-    ValidationType,
-    ValidationSeverity,
     ValidationIssue,
+    ValidationResult,
+    ValidationSeverity,
+    ValidationType,
     VideoValidator,
 )
 
@@ -32,7 +32,7 @@ class TestValidationResult:
             metadata={"test": True},
             suggestions=["suggestion1"],
         )
-        
+
         # Add a warning to test the issues system
         result.add_warning("warning1", "WARN_001")
 
@@ -47,7 +47,7 @@ class TestValidationResult:
     def test_validation_result_defaults(self):
         """Test ValidationResult with minimal parameters."""
         result = ValidationResult(
-            is_valid=False, 
+            is_valid=False,
             validation_type=ValidationType.BASIC_FORMAT
         )
 
@@ -65,7 +65,7 @@ class TestValidationResult:
             validation_type=ValidationType.BASIC_FORMAT,
         )
         result.add_warning("warning1", "WARN_001")
-        
+
         assert len(result.get_warnings()) > 0
         assert result.get_warnings()[0].message == "warning1"
 
@@ -76,7 +76,7 @@ class TestValidationResult:
             validation_type=ValidationType.BASIC_FORMAT,
         )
         result.add_error("error1", "ERR_001")
-        
+
         # Adding an error should make the result invalid
         assert result.is_valid is False
         assert len(result.get_errors()) > 0
@@ -88,14 +88,14 @@ class TestValidationResult:
             is_valid=True,
             validation_type=ValidationType.BASIC_FORMAT,
         )
-        
+
         # Valid result
         assert "Valid" in result.get_summary()
-        
+
         # Add warning and test
         result.add_warning("warning", "WARN_001")
         assert "warning" in result.get_summary()
-        
+
         # Make invalid and test
         result.add_error("error", "ERR_001")
         assert "Invalid" in result.get_summary()
@@ -117,7 +117,7 @@ class TestVideoValidator:
         """Test basic format validation with nonexistent file."""
         validator = VideoValidator()
         result = validator.validate_basic_format("nonexistent.mp4")
-        
+
         assert isinstance(result, ValidationResult)
         assert result.validation_type == ValidationType.BASIC_FORMAT
         # File doesn't exist, so should be invalid
@@ -128,17 +128,17 @@ class TestVideoValidator:
         """Test iPhone compatibility validation with nonexistent file."""
         validator = VideoValidator()
         result = validator.validate_iphone_compatibility("nonexistent.mp4")
-        
+
         assert isinstance(result, ValidationResult)
         assert result.validation_type == ValidationType.IPHONE_COMPATIBILITY
         # File doesn't exist, so should be invalid
         assert result.is_valid is False
 
     def test_validate_transcoded_output_nonexistent_file(self):
-        """Test transcoded output validation with nonexistent file.""" 
+        """Test transcoded output validation with nonexistent file."""
         validator = VideoValidator()
         result = validator.validate_transcoded_output("nonexistent.mp4")
-        
+
         assert isinstance(result, ValidationResult)
         # validate_transcoded_output delegates to validate_iphone_compatibility
         assert result.validation_type == ValidationType.IPHONE_COMPATIBILITY
@@ -149,10 +149,10 @@ class TestVideoValidator:
         """Test input files validation with empty lists."""
         validator = VideoValidator()
         result = validator.validate_input_files(
-            video_files=[], 
+            video_files=[],
             audio_file="nonexistent.mp3"
         )
-        
+
         assert isinstance(result, ValidationResult)
         # Should be invalid due to empty video files list
         assert result.is_valid is False
@@ -169,7 +169,7 @@ class TestValidationIssue:
             code="TEST_001",
             context={"file": "test.mp4"}
         )
-        
+
         assert issue.severity == ValidationSeverity.ERROR
         assert issue.message == "Test error"
         assert issue.code == "TEST_001"
@@ -182,7 +182,7 @@ class TestValidationIssue:
             message="Test warning",
             code="WARN_001"
         )
-        
+
         str_repr = str(issue)
         assert "Test warning" in str_repr
         assert "⚠️" in str_repr  # Warning emoji should be present

@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 __all__ = [
     # Constants
     "SUPPORTED_VIDEO_FORMATS",
-    "SUPPORTED_AUDIO_FORMATS", 
+    "SUPPORTED_AUDIO_FORMATS",
     "DEFAULT_CONFIG",
 
     # Core functions
@@ -25,7 +25,7 @@ __all__ = [
 
     # Validation functions
     "validate_video_file",
-    "validate_audio_file", 
+    "validate_audio_file",
     "validate_input_files",
     "validate_transcoded_output",
 

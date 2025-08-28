@@ -685,7 +685,6 @@ class VideoPreprocessor:
         Returns:
             Dictionary with preprocessing decision and reasons
         """
-        import os
 
         if not Path(video_path).exists():
             return {"needs_preprocessing": False, "reason": "file_not_found"}
@@ -817,7 +816,6 @@ class VideoPreprocessor:
         Returns:
             Path to video file to use (original or preprocessed)
         """
-        import os
 
         # Check if preprocessing is needed
         analysis = self.should_preprocess_video(video_path)
@@ -964,7 +962,6 @@ class VideoPreprocessor:
 
     def cleanup_preprocessed_files(self, max_age_hours: int = 24) -> None:
         """Clean up old preprocessed files to save disk space."""
-        import os
         import time
 
         current_time = time.time()
@@ -1514,7 +1511,6 @@ class RobustVideoLoader:
         canvas_format: Optional[dict] = None,  # NEW: Canvas format for scaling
     ) -> Optional[Any]:
         """Load with format conversion fallback and intelligent canvas scaling."""
-        import os
         import subprocess
         import tempfile
 
@@ -1621,7 +1617,6 @@ class RobustVideoLoader:
         canvas_format: Optional[dict] = None,  # NEW: Canvas format for scaling
     ) -> Optional[Any]:
         """Load with quality reduction for memory-intensive videos and intelligent canvas scaling."""
-        import os
         import subprocess
         import tempfile
 
@@ -1738,7 +1733,6 @@ class RobustVideoLoader:
         canvas_format: Optional[dict] = None,  # NEW: Canvas format for scaling
     ) -> Optional[Any]:
         """Emergency minimal loading with maximum compatibility and intelligent canvas scaling."""
-        import os
         import subprocess
         import tempfile
 
@@ -3241,7 +3235,6 @@ def assemble_clips(
     """
     import logging
     import mimetypes
-    import os
 
     # Dual import pattern for package/direct execution compatibility
     try:

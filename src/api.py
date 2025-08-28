@@ -105,7 +105,7 @@ class AutoCutAPI:
 
         # Create output directory
         output_dir = Path(output_path).parent
-        if output_dir != Path('.'):
+        if output_dir != Path():
             output_dir.mkdir(parents=True, exist_ok=True)
 
         # Set up progress callback for verbose mode

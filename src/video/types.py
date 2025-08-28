@@ -216,7 +216,7 @@ ProcessingOptionsDict = Dict[str, Any]
 
 # Function signature types for common operations
 ProcessingFunction = Callable[[VideoFileList, PathLike, PathLike], str]
-ValidationFunction = Callable[[PathLike], ValidationResults] 
+ValidationFunction = Callable[[PathLike], ValidationResults]
 AnalysisFunction = Callable[[PathLike], VideoAnalysisResult]
 
 
@@ -224,7 +224,7 @@ AnalysisFunction = Callable[[PathLike], VideoAnalysisResult]
 __all__ = [
     # Basic types
     "PathLike",
-    "PatternType", 
+    "PatternType",
     "EncoderType",
 
     # Metadata types
@@ -244,7 +244,7 @@ __all__ = [
     # Processing types
     "ProcessingProgress",
     "ValidationIssue",
-    "ValidationResults", 
+    "ValidationResults",
     "RenderingConfig",
 
     # Protocols

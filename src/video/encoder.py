@@ -50,9 +50,8 @@ class VideoEncoder:
             result = detect_codec_legacy()
             if isinstance(result, tuple) and len(result) == 2:
                 return result
-            else:
-                # Fallback if result format is unexpected
-                return self._fallback_codec_settings()
+            # Fallback if result format is unexpected
+            return self._fallback_codec_settings()
 
         except ImportError:
             # Fallback to legacy implementation if modules not available
@@ -240,7 +239,7 @@ class VideoEncoder:
                 write_videofile_safely,
             )
         except ImportError:
-            # Fallback if compatibility module not available  
+            # Fallback if compatibility module not available
             def write_videofile_safely(
                 video_clip: Any, output_path: str, compatibility_info: Dict[str, Any], **kwargs: Any
             ) -> Any:

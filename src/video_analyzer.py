@@ -21,7 +21,7 @@ except ImportError:
         from .video.types import PathLike, SceneSegment, VideoAnalysisResult
     except ImportError:
         # Fallback type definitions if types module not available
-        PathLike = Union[str, 'Path']
+        PathLike = Union[str, "Path"]
         VideoAnalysisResult = Dict[str, Any]
         SceneSegment = Dict[str, Any]
 
@@ -60,7 +60,6 @@ def load_video(file_path: PathLike) -> Tuple[VideoFileClip, Dict[str, Any]]:
         FileNotFoundError: If video file doesn't exist
         ValueError: If video format is unsupported
     """
-    import os
 
     # Import video preprocessing from new transcoding module with dual import pattern
     try:
