@@ -199,7 +199,7 @@ class AutoCutAPI:
             import multiprocessing
 
             cpu_cores = multiprocessing.cpu_count()
-        except:
+        except Exception:
             cpu_cores = 1
 
         # Check FFmpeg availability
@@ -215,7 +215,7 @@ class AutoCutAPI:
                 timeout=5,
             )
             ffmpeg_available = result.returncode == 0
-        except:
+        except Exception:
             ffmpeg_available = False
 
         # Get platform info

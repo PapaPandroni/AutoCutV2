@@ -1139,7 +1139,7 @@ class AdvancedMemoryManager:
 
             if hasattr(ctypes, "windll"):  # Windows
                 ctypes.windll.kernel32.SetProcessWorkingSetSize(-1, -1, -1)
-        except:
+        except Exception:
             pass
 
         after_status = self.get_memory_status()
@@ -1603,7 +1603,7 @@ class RobustVideoLoader:
                     converted_file.unlink()
                 if Path(temp_dir).exists():
                     Path(temp_dir).rmdir()
-            except:
+            except Exception:
                 pass
             raise RuntimeError(f"Format conversion failed: {e}") from e
 

@@ -424,7 +424,7 @@ def get_audio_info(audio_file: str) -> dict:
                 info["sample_rate"] = int(stream.get("sample_rate", 0))
                 info["channels"] = int(stream.get("channels", 0))
                 info["codec"] = stream.get("codec_name", "unknown")
-    except:
+    except Exception:
         pass  # Ignore errors in info gathering
 
     return info
