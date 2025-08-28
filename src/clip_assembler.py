@@ -785,7 +785,7 @@ class VideoPreprocessor:
                 "r_frame_rate": "24/1",
             }
 
-        except Exception as e:
+        except Exception:
             return {
                 "codec_name": "unknown",
                 "width": 1920,
@@ -857,7 +857,7 @@ class VideoPreprocessor:
                 return str(processed_path)
             return video_path
 
-        except Exception as e:
+        except Exception:
             return video_path
 
     def _preprocess_with_ffmpeg_modern(
@@ -957,7 +957,7 @@ class VideoPreprocessor:
 
         except subprocess.TimeoutExpired:
             return False
-        except Exception as e:
+        except Exception:
             return False
 
     def cleanup_preprocessed_files(self, max_age_hours: int = 24) -> None:
@@ -1296,7 +1296,7 @@ def load_video_clips_with_advanced_memory_management(
                         video_clips.append(segment)
                         file_clips_loaded += 1
 
-                    except Exception as e:
+                    except Exception:
                         # Use original_index from grouped clips to maintain timeline alignment
                         original_index = clip_data.get(
                             "original_index",
@@ -1318,7 +1318,7 @@ def load_video_clips_with_advanced_memory_management(
             # NOTE: We do NOT close the source_video here - it will be cleaned up later
             # This is the key fix: parent videos stay alive until after concatenation
 
-        except Exception as e:
+        except Exception:
             # Mark all clips from this file as failed using original indices
             for clip_data in file_clips:
                 original_index = clip_data.get("original_index", total_clips_processed)
@@ -1931,7 +1931,7 @@ def load_video_clips_with_robust_error_handling(
             canvas_format=canvas_format,  # NEW: Pass canvas format for intelligent preprocessing
             progress_callback=progress_callback,
         )
-    except Exception as e:
+    except Exception:
         video_path_map = {path: path for path in video_files}
 
     # Update clip paths

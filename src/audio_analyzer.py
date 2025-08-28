@@ -494,7 +494,7 @@ def test_audio_analyzer():
     test_beats = [0.5, 1.0, 1.3, 2.0, 2.8, 3.5, 4.0, 4.2, 5.0]
     song_duration = 6.0
 
-    cut_points = get_cut_points(test_beats, song_duration)
+    get_cut_points(test_beats, song_duration)
 
     # Test with empty beats
-    empty_cuts = get_cut_points([], 5.0)
+    get_cut_points([], 5.0)
