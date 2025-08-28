@@ -946,8 +946,8 @@ class VideoPreprocessor:
             if result.returncode == 0:
                 # Verify output dimensions match target
                 if target_format:
-                    expected_w = target_format.get("target_width", 1920)
-                    expected_h = target_format.get("target_height", 1080)
+                    # target_format dimensions available for future validation
+                    pass
                 else:
                     pass
                 return True

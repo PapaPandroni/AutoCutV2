@@ -494,7 +494,8 @@ def test_audio_analyzer():
     test_beats = [0.5, 1.0, 1.3, 2.0, 2.8, 3.5, 4.0, 4.2, 5.0]
     song_duration = 6.0
 
+    # Test that get_cut_points doesn't crash with normal data
     get_cut_points(test_beats, song_duration)
 
-    # Test with empty beats
+    # Test that get_cut_points doesn't crash with empty beats
     get_cut_points([], 5.0)
