@@ -490,7 +490,7 @@ def load_video_clips_sequential(
                 )
 
     # Memory monitoring at start
-    initial_memory = get_memory_info()
+    get_memory_info()
 
     # Use a results dictionary to maintain perfect index alignment
     clip_results = {}  # Maps original_index -> video clip (or None for failed)
@@ -592,15 +592,12 @@ def load_video_clips_sequential(
 
     # Report final statistics
     success_count = len(successful_clips)
-    total_count = len(sorted_clips)
-    success_rate = success_count / total_count
 
     if failed_indices:
         pass
 
     # Memory monitoring at completion
     final_memory = get_memory_info()
-    memory_increase = final_memory["used_gb"] - initial_memory["used_gb"]
 
     # Memory usage warning
     if final_memory["percent"] > 85:
@@ -896,7 +893,6 @@ class VideoPreprocessor:
             ):
                 target_w = target_format.get("target_width", 1920)
                 target_h = target_format.get("target_height", 1080)
-                canvas_type = target_format.get("canvas_type", "default_landscape")
 
                 # Use modern FFmpeg scaling with aspect ratio preservation + letterboxing
                 # Step 1: Scale down if needed, maintaining aspect ratio
