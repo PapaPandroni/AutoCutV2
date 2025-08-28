@@ -7,11 +7,8 @@ These tests stress-test resource management, error recovery, and large-scale pro
 
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
-from typing import List
-from unittest.mock import patch
 
 import pytest
 
@@ -278,7 +275,6 @@ class TestProductionReliability:
         print("\\n🔄 Testing concurrent processing safety")
 
         import threading
-        import time
 
         results = []
         errors = []

@@ -6,7 +6,7 @@ calculation of musically appropriate clip durations.
 """
 
 import contextlib
-import os
+from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import librosa
@@ -312,7 +312,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
         FileNotFoundError: If audio file doesn't exist
         ValueError: If BPM is outside valid range (30-300)
     """
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         raise FileNotFoundError(f"Audio file not found: {file_path}")
 
     try:

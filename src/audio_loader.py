@@ -18,11 +18,18 @@ Key Benefits:
 """
 
 import logging
-import os
 import subprocess
+from pathlib import Path
 from typing import Any, Optional, Tuple
 
 import numpy as np
+
+# Import for type annotations
+try:
+    from moviepy.audio.AudioClip import AudioArrayClip
+except ImportError:
+    # Fallback for type checking when moviepy not available
+    AudioArrayClip = Any
 
 # Setup logging
 logger = logging.getLogger(__name__)

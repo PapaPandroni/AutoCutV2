@@ -5,12 +5,10 @@ Provides a clean, well-documented API for AutoCut functionality.
 This module serves as the primary interface for all AutoCut operations.
 """
 
-import glob
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path, Path as PathType
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union
 
 # Import core AutoCut modules (src is in path, so no relative imports needed)
 from clip_assembler import assemble_clips
@@ -356,7 +354,7 @@ class AutoCutAPI:
             audio_extensions = ["*.mp3", "*.wav", "*.m4a", "*.flac", "*.aac", "*.ogg"]
             audio_files = []
             for ext in audio_extensions:
-                audio_files.extend(glob.glob(f"{test_media_dir}/{ext}"))
+                audio_files.extend(str(p) for p in Path(test_media_dir).glob(ext))
 
             if not audio_files:
                 return DemoResult(
