@@ -17,7 +17,6 @@ def detect_musical_start(
     y: np.ndarray,
     sr: int,
     tempo: float,
-    beats: np.ndarray,
 ) -> Tuple[float, float]:
     """Detect the start of significant musical content using onset detection and energy analysis.
 
@@ -25,7 +24,6 @@ def detect_musical_start(
         y: Audio time series
         sr: Sample rate
         tempo: Detected BPM
-        beats: Beat frame indices
 
     Returns:
         Tuple of (musical_start_time, intro_duration)
@@ -173,14 +171,12 @@ def detect_intro_duration(
 
 def create_beat_hierarchy(
     beats: np.ndarray,
-    tempo: float,
     sr: int,
 ) -> Dict[str, List[float]]:
     """Create hierarchical beat structure with downbeats, half-beats, and measures.
 
     Args:
         beats: Beat frame indices
-        tempo: BPM
         sr: Sample rate
 
     Returns:
@@ -337,7 +333,6 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
             y,
             sr,
             tempo,
-            beat_frames,
         )
 
         # 2. Apply systematic offset compensation for librosa latency
@@ -353,7 +348,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
         )
 
         # 4. Create beat hierarchy structure
-        beat_hierarchy = create_beat_hierarchy(beat_frames, tempo, sr)
+        beat_hierarchy = create_beat_hierarchy(beat_frames, sr)
 
         # 5. Enhanced intro detection with configurable thresholds
         refined_intro_duration = detect_intro_duration(

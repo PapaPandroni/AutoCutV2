@@ -2568,7 +2568,6 @@ def match_clips_to_beats(
         clip_start, clip_end, clip_duration = _fit_clip_to_duration(
             best_clip,
             target_duration,
-            allowed_durations,
         )
 
         # Add to timeline
@@ -2633,14 +2632,12 @@ def _calculate_duration_fit(
 def _fit_clip_to_duration(
     clip: VideoChunk,
     target_duration: float,
-    allowed_durations: List[float],
 ) -> Tuple[float, float, float]:
     """Fit a clip to the target duration by trimming if necessary.
 
     Args:
         clip: Video chunk to fit
         target_duration: Desired duration
-        allowed_durations: List of allowed durations
 
     Returns:
         Tuple of (start_time, end_time, actual_duration)
