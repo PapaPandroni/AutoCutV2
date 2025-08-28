@@ -339,7 +339,7 @@ class TestCLIInterface:
         assert is_executable, "autocut.py should be executable"
 
         # Check shebang line
-        with open(autocut_path) as f:
+        with Path(autocut_path).open() as f:
             first_line = f.readline().strip()
 
         assert first_line.startswith("#!"), "Should have shebang line"

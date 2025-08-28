@@ -972,7 +972,7 @@ class VideoPreprocessor:
                 file_age_hours = (current_time - Path(cached_path).stat().st_mtime) / 3600
                 if file_age_hours > max_age_hours:
                     try:
-                        os.remove(cached_path)
+                        Path(cached_path).unlink()
                         cleaned_count += 1
                     except Exception:
                         pass  # Ignore cleanup errors
@@ -3754,7 +3754,7 @@ def assemble_clips(
         summary_path = output_path.replace(".mp4", "_processing_summary.json")
         import json
 
-        with open(summary_path, "w") as f:
+        with Path(summary_path).open("w") as f:
             json.dump(processing_summary, f, indent=2)
         logger.info(f"Debug: Processing summary exported to {summary_path}")
 

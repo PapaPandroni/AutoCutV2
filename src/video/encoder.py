@@ -260,7 +260,7 @@ class VideoEncoder:
 
         try:
             # Create output directory if needed
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
             encoding_start_time = time.time()
 
@@ -280,7 +280,7 @@ class VideoEncoder:
             )
 
             # Validate output
-            if not os.path.exists(output_path):
+            if not Path(output_path).exists():
                 raise RuntimeError(f"Output file was not created: {output_path}")
 
             encoding_time = time.time() - encoding_start_time
