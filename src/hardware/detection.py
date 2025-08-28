@@ -90,7 +90,7 @@ class HardwareDetector:
         if force_cpu:
             return default_result
 
-        diagnostics = {"tests_performed": [], "errors_encountered": []}
+        diagnostics: Dict[str, List[str]] = {"tests_performed": [], "errors_encountered": []}
 
         try:
             # Step 1: Check FFmpeg availability
@@ -290,7 +290,7 @@ class HardwareDetector:
         encoder_name: str,
         encoder_codec: str,
         test_iphone_parameters: bool = True,
-        diagnostics: Optional[Dict] = None,
+        diagnostics: Optional[Dict[str, List[str]]] = None,
     ) -> Dict[str, Any]:
         """
         Fast hardware encoder testing with intelligent early termination.
@@ -516,7 +516,7 @@ class HardwareDetector:
         Returns:
             Dictionary with detailed test results
         """
-        diagnostics = {"tests_performed": [], "errors_encountered": []}
+        diagnostics: Dict[str, List[str]] = {"tests_performed": [], "errors_encountered": []}
 
         # Check if encoder is available first
         available_encoders = self._list_available_encoders(diagnostics)
