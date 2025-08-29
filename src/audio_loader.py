@@ -121,6 +121,9 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
     else:
         cmd = base_cmd
 
+    def _raise_no_audio_data():
+        raise RuntimeError("No audio data extracted from file")
+
     try:
         # Run FFmpeg subprocess with output capture
         process = subprocess.run(
@@ -134,7 +137,7 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
         audio_data = np.frombuffer(process.stdout, dtype=np.int16)
 
         if len(audio_data) == 0:
-            raise RuntimeError("No audio data extracted from file")
+            _raise_no_audio_data()
 
         # Reshape to stereo format (N, 2) and normalize to float32 [-1, 1]
         audio_data = audio_data.reshape(-1, 2).astype(np.float32) / 32768.0
@@ -210,6 +213,9 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
         f"🔄 Attempting WAV fallback processing for {Path(audio_file).name}"
     )
 
+    def _raise_unsupported_sample_width():
+        raise RuntimeError("Unsupported sample width")
+
     # Strategy 1: Use simplified FFmpeg command for WAV files
     try:
         logger.info("📋 Fallback Strategy 1: Simplified WAV FFmpeg command")
@@ -249,7 +255,7 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
             if wav_file.getsampwidth() == 2:  # 16-bit
                 audio_data = np.frombuffer(frames, dtype=np.int16)
             else:  # Other formats
-                raise RuntimeError("Unsupported sample width")
+                _raise_unsupported_sample_width()
 
             # Handle mono/stereo
             if n_channels == 1:

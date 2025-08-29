@@ -112,6 +112,9 @@ except ImportError:
                 return AudioFileClip(audio_file)
             except (AttributeError, RuntimeError, OSError) as e:
                 if "proc" in str(e).lower() or "ffmpeg" in str(e).lower():
+                    def _raise_no_audio_data():
+                        raise RuntimeError("No audio data extracted from file")
+
                     # Fallback to FFmpeg subprocess for problematic files
                     try:
                         import subprocess
@@ -143,7 +146,7 @@ except ImportError:
                         audio_data = np.frombuffer(process.stdout, dtype=np.int16)
 
                         if len(audio_data) == 0:
-                            raise RuntimeError("No audio data extracted from file")
+                            _raise_no_audio_data()
 
                         # Convert to stereo float32 format
                         audio_data = (
@@ -341,14 +344,17 @@ class VideoResourceManager:
         import gc
         from contextlib import contextmanager
 
+        def _raise_moviepy_not_available():
+            raise RuntimeError(
+                "MoviePy not available. Please install moviepy>=1.0.3",
+            )
+
         @contextmanager
         def _video_context():
             video = None
             try:
                 if VideoFileClip is None:
-                    raise RuntimeError(
-                        "MoviePy not available. Please install moviepy>=1.0.3",
-                    )
+                    _raise_moviepy_not_available()
 
                 video = VideoFileClip(video_path)
                 self.active_videos.add(id(video))
@@ -374,11 +380,14 @@ class VideoResourceManager:
         - Parent videos stay alive while their subclips are being used
         - Cleanup happens only after concatenation is complete
         """
+        def _raise_moviepy_unavailable():
+            raise RuntimeError(
+                "MoviePy not available. Please install moviepy>=1.0.3",
+            )
+
         try:
             if VideoFileClip is None:
-                raise RuntimeError(
-                    "MoviePy not available. Please install moviepy>=1.0.3",
-                )
+                _raise_moviepy_unavailable()
 
             # Check if we already have this video loaded for delayed cleanup
             if video_path in self.delayed_cleanup_videos:
