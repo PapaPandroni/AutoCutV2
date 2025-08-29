@@ -259,8 +259,6 @@ class VideoEncoder:
             # Create output directory if needed
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-            encoding_start_time = time.time()
-
             # Lower process priority to prevent system lockup
             try:
                 current_process = psutil.Process()
@@ -280,7 +278,7 @@ class VideoEncoder:
             if not Path(output_path).exists():
                 raise RuntimeError(f"Output file was not created: {output_path}")
 
-            encoding_time = time.time() - encoding_start_time
+            # Note: Encoding time tracking removed - not used in current implementation
             return output_path
 
         except Exception as e:

@@ -920,8 +920,8 @@ def _log_transcoding_success(
     encoder_type: str,
 ) -> None:
     """Log successful transcoding with comprehensive information."""
-    input_size = Path(input_path).stat().st_size / (1024 * 1024)  # MB
-    output_size = Path(output_path).stat().st_size / (1024 * 1024)  # MB
+    # Note: File size logging removed - not implemented in current version
+    pass
 
 
 # Legacy function for backward compatibility
@@ -1038,7 +1038,7 @@ def preprocess_video_if_needed_enhanced(
         "original_codec": None,
     }
 
-    filename = Path(file_path).name
+    # Note: Filename variable removed - not used in current implementation
 
     try:
         # OPTIMIZATION: Phase 0 - Check transcoding cache first
@@ -1184,7 +1184,7 @@ def preprocess_video_if_needed_enhanced(
 
     finally:
         result["processing_time"] = time.time() - start_time
-        performance_indicator = "⚡" if result["cached"] else "⏱️"
+        # Note: Performance indicator removed - not used in current implementation
 
     return result
 
@@ -1711,7 +1711,7 @@ def _validate_transcoded_output_enhanced(video_path: str) -> bool:
 
         return validation_result["valid"]
 
-    except Exception as e:
+    except Exception:
         return False
 
 

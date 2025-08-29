@@ -375,7 +375,7 @@ class AssemblyEngine:
             quality_range = (0.0, 0.0)
 
         # Calculate musical coverage
-        timeline_stats = beat_match_result.timeline.get_summary_stats()
+        # Note: Timeline statistics removed - not used in current implementation
         musical_coverage = beat_match_result.coverage_ratio
 
         # Get selected clips from timeline

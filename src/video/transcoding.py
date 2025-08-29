@@ -262,7 +262,7 @@ class TranscodingService:
             "original_codec": None,
         }
 
-        filename = Path(file_path).name
+        # Note: Filename variable removed - not used in current implementation
 
         try:
             # Check transcoding cache first
@@ -398,7 +398,7 @@ class TranscodingService:
 
         finally:
             result["processing_time"] = time.time() - start_time
-            performance_indicator = "⚡" if result["cached"] else "⏱️"
+            # Note: Performance indicator removed - not used in current implementation
 
         return result
 

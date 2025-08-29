@@ -840,19 +840,7 @@ def analyze_video_file(
                     f"Scene {scene_idx + 1} stability score: {stability_score:.2f}"
                 )
 
-                # Create enhanced metadata
-                chunk_metadata = {
-                    "source_file": Path(file_path).name,
-                    "scene_index": scene_idx,
-                    "video_width": metadata["width"],
-                    "video_height": metadata["height"],
-                    "video_fps": metadata["fps"],
-                    "video_duration": metadata["duration"],
-                    "quality_score": quality_score,
-                    "motion_score": motion_score,
-                    "face_count": face_count,
-                    "stability_score": stability_score,
-                }
+                # Note: Chunk metadata creation removed - not used in current implementation
 
                 # Calculate enhanced combined score with stability penalty
                 # Quality: 60% weight (image quality metrics)

@@ -41,7 +41,7 @@ class VideoNormalizationPipeline:
             """Safely normalize clip, returning original on failure."""
             try:
                 return self._normalize_single_clip(clip, target_format)
-            except Exception as e:
+            except Exception:
                 # Use original clip if normalization fails
                 return clip
 
@@ -135,9 +135,7 @@ class VideoNormalizationPipeline:
                     CompositeVideoClip,
                 )
 
-        # Calculate aspect ratios
-        clip_aspect = clip.w / clip.h
-        target_aspect = target_width / target_height
+        # Note: Aspect ratio calculations removed - not used in current implementation
 
         # Calculate scaling to maximize video size while preserving all content
         # Always use "fit" scaling to preserve all video content (no cropping)
@@ -171,9 +169,9 @@ class VideoNormalizationPipeline:
                 from moviepy.editor import ColorClip, CompositeVideoClip
 
                 resized_clip = clip.resized((new_width, new_height))
-            except Exception as fallback_error:
+            except Exception:
                 return clip
-        except Exception as e:
+        except Exception:
             return clip
 
         # Check if letterboxing is needed
@@ -220,10 +218,10 @@ class VideoNormalizationPipeline:
             # Log letterboxing details
             if width_difference > height_difference:
                 # More width padding needed (pillarbox)
-                bar_width = width_difference // 2
+                pass  # Bar width calculation not used
             else:
                 # More height padding needed (letterbox)
-                bar_height = height_difference // 2
+                pass  # Bar height calculation not used
 
             # Warn if utilization is very low
             if utilization < 50 or utilization > 80:
@@ -231,5 +229,5 @@ class VideoNormalizationPipeline:
 
             return letterboxed_clip
 
-        except Exception as e:
+        except Exception:
             return resized_clip

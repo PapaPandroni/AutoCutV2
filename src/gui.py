@@ -313,7 +313,7 @@ class AutoCutGUI:
 def main():
     """Run the AutoCut GUI application."""
     root = tk.Tk()
-    app = AutoCutGUI(root)
+    AutoCutGUI(root)  # GUI app instance handles itself
     root.mainloop()
 
 

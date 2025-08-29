@@ -1167,8 +1167,7 @@ class AdvancedMemoryManager:
 
     def log_memory_summary(self, context: str) -> None:
         """Log comprehensive memory summary."""
-        status = self.get_memory_status()
-
+        # Note: Method implementation incomplete - placeholder for future enhancement
         if self.emergency_cleanup_count > 0:
             pass
         if self.memory_warnings > 0:
@@ -1336,7 +1335,7 @@ def load_video_clips_with_advanced_memory_management(
     memory_manager.log_memory_summary("completion")
 
     success_count = len(video_clips)
-    success_rate = success_count / len(sorted_clips)
+    # Note: Success rate calculation removed - not used in current implementation
 
     if failed_indices:
         pass
@@ -1408,8 +1407,6 @@ class RobustVideoLoader:
             ("emergency_mode", self._load_emergency_minimal),
         ]
 
-        last_error = None
-
         def _try_loading_strategy(strategy_name: str, strategy_func, clip_data, resource_manager, canvas_format):
             """Try a single loading strategy and return result or None."""
             try:
@@ -1440,7 +1437,7 @@ class RobustVideoLoader:
             if result is not None:
                 return result
             if error is not None:
-                last_error = error
+                pass  # Error logged by individual strategies
 
         # All strategies failed
         self.error_statistics["failed_loads"] += 1
@@ -1494,7 +1491,7 @@ class RobustVideoLoader:
                     target_height=canvas_format["target_height"],
                     scaling_mode="smart",  # Use smart scaling for optimal results
                 )
-            except Exception as scaling_error:
+            except Exception:
                 pass
                 # Continue with unscaled segment rather than failing
 
@@ -1954,9 +1951,10 @@ def load_video_clips_with_robust_error_handling(
         # Check memory and adapt strategy
         if memory_manager.should_switch_to_emergency_mode():
             memory_manager.perform_emergency_cleanup(f"before file {processed_files}")
-            batch_size = 1  # Process one at a time in emergency mode
+            # Process one at a time in emergency mode
         else:
-            batch_size = memory_manager.get_optimal_batch_size(len(file_clips))
+            # Note: Batch processing not implemented - clips processed sequentially
+            pass
 
         # Process clips with robust error handling
         for i, clip_data in enumerate(file_clips):
@@ -2057,9 +2055,6 @@ def load_video_clips_parallel(
     if not sorted_clips:
         raise ValueError("No clips provided for loading")
 
-    # Memory monitoring at start
-    initial_memory = get_memory_info()
-
     # Initialize cache and results
     video_cache = VideoCache()
     video_clips = []
@@ -2154,14 +2149,14 @@ def load_video_clips_parallel(
 
     # Memory monitoring at completion
     final_memory = get_memory_info()
-    memory_increase = final_memory["used_gb"] - initial_memory["used_gb"]
+    # Note: Memory increase tracking removed - not used in current implementation
 
     # Memory usage warning
     if final_memory["percent"] > 85:
         pass
 
-    # Log cache statistics
-    cached_files = video_cache.get_cached_paths()
+    # Note: Cache statistics logging not implemented
+    video_cache.get_cached_paths()  # Just ensure cache is accessible
 
     return video_clips, video_cache, failed_indices
 
@@ -2369,10 +2364,10 @@ def test_independent_subclip_creation(video_path: Optional[str] = None) -> bool:
         try:
             new_frame = new_subclip.get_frame(0.1)
             return new_frame is not None
-        except Exception as e:
+        except Exception:
             return False
 
-    except Exception as e:
+    except Exception:
         return False
 
     finally:
@@ -2885,7 +2880,7 @@ def render_video(
             audio_size = Path(audio_file).stat().st_size
             if audio_size == 0:
                 raise RuntimeError(f"Audio file is empty: {audio_file}")
-        except Exception as size_error:
+        except Exception:
             pass
 
         # Get MoviePy compatibility info for safe subclip operations
@@ -3032,10 +3027,10 @@ def render_video(
                             )
                         else:
                             pass
-                    except Exception as legacy_error:
+                    except Exception:
                         pass
 
-            except Exception as fade_error:
+            except Exception:
                 pass
                 # Continue without fades rather than failing completely - this prevents
                 # the creation of new FFMPEG_AudioReader instances that could trigger proc errors
@@ -3120,7 +3115,7 @@ def render_video(
         try:
             if "resource_manager" in locals():
                 resource_manager.cleanup_all()
-        except Exception as cleanup_error:
+        except Exception:
             pass
 
         # Clean up individual clips
@@ -3139,14 +3134,14 @@ def render_video(
                 with contextlib.suppress(builtins.BaseException):
                     audio_clip.reader.proc.terminate()
 
-        except Exception as audio_cleanup_error:
+        except Exception:
             pass
 
         # Clean up final video
         try:
             if hasattr(final_video, "close"):
                 final_video.close()
-        except Exception as video_cleanup_error:
+        except Exception:
             pass
 
         return output_path

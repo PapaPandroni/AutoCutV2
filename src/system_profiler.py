@@ -214,7 +214,7 @@ class SystemProfiler:
                     "resolution_factor": estimate["resolution_factor"],
                     "expansion_ratio": estimate["expansion_ratio"]
                 }
-            except Exception as e:
+            except Exception:
                 # Use conservative fallback for failed analysis
                 return {
                     "memory_mb": 200.0,

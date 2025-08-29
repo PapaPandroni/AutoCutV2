@@ -33,7 +33,7 @@ try:
     from .format_analyzer import VideoFormatAnalyzer
     from .normalization import VideoNormalizationPipeline
     from .timeline_renderer import ClipTimeline, TimelineRenderer
-except ImportError as e:
+except ImportError:
     pass
 
 # Version information

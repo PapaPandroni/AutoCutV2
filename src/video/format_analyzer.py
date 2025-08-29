@@ -54,7 +54,7 @@ class VideoFormatAnalyzer:
 
             return format_info
 
-        except Exception as e:
+        except Exception:
             # Use smart fallback instead of hard-coded 1920x1080
             return self._get_smart_fallback_format()
 
