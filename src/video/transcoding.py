@@ -19,8 +19,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 try:
     # Try absolute import first for autocut.py execution context
     from core.exceptions import (
-        TranscodingError,
-        VideoProcessingError,
         raise_transcoding_error,
     )
 except ImportError:

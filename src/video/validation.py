@@ -16,10 +16,7 @@ from typing import Any, Dict, List, Optional
 # Import our custom exceptions with dual import pattern
 try:
     from ..core.exceptions import (
-        ValidationError,
         VideoProcessingError,
-        iPhoneCompatibilityError,
-        raise_validation_error,
     )
 except ImportError:
     # Fallback for direct execution

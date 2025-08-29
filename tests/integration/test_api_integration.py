@@ -5,12 +5,8 @@ Tests the API layer integration with core components, parameter validation,
 error handling, and contract compliance for the AutoCutAPI class.
 """
 
-import os
 import sys
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -441,7 +437,6 @@ class TestAPIIntegration:
         print("\\n🔄 Testing API thread safety basics")
 
         import threading
-        import time
 
         results = []
         errors = []
@@ -557,29 +552,25 @@ class TestAPIIntegration:
         print("\\n🔧 Testing API integration with core components")
 
         # Test that API can import and access core modules
-        try:
-            # This tests that the API can access audio analysis
-            from audio_analyzer import analyze_audio
-
+        import importlib.util
+        
+        # Test audio analyzer availability
+        if importlib.util.find_spec("audio_analyzer"):
             print("   ✅ Audio analyzer integration available")
-        except ImportError as e:
-            print(f"   ⚠️ Audio analyzer integration issue: {e}")
+        else:
+            print("   ⚠️ Audio analyzer integration not available")
 
-        try:
-            # This tests that the API can access video analysis
-            from video_analyzer import VideoAnalyzer
-
+        # Test video analyzer availability  
+        if importlib.util.find_spec("video_analyzer"):
             print("   ✅ Video analyzer integration available")
-        except ImportError as e:
-            print(f"   ⚠️ Video analyzer integration issue: {e}")
+        else:
+            print("   ⚠️ Video analyzer integration not available")
 
-        try:
-            # This tests that the API can access clip assembly
-            from clip_assembler import ClipAssembler
-
+        # Test clip assembler availability
+        if importlib.util.find_spec("clip_assembler"):
             print("   ✅ Clip assembler integration available")
-        except ImportError as e:
-            print(f"   ⚠️ Clip assembler integration issue: {e}")
+        else:
+            print("   ⚠️ Clip assembler integration not available")
 
         # Test system info integration
         try:

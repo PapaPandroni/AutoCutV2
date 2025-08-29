@@ -71,7 +71,6 @@ try:
         detect_optimal_codec_settings,
         detect_optimal_codec_settings_with_diagnostics,
     )
-    from video.format_analyzer import VideoFormatAnalyzer
     from video.timeline_renderer import ClipTimeline
 except ImportError:
     # Classes will be defined inline below for backward compatibility
@@ -2182,9 +2181,9 @@ def check_moviepy_api_compatibility():
         try:
             # Fallback to legacy import structure (MoviePy < 2.1.2)
             from moviepy.editor import (
-                AudioFileClip,
-                VideoFileClip,
-                concatenate_videoclips,
+                AudioFileClip,  # noqa: F401
+                VideoFileClip,  # noqa: F401
+                concatenate_videoclips,  # noqa: F401
             )
 
             import_pattern = "legacy"  # from moviepy.editor import ...

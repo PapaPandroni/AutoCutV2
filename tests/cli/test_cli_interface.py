@@ -8,7 +8,6 @@ These tests validate the `autocut.py` commands that power the production system.
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import List
 

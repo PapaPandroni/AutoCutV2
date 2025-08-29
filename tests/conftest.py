@@ -5,7 +5,6 @@ This file provides common fixtures, test utilities, and configuration
 for the AutoCut V2 test suite.
 """
 
-import os
 import shutil
 import sys
 import tempfile
