@@ -60,19 +60,19 @@ def check_moviepy_api_compatibility() -> Dict[str, Any]:
         version = getattr(moviepy, "__version__", "unknown")
 
         # Test for API method availability by creating a dummy clip
-        VideoFileClip, _, _, _ = import_moviepy_safely()
+        video_file_clip, _, _, _ = import_moviepy_safely()
 
         # Check method names by inspecting the class
-        has_subclip = hasattr(VideoFileClip, "subclip")
-        has_subclipped = hasattr(VideoFileClip, "subclipped")
-        has_set_audio = hasattr(VideoFileClip, "set_audio")
-        has_with_audio = hasattr(VideoFileClip, "with_audio")
-        has_resize = hasattr(VideoFileClip, "resize")
-        has_resized = hasattr(VideoFileClip, "resized")
-        has_set_fps = hasattr(VideoFileClip, "set_fps")
-        has_with_fps = hasattr(VideoFileClip, "with_fps")
-        has_crop = hasattr(VideoFileClip, "crop")
-        has_cropped = hasattr(VideoFileClip, "cropped")
+        has_subclip = hasattr(video_file_clip, "subclip")
+        has_subclipped = hasattr(video_file_clip, "subclipped")
+        has_set_audio = hasattr(video_file_clip, "set_audio")
+        has_with_audio = hasattr(video_file_clip, "with_audio")
+        has_resize = hasattr(video_file_clip, "resize")
+        has_resized = hasattr(video_file_clip, "resized")
+        has_set_fps = hasattr(video_file_clip, "set_fps")
+        has_with_fps = hasattr(video_file_clip, "with_fps")
+        has_crop = hasattr(video_file_clip, "crop")
+        has_cropped = hasattr(video_file_clip, "cropped")
 
         # Determine preferred method based on availability
         preferred_subclip = "subclipped" if has_subclipped else "subclip"
@@ -316,34 +316,34 @@ def resize_clip_safely(
             if content_type == "landscape":
                 if canvas_type == "landscape":
                     # Landscape → Landscape: very permissive (same family)
-                    SAFE_CROP_THRESHOLD = 15.0
+                    safe_crop_threshold = 15.0
                 elif canvas_type == "square":
                     # Landscape → Square: moderately permissive
-                    SAFE_CROP_THRESHOLD = 25.0
+                    safe_crop_threshold = 25.0
                 else:
                     # Landscape → Portrait: conservative (major mismatch)
-                    SAFE_CROP_THRESHOLD = 8.0
+                    safe_crop_threshold = 8.0
             elif content_type == "portrait":
                 if canvas_type == "portrait":
                     # Portrait → Portrait: very permissive (same family)
-                    SAFE_CROP_THRESHOLD = 15.0
+                    safe_crop_threshold = 15.0
                 elif canvas_type == "square":
                     # Portrait → Square: moderately permissive
-                    SAFE_CROP_THRESHOLD = 25.0
+                    safe_crop_threshold = 25.0
                 else:
                     # Portrait → Landscape: conservative (major mismatch)
-                    SAFE_CROP_THRESHOLD = 8.0
+                    safe_crop_threshold = 8.0
             else:  # square content
                 # Square content: moderate threshold for any canvas
-                SAFE_CROP_THRESHOLD = 15.0
+                safe_crop_threshold = 15.0
 
             # Decision logic with enhanced reasoning
-            if crop_percentage <= SAFE_CROP_THRESHOLD:
+            if crop_percentage <= safe_crop_threshold:
                 scale = fill_scale
-                scaling_reason = f"smart mode - fill (crop: {crop_percentage:.1f}% ≤ {SAFE_CROP_THRESHOLD}% for {content_type}→{canvas_type})"
+                scaling_reason = f"smart mode - fill (crop: {crop_percentage:.1f}% ≤ {safe_crop_threshold}% for {content_type}→{canvas_type})"
             else:
                 scale = fit_scale
-                scaling_reason = f"smart mode - fit (crop: {crop_percentage:.1f}% > {SAFE_CROP_THRESHOLD}% for {content_type}→{canvas_type})"
+                scaling_reason = f"smart mode - fit (crop: {crop_percentage:.1f}% > {safe_crop_threshold}% for {content_type}→{canvas_type})"
         else:
             # Unknown mode: default to safe fit mode
             scale = min(width_scale, height_scale)
