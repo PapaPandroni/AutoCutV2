@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Dual import pattern for package/direct execution compatibility
 try:
-    from ...core.exceptions import ValidationError, raise_validation_error
+    from ...core.exceptions import raise_validation_error
     from ...core.logging_config import get_logger, log_performance
 except ImportError:
     # Fallback for direct execution

@@ -72,7 +72,6 @@ try:
         detect_optimal_codec_settings_with_diagnostics,
     )
     from video.format_analyzer import VideoFormatAnalyzer
-    from video.normalization import VideoNormalizationPipeline
     from video.timeline_renderer import ClipTimeline
 except ImportError:
     # Classes will be defined inline below for backward compatibility
@@ -2843,8 +2842,6 @@ def render_video(
         RuntimeError: If rendering fails
     """
     try:
-        import os
-
         # Import MoviePy components safely
         VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = (
             import_moviepy_safely()

@@ -15,11 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # Import our custom exceptions with dual import pattern
-try:
-    from ..core.exceptions import HardwareAccelerationError
-except ImportError:
-    # Fallback for direct execution
-    pass
+# Note: HardwareAccelerationError import removed - not used in current implementation
 
 
 class HardwareDetector:

@@ -1567,7 +1567,6 @@ def _test_hardware_encoder(
         - 'message': Detailed status message
         - 'error_category': Category of error if failed
     """
-    import os
     import subprocess
     import tempfile
 
