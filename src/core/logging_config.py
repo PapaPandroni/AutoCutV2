@@ -295,8 +295,6 @@ def log_performance(
 
                 perf_logger.info(f"{op_name} completed successfully", extra=log_context)
 
-                return result
-
             except Exception as e:
                 # Calculate execution time even for failures
                 execution_time = time.time() - start_time
@@ -315,6 +313,8 @@ def log_performance(
 
                 # Re-raise the exception
                 raise
+            else:
+                return result
 
         return wrapper
 

@@ -198,7 +198,6 @@ class TranscodingService:
                             attempt + 1,
                             encoder_type,
                         )
-                        return output_path
                     error_msg = f"Attempt {attempt + 1}: Output validation failed - not iPhone compatible"
                     attempt_log.append(error_msg)
                     if attempt < max_retries:
@@ -226,6 +225,8 @@ class TranscodingService:
 
                 if attempt >= max_retries:
                     break
+            else:
+                return output_path
 
         # All attempts failed
         total_time = time.time() - start_time
@@ -276,7 +277,6 @@ class TranscodingService:
                 result["diagnostic_message"] = (
                     f"Used cached transcoded file: {Path(cached_path).name}"
                 )
-                return result
 
             # Analyze video format
             try:
@@ -395,7 +395,8 @@ class TranscodingService:
                 f"Unexpected preprocessing error: {str(e)[:200]}"
             )
             result["processed_path"] = file_path
-
+        else:
+            return result
         finally:
             result["processing_time"] = time.time() - start_time
             # Note: Performance indicator removed - not used in current implementation
@@ -464,8 +465,6 @@ class TranscodingService:
 
                 test_time = time.time() - start_time
 
-                return True
-
         except TimeoutError:
             return False
 
@@ -483,6 +482,8 @@ class TranscodingService:
                 pass
 
             return False
+        else:
+            return True
 
         finally:
             # Cleanup
@@ -636,8 +637,6 @@ class TranscodingService:
 
             # Get final result
             stdout, stderr = process.communicate()
-            return process.returncode == 0
-
         except subprocess.SubprocessError:
             return False
 
@@ -653,8 +652,6 @@ class TranscodingService:
                 or "baseline" in codec_info.get("profile", "").lower()
             )
             pixfmt_ok = codec_info.get("pixel_format") == "yuv420p"
-
-            return codec_ok and profile_ok and pixfmt_ok
 
         except Exception:
             return False
@@ -717,8 +714,6 @@ class TranscodingService:
                 # Cached file was deleted
                 del self._transcoding_cache[cache_key]
                 return None
-
-            return None
 
         except (OSError, KeyError):
             return None

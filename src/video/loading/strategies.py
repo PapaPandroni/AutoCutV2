@@ -520,10 +520,11 @@ class VideoLoadingStrategy(ABC):
             system_resources = (
                 self.resource_manager.memory_monitor.get_system_resources()
             )
-            return system_resources.memory_percent > 88.0
         except Exception as e:
             self.logger.warning(f"Failed to check system memory pressure: {e}")
             return False
+        else:
+            return system_resources.memory_percent > 88.0
 
     def _load_clip_from_disk(self, spec: ClipSpec) -> VideoFileClip:
         """Load clip from disk with MoviePy 2.x reader corruption prevention.
@@ -582,8 +583,6 @@ class VideoLoadingStrategy(ABC):
                 f"Resolution standardization temporarily disabled for {spec}"
             )
 
-            return final_clip
-
         except Exception as e:
             self.logger.exception(f"Failed to load clip from disk for {spec}: {e}")
             # Handle iPhone H.265 compatibility issues
@@ -594,6 +593,8 @@ class VideoLoadingStrategy(ABC):
                     details={"original_error": str(e)},
                 ) from e
             raise
+        else:
+            return final_clip
 
     def _standardize_clip_resolution(
         self, clip: VideoFileClip, spec: ClipSpec
@@ -779,8 +780,6 @@ class VideoLoadingStrategy(ABC):
                 # If size check fails, still return the clip
                 self.logger.warning(f"Could not verify final dimensions for {spec}")
 
-            return resized_clip
-
         except Exception as e:
             self.logger.exception(f"Failed to standardize resolution for {spec}: {e}")
             import traceback
@@ -789,6 +788,8 @@ class VideoLoadingStrategy(ABC):
             # Return original clip if standardization fails
             self.logger.warning(f"Falling back to original resolution for {spec}")
             return clip
+        else:
+            return resized_clip
 
     def _generate_cache_key(self, spec: ClipSpec) -> str:
         """Generate cache key for clip specification."""
@@ -1085,24 +1086,25 @@ class RobustLoader(VideoLoadingStrategy):
                 time.sleep(delay)
 
             result = self._load_single_clip(spec)
-            return result, None
-
         except iPhoneCompatibilityError as e:
             # Try transcoding for iPhone H.265 issues
             if self.enable_transcoding and attempt == 0:
                 try:
                     result = self._load_with_transcoding(spec)
-                    return result, None
                 except Exception as transcoding_error:
                     self.logger.warning(
                         f"Transcoding failed for {spec}: {transcoding_error}",
                     )
                     return None, e
+                else:
+                    return result, None
             else:
                 return None, e
 
         except Exception as e:
             return None, e
+        else:
+            return result, None
 
     def _load_clip_with_retry(self, spec: ClipSpec) -> LoadedClip:
         """Load clip with retry and fallback logic."""

@@ -972,9 +972,9 @@ def _check_transcoding_cache(file_path: str) -> Optional[str]:
             del _TRANSCODING_CACHE[cache_key]
             return None
 
-        return None
-
     except (OSError, KeyError):
+        return None
+    else:
         return None
 
 
@@ -1249,10 +1249,10 @@ def validate_transcoded_output(output_path: str) -> Dict[str, Any]:
                 "Enhanced validation failed - see detailed logs above",
             )
 
-        return validation_result
-
     except Exception as e:
         validation_result["error_details"].append(f"Validation exception: {e!s}")
+        return validation_result
+    else:
         return validation_result
 
 
@@ -1827,13 +1827,13 @@ def _validate_combined_iphone_requirements(video_path: str) -> Dict[str, Any]:
             f"H264/Main/8bit {width}x{height} {duration:.1f}s {file_size // 1024}KB"
         )
 
-        return result
-
     except json.JSONDecodeError:
         result["reason"] = "FFprobe output parsing failed"
         return result
     except Exception as e:
         result["reason"] = f"Validation exception: {str(e)[:100]}"
+        return result
+    else:
         return result
 
 
@@ -1916,8 +1916,6 @@ def _validate_video_format_detailed(video_path: str) -> Dict[str, Any]:
 
         result["valid"] = True
         result["details"] = f"h264 Main {pixel_format} level={level}"
-        return result
-
     except json.JSONDecodeError as e:
         result["reason"] = f"JSON decode error: {e!s}"
         return result
@@ -1926,6 +1924,8 @@ def _validate_video_format_detailed(video_path: str) -> Dict[str, Any]:
         return result
     except Exception as e:
         result["reason"] = f"Format validation error: {e!s}"
+        return result
+    else:
         return result
 
 
@@ -2115,11 +2115,11 @@ def _validate_iphone_specific_requirements(video_path: str) -> Dict[str, Any]:
         result["details"] = (
             f"{width}x{height} @{fps:.1f}fps, {container}, level={level}"
         )
-        return result
-
     except Exception as e:
         result["compatible"] = False
         result["reason"] = f"iPhone validation error: {e!s}"
+        return result
+    else:
         return result
 
 
@@ -2184,10 +2184,10 @@ def _validate_encoder_output_fast(
         )
         pixfmt_ok = pix_fmt == "yuv420p"
 
-        return codec_ok and profile_ok and pixfmt_ok
-
     except (subprocess.SubprocessError, subprocess.TimeoutExpired):
         return False
+    else:
+        return codec_ok and profile_ok and pixfmt_ok
 
 
 def find_all_video_files(directory: str) -> List[str]:

@@ -141,13 +141,13 @@ def main():
             if Path(timeline_json).exists():
                 pass
 
-        return True
-
     except Exception as e:
         import traceback
 
         traceback.print_exc()
         return False
+    else:
+        return True
 
 
 if __name__ == "__main__":

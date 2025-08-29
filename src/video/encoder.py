@@ -279,10 +279,11 @@ class VideoEncoder:
                 raise RuntimeError(f"Output file was not created: {output_path}")
 
             # Note: Encoding time tracking removed - not used in current implementation
-            return output_path
 
         except Exception as e:
             raise RuntimeError(f"Video encoding failed: {e!s}") from e
+        else:
+            return output_path
 
 
 # Legacy functions for backward compatibility

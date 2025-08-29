@@ -165,8 +165,6 @@ class CodecDetector:
             if use_cache:
                 self._codec_cache[cache_key] = codec_info
 
-            return codec_info
-
         except subprocess.CalledProcessError as e:
             raise VideoProcessingError(
                 f"FFprobe failed for {file_path}",
@@ -178,6 +176,8 @@ class CodecDetector:
             raise VideoProcessingError(
                 f"Failed to parse video information for {file_path}: {e!s}",
             ) from e
+        else:
+            return codec_info
 
     def _standardize_codec_name(self, codec_name: str) -> str:
         """Convert various codec name variants to standard names."""

@@ -25,7 +25,6 @@ def import_moviepy_safely():
             from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
         except ImportError:
             from moviepy import CompositeVideoClip
-        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
     except ImportError:
         try:
             # Fallback to legacy import structure (MoviePy < 2.1.2)
@@ -36,16 +35,19 @@ def import_moviepy_safely():
                 concatenate_videoclips,
             )
 
+        except ImportError as e:
+            raise RuntimeError(
+                "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
+            ) from e
+        else:
             return (
                 VideoFileClip,
                 AudioFileClip,
                 concatenate_videoclips,
                 CompositeVideoClip,
             )
-        except ImportError as e:
-            raise RuntimeError(
-                "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
-            ) from e
+    else:
+        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
 
 
 def check_moviepy_api_compatibility() -> Dict[str, Any]:
@@ -81,28 +83,6 @@ def check_moviepy_api_compatibility() -> Dict[str, Any]:
         preferred_fps = "with_fps" if has_with_fps else "set_fps"
         preferred_crop = "cropped" if has_cropped else "crop"
 
-        return {
-            "version_detected": version,
-            "method_mappings": {
-                "subclip": preferred_subclip,
-                "set_audio": preferred_audio,
-                "resize": preferred_resize,
-                "set_fps": preferred_fps,
-                "crop": preferred_crop,
-            },
-            "available_methods": {
-                "subclip": has_subclip,
-                "subclipped": has_subclipped,
-                "set_audio": has_set_audio,
-                "with_audio": has_with_audio,
-                "resize": has_resize,
-                "resized": has_resized,
-                "set_fps": has_set_fps,
-                "with_fps": has_with_fps,
-                "crop": has_crop,
-                "cropped": has_cropped,
-            },
-        }
     except Exception as e:
         logger.warning(f"MoviePy compatibility check failed: {e}")
         return {
@@ -125,6 +105,29 @@ def check_moviepy_api_compatibility() -> Dict[str, Any]:
                 "with_fps": True,
                 "crop": False,
                 "cropped": True,
+            },
+        }
+    else:
+        return {
+            "version_detected": version,
+            "method_mappings": {
+                "subclip": preferred_subclip,
+                "set_audio": preferred_audio,
+                "resize": preferred_resize,
+                "set_fps": preferred_fps,
+                "crop": preferred_crop,
+            },
+            "available_methods": {
+                "subclip": has_subclip,
+                "subclipped": has_subclipped,
+                "set_audio": has_set_audio,
+                "with_audio": has_with_audio,
+                "resize": has_resize,
+                "resized": has_resized,
+                "set_fps": has_set_fps,
+                "with_fps": has_with_fps,
+                "crop": has_crop,
+                "cropped": has_cropped,
             },
         }
 
@@ -504,8 +507,6 @@ def resize_clip_safely(
                 f"  Mode: {scaling_mode} - letterboxing applied to preserve content and aspect ratio"
             )
 
-            return letterboxed_clip
-
         except Exception as letterbox_error:
             # Fallback: return resized clip without letterboxing if composition fails
             logger.warning(
@@ -573,7 +574,6 @@ def resize_with_aspect_preservation(
         )
 
         logger.info("Aspect ratio preservation completed successfully")
-        return result
 
     except Exception as e:
         logger.exception(f"resize_with_aspect_preservation failed: {e}")
@@ -784,6 +784,7 @@ def test_independent_subclip_creation():
     try:
         VideoFileClip, _, _, _ = import_moviepy_safely()
         # This is a placeholder - actual implementation would test subclip creation
-        return True
     except Exception:
         return False
+    else:
+        return True

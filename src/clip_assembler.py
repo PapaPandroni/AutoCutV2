@@ -782,15 +782,15 @@ class VideoPreprocessor:
                         else 0,
                     }
 
-            # Fallback if ffprobe fails
+        except Exception:
             return {
                 "codec_name": "unknown",
                 "width": 1920,
                 "height": 1080,
                 "r_frame_rate": "24/1",
             }
-
-        except Exception:
+        else:
+            # Fallback if ffprobe fails
             return {
                 "codec_name": "unknown",
                 "width": 1920,
@@ -860,9 +860,9 @@ class VideoPreprocessor:
             if success and processed_path.exists():
                 self.preprocessing_cache[cache_key] = str(processed_path)
                 return str(processed_path)
-            return video_path
-
         except Exception:
+            return video_path
+        else:
             return video_path
 
     def _preprocess_with_ffmpeg_modern(
@@ -957,11 +957,11 @@ class VideoPreprocessor:
                 return True
             if result.stderr:
                 pass  # First 200 chars
-            return False
-
         except subprocess.TimeoutExpired:
             return False
         except Exception:
+            return False
+        else:
             return False
 
     def cleanup_preprocessed_files(self, max_age_hours: int = 24) -> None:
@@ -1432,13 +1432,14 @@ class RobustVideoLoader:
                         pass
 
                     return result, None
-                return None, None
             except Exception as e:
                 error_type = type(e).__name__
                 self.error_statistics["error_types"][error_type] = (
                     self.error_statistics["error_types"].get(error_type, 0) + 1
                 )
                 return None, e
+            else:
+                return None, None
 
         for strategy_name, strategy_func in strategies:
             result, error = _try_loading_strategy(strategy_name, strategy_func, clip_data, resource_manager, canvas_format)
@@ -1594,9 +1595,6 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(converted_file)
             resource_manager.register_temp_file(temp_dir)
-
-            return segment
-
         except Exception as e:
             # Cleanup on failure
             try:
@@ -1607,9 +1605,10 @@ class RobustVideoLoader:
             except Exception:
                 pass
             raise RuntimeError(f"Format conversion failed: {e}") from e
-
         except subprocess.TimeoutExpired as timeout_error:
             raise RuntimeError("Format conversion timed out") from timeout_error
+        else:
+            return segment
 
     def _load_with_quality_reduction(
         self,
@@ -1710,9 +1709,6 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(reduced_file)
             resource_manager.register_temp_file(temp_dir)
-
-            return segment
-
         except Exception as e:
             # Cleanup on failure
             try:
@@ -1723,9 +1719,10 @@ class RobustVideoLoader:
             except Exception:
                 pass  # Ignore cleanup errors
             raise RuntimeError(f"Quality reduction failed: {e}") from e
-
         except subprocess.TimeoutExpired as timeout_error:
             raise RuntimeError("Quality reduction timed out") from timeout_error
+        else:
+            return segment
 
     def _load_emergency_minimal(
         self,
@@ -1835,9 +1832,6 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(minimal_file)
             resource_manager.register_temp_file(temp_dir)
-
-            return segment
-
         except Exception as e:
             # Cleanup on failure
             try:
@@ -1848,9 +1842,10 @@ class RobustVideoLoader:
             except Exception:
                 pass  # Ignore cleanup errors
             raise RuntimeError(f"Emergency loading failed: {e}") from e
-
         except subprocess.TimeoutExpired as timeout_error:
             raise RuntimeError("Emergency loading timed out") from timeout_error
+        else:
+            return segment
 
     def get_error_report(self) -> Dict[str, Any]:
         """Get comprehensive error statistics report."""
@@ -2271,11 +2266,10 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
                 # CRITICAL: Ensure we never return None
                 if result is None:
                     continue
-
-                return result
-
             except Exception:
                 continue
+            else:
+                return result
 
     # If all methods fail, this is a critical error
     raise RuntimeError(
@@ -2371,9 +2365,10 @@ def test_independent_subclip_creation(video_path: Optional[str] = None) -> bool:
         # Test new subclip (should work)
         try:
             new_frame = new_subclip.get_frame(0.1)
-            return new_frame is not None
         except Exception:
             return False
+        else:
+            return new_frame is not None
 
     except Exception:
         return False
@@ -2403,7 +2398,6 @@ def import_moviepy_safely():
             from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
         except ImportError:
             from moviepy import CompositeVideoClip
-        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
     except ImportError:
         try:
             # Fallback to legacy import structure (MoviePy < 2.1.2)
@@ -2414,16 +2408,19 @@ def import_moviepy_safely():
                 concatenate_videoclips,
             )
 
+        except ImportError as import_error:
+            raise RuntimeError(
+                "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
+            ) from import_error
+        else:
             return (
                 VideoFileClip,
                 AudioFileClip,
                 concatenate_videoclips,
                 CompositeVideoClip,
             )
-        except ImportError as import_error:
-            raise RuntimeError(
-                "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
-            ) from import_error
+    else:
+        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
 
 
 def write_videofile_safely(video_clip, output_path, compatibility_info=None, **kwargs):
@@ -3149,11 +3146,10 @@ def render_video(
                 final_video.close()
         except Exception:
             pass
-
-        return output_path
-
     except Exception as e:
         raise RuntimeError(f"Failed to render video: {e!s}") from e
+    else:
+        return output_path
 
 
 def add_transitions(
@@ -3319,11 +3315,10 @@ def assemble_clips(
                 logger.warning(
                     "   Will attempt to process but may encounter issues...",
                 )
-
-            return True, None
-
         except Exception as e:
             return False, f"Unexpected error validating audio file: {e!s}"
+        else:
+            return True, None
 
     # Set up detailed logging for the main pipeline
     logger = logging.getLogger("autocut.clip_assembler")
@@ -3728,13 +3723,12 @@ def assemble_clips(
         logger.info(
             f"  - Canvas format: {canvas_format['canvas_type']} ({canvas_format['target_width']}x{canvas_format['target_height']})"
         )
-
-        return final_video_path
-
     except Exception as e:
         error_msg = f"Failed to render video: {e!s}"
         logger.exception(error_msg)
         raise RuntimeError(error_msg) from e
+    else:
+        return final_video_path
 
     # Export timeline JSON for debugging (optional)
     try:

@@ -255,7 +255,6 @@ class HardwareDetector:
             diagnostics["ffmpeg_version"] = (
                 result.stdout.split("\\n")[0] if result.stdout else "Unknown"
             )
-            return True
         except (
             subprocess.SubprocessError,
             subprocess.TimeoutExpired,
@@ -263,6 +262,8 @@ class HardwareDetector:
         ) as e:
             diagnostics["errors_encountered"].append(f"FFmpeg not available: {e!s}")
             return False
+        else:
+            return True
 
     def _list_available_encoders(self, diagnostics: Dict[str, Any]) -> str:
         """List available FFmpeg encoders."""
@@ -275,12 +276,13 @@ class HardwareDetector:
                 timeout=5,
             )
             diagnostics["available_encoders"] = "Listed successfully"
-            return result.stdout
         except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
             diagnostics["errors_encountered"].append(
                 f"Encoder listing failed: {e!s}",
             )
             return ""
+        else:
+            return result.stdout
 
     def _test_hardware_encoder(
         self,
@@ -475,8 +477,6 @@ class HardwareDetector:
                 acceptable in profile.lower() for acceptable in ["main", "baseline"]
             )
             pixfmt_ok = pix_fmt == "yuv420p"
-
-            return codec_ok and profile_ok and pixfmt_ok
 
         except (subprocess.SubprocessError, subprocess.TimeoutExpired):
             return False

@@ -227,7 +227,7 @@ class VideoNormalizationPipeline:
             if utilization < 50 or utilization > 80:
                 pass
 
-            return letterboxed_clip
-
         except Exception:
             return resized_clip
+        else:
+            return letterboxed_clip

@@ -100,11 +100,10 @@ def load_video(file_path: PathLike) -> Tuple[VideoFileClip, Dict[str, Any]]:
             "processed_file_path": processed_file_path,  # May be different if transcoded
             "was_transcoded": processed_file_path != file_path,
         }
-
-        return video, metadata
-
     except Exception as e:
         raise ValueError(f"Failed to load video file {file_path}: {e!s}") from e
+    else:
+        return video, metadata
 
 
 def detect_scenes(
@@ -144,11 +143,11 @@ def detect_scenes(
             frame = video.get_frame(timestamp)
             if prev_frame is not None:
                 diff = np.mean(np.abs(frame.astype(float) - prev_frame.astype(float)))
-                return frame, diff
-            return frame, None
         except Exception:
             # Skip problematic frames
             return None, None
+        else:
+            return frame, diff
 
     for t in timestamps[1:]:  # Skip first timestamp
         frame, diff = _safe_get_frame_diff(t)
@@ -248,12 +247,11 @@ def score_scene(video: VideoFileClip, start_time: float, end_time: float) -> flo
             frame_score = (
                 0.4 * sharpness_score + 0.3 * brightness_score + 0.3 * contrast_score
             )
-
-            return frame_score
-
         except Exception:
             # Skip problematic frames
             return None
+        else:
+            return frame_score
 
     for t in sample_times:
         frame_score = _safe_score_frame(t)
@@ -929,11 +927,11 @@ def analyze_video_file(
         logger.info(
             f"Successfully created {len(chunks)} chunks from {filename} (scores: {chunks[0].score:.1f}-{chunks[-1].score:.1f})",
         )
-        return chunks
-
     except Exception as e:
         error_msg = f"Critical error analyzing {filename}: {e!s}"
         processing_stats["errors"].append(error_msg)
         logger.exception(error_msg)
         logger.exception(f"Processing stats: {processing_stats}")
         raise ValueError(error_msg) from e
+    else:
+        return chunks

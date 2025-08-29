@@ -52,11 +52,11 @@ class VideoFormatAnalyzer:
             if hasattr(video_clip, "filename"):
                 format_info["filename"] = video_clip.filename
 
-            return format_info
-
         except Exception:
             # Use smart fallback instead of hard-coded 1920x1080
             return self._get_smart_fallback_format()
+        else:
+            return format_info
 
     def _categorize_resolution(self, width: int, height: int) -> str:
         """Categorize resolution into standard formats."""
