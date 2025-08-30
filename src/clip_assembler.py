@@ -3373,10 +3373,11 @@ def assemble_clips(
                 logger.warning(
                     "   Will attempt to process but may encounter issues...",
                 )
+        
+        # CRITICAL FIX: Return in try block, not orphaned else block  
+        return True, None
         except Exception as e:
             return False, f"Unexpected error validating audio file: {e!s}"
-        else:
-            return True, None
 
     # Set up detailed logging for the main pipeline
     logger = logging.getLogger("autocut.clip_assembler")
