@@ -2323,10 +2323,10 @@ def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
                 # CRITICAL: Ensure we never return None
                 if result is None:
                     continue
+                # CRITICAL FIX: Return in try block, not orphaned else block
+                return result
             except Exception:
                 continue
-            else:
-                return result
 
     # If all methods fail, this is a critical error
     raise RuntimeError(
@@ -3203,10 +3203,11 @@ def render_video(
                 final_video.close()
         except Exception:
             pass
+        
+        # CRITICAL FIX: Return in try block, not orphaned else block
+        return output_path
     except Exception as e:
         raise RuntimeError(f"Failed to render video: {e!s}") from e
-    else:
-        return output_path
 
 
 def add_transitions(
