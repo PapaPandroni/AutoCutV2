@@ -574,6 +574,7 @@ def resize_with_aspect_preservation(
         )
 
         logger.info("Aspect ratio preservation completed successfully")
+        return result
 
     except Exception as e:
         logger.exception(f"resize_with_aspect_preservation failed: {e}")

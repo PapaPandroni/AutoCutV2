@@ -650,6 +650,9 @@ class TranscodingService:
                 or "baseline" in codec_info.get("profile", "").lower()
             )
             pixfmt_ok = codec_info.get("pixel_format") == "yuv420p"
+            
+            # Return True only if all compatibility checks pass
+            return codec_ok and profile_ok and pixfmt_ok
 
         except Exception:
             return False

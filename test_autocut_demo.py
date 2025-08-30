@@ -72,7 +72,6 @@ def main():
         format_counts[ext] = format_counts.get(ext, 0) + 1
 
     for _i, vf in enumerate(video_files, 1):
-        name = Path(vf).name
         ext = Path(vf).suffix.upper()
 
     # Find audio file
@@ -106,6 +105,7 @@ def main():
         bar_length = 30
         filled = int(bar_length * progress)
         bar = "█" * filled + "░" * (bar_length - filled)
+        print(f"\r{step}: [{bar}] {progress:.1%}", end="", flush=True)
 
     try:
         start_time = time.time()
@@ -121,16 +121,18 @@ def main():
         elapsed = time.time() - start_time
 
         # Show file info
+        print(f"\n✅ Processing completed in {elapsed:.1f} seconds")
         result_path_obj = Path(result_path)
         if result_path_obj.exists():
             file_size = result_path_obj.stat().st_size / (1024 * 1024)  # MB
+            print(f"📁 Output file: {result_path} ({file_size:.1f} MB)")
 
             # Check for timeline JSON
             timeline_json = result_path.replace(".mp4", "_timeline.json")
             if Path(timeline_json).exists():
-                pass
+                print(f"📊 Timeline data: {timeline_json}")
 
-    except Exception as e:
+    except Exception:
         import traceback
 
         traceback.print_exc()
