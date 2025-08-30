@@ -1525,9 +1525,13 @@ class RobustVideoLoader:
         self,
         clip_data: Dict[str, Any],
         resource_manager: VideoResourceManager,
-        canvas_format: Optional[dict] = None,  # NEW: Canvas format for scaling
+        canvas_format: Optional[dict] = None,  # Kept for backward compatibility, no longer used
     ) -> Optional[Any]:
-        """Direct loading with MoviePy and intelligent canvas scaling."""
+        """Direct loading with MoviePy.
+        
+        NOTE: Canvas scaling is now handled centrally in uniformize_dimensions()
+        before concatenation for better performance and consistency.
+        """
         video_file = clip_data["video_file"]
         start_time = clip_data["start"]
         end_time = clip_data["end"]
@@ -1541,43 +1545,6 @@ class RobustVideoLoader:
             segment = video_clip.subclipped(start_time, end_time)
         except AttributeError:
             segment = video_clip.subclip(start_time, end_time)
-
-        # NEW: Apply intelligent canvas scaling if provided
-        if canvas_format and segment is not None:
-            try:
-                target_width = canvas_format["target_width"]
-                target_height = canvas_format["target_height"]
-                
-                # Get current segment dimensions
-                current_width, current_height = segment.size
-                
-                # Calculate aspect ratios
-                target_aspect = target_width / target_height
-                current_aspect = current_width / current_height
-                
-                logger = logging.getLogger("autocut.clip_assembler")
-                logger.info(f"🎯 Scaling {current_width}x{current_height} to {target_width}x{target_height}")
-                
-                # Use MoviePy's resize with aspect ratio preservation
-                if current_aspect > target_aspect:
-                    # Video is wider than target - fit to width, add letterbox bars top/bottom
-                    scaled_segment = segment.resize(width=target_width)
-                else:
-                    # Video is taller than target - fit to height, add pillarbox bars left/right  
-                    scaled_segment = segment.resize(height=target_height)
-                
-                # Only use scaled version if it succeeded
-                if scaled_segment is not None:
-                    segment = scaled_segment
-                    logger.info(f"✅ Canvas scaling successful: {segment.size}")
-                else:
-                    logger.warning(f"⚠️ MoviePy resize returned None, using original segment")
-                    
-            except Exception as e:
-                # DIAGNOSTIC: Log scaling failure but continue with original segment
-                logger = logging.getLogger("autocut.clip_assembler")
-                logger.warning(f"⚠️ Canvas scaling failed, using original segment: {e}")
-                # segment remains unchanged (original unscaled version)
 
         return segment
 
@@ -1613,19 +1580,7 @@ class RobustVideoLoader:
                 str(end_time - start_time),
             ]
 
-            # NEW: Apply intelligent canvas scaling during conversion if provided
-            if canvas_format:
-                target_w = canvas_format["target_width"]
-                target_h = canvas_format["target_height"]
-                # Use aspect-aware scaling with letterboxing
-                scale_filter = (
-                    f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease"
-                )
-                pad_filter = f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
-                combined_filter = f"{scale_filter},{pad_filter}"
-                cmd.extend(["-vf", combined_filter])
-            else:
-                pass
+            # NOTE: Canvas scaling is now handled centrally in uniformize_dimensions()
 
             # Standard conversion settings
             cmd.extend(
@@ -1727,29 +1682,14 @@ class RobustVideoLoader:
                 str(end_time - start_time),
             ]
 
-            # NEW: Apply intelligent canvas scaling during quality reduction if provided
-            if canvas_format:
-                target_w = canvas_format["target_width"]
-                target_h = canvas_format["target_height"]
-                target_fps = canvas_format.get("target_fps", 25)
-
-                # Combine quality reduction with canvas scaling for maximum efficiency
-                scale_filter = (
-                    f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease"
-                )
-                pad_filter = f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
-                fps_filter = f"fps={target_fps}"
-                combined_filter = f"{scale_filter},{pad_filter},{fps_filter}"
-
-                cmd.extend(["-vf", combined_filter])
-            else:
-                # Standard quality reduction without canvas scaling
-                cmd.extend(
-                    [
-                        "-vf",
-                        "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=24",
-                    ]
-                )
+            # NOTE: Canvas scaling is now handled centrally in uniformize_dimensions()
+            # Apply standard quality reduction
+            cmd.extend(
+                [
+                    "-vf",
+                    "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=24",
+                ]
+            )
 
             # Aggressive quality reduction settings
             cmd.extend(
@@ -1851,30 +1791,14 @@ class RobustVideoLoader:
                 str(end_time - start_time),
             ]
 
-            # NEW: Apply emergency canvas scaling if provided
-            if canvas_format:
-                # Use smaller dimensions for emergency mode to reduce memory pressure
-                emergency_width = min(
-                    canvas_format["target_width"], 854
-                )  # Max 854 wide for emergency
-                emergency_height = min(
-                    canvas_format["target_height"], 480
-                )  # Max 480 high for emergency
-
-                scale_filter = f"scale={emergency_width}:{emergency_height}:force_original_aspect_ratio=decrease"
-                pad_filter = f"pad={emergency_width}:{emergency_height}:(ow-iw)/2:(oh-ih)/2:black"
-                fps_filter = "fps=15"  # Very low FPS for emergency
-                combined_filter = f"{scale_filter},{pad_filter},{fps_filter}"
-
-                cmd.extend(["-vf", combined_filter])
-            else:
-                # Standard emergency settings without canvas scaling
-                cmd.extend(
-                    [
-                        "-vf",
-                        "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2:black,fps=15",
-                    ]
-                )
+            # NOTE: Canvas scaling is now handled centrally in uniformize_dimensions()
+            # Apply standard emergency settings for minimal resource usage
+            cmd.extend(
+                [
+                    "-vf",
+                    "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2:black,fps=15",
+                ]
+            )
 
             # Minimal quality settings for maximum compatibility
             cmd.extend(
@@ -2940,6 +2864,89 @@ def apply_variety_pattern(pattern_name: str, beat_count: int) -> List[int]:
     return result
 
 
+def uniformize_dimensions(clips, target_width, target_height):
+    """Force all clips to exact canvas dimensions with maximum scaling and minimal letterboxing.
+    
+    This function ensures all clips have identical final dimensions before concatenation,
+    preventing black bars caused by dimension mismatches. Each clip is scaled to use
+    the maximum possible screen space within the target canvas while preserving aspect ratio.
+    
+    Args:
+        clips: List of MoviePy VideoClip objects
+        target_width: Canvas width in pixels
+        target_height: Canvas height in pixels
+        
+    Returns:
+        List of VideoClip objects, all exactly target_width x target_height
+    """
+    import logging
+    from moviepy.editor import ColorClip, CompositeVideoClip
+    
+    logger = logging.getLogger("autocut.clip_assembler")
+    logger.info(f"🎯 Uniformizing {len(clips)} clips to {target_width}x{target_height}")
+    
+    uniform_clips = []
+    target_aspect = target_width / target_height
+    
+    for i, clip in enumerate(clips):
+        try:
+            # Get original clip dimensions
+            original_width, original_height = clip.size
+            original_aspect = original_width / original_height
+            
+            # Calculate maximum scale factor that preserves aspect ratio
+            if original_aspect > target_aspect:
+                # Clip is wider than target - fit to width (letterbox top/bottom)
+                scale_factor = target_width / original_width
+                scaled_width = target_width
+                scaled_height = int(original_height * scale_factor)
+            else:
+                # Clip is taller than target - fit to height (pillarbox left/right)
+                scale_factor = target_height / original_height
+                scaled_width = int(original_width * scale_factor)
+                scaled_height = target_height
+            
+            # Resize clip to maximum possible size within canvas
+            resized_clip = clip.resize((scaled_width, scaled_height))
+            
+            # Calculate position to center the resized clip
+            x_offset = (target_width - scaled_width) // 2
+            y_offset = (target_height - scaled_height) // 2
+            
+            # Create black background canvas
+            background = ColorClip(
+                size=(target_width, target_height),
+                color=(0, 0, 0),  # Black background
+                duration=resized_clip.duration
+            )
+            
+            # Position resized clip on background canvas
+            positioned_clip = resized_clip.set_position((x_offset, y_offset))
+            
+            # Composite to create exact target dimensions
+            uniform_clip = CompositeVideoClip(
+                [background, positioned_clip],
+                size=(target_width, target_height)
+            )
+            
+            uniform_clips.append(uniform_clip)
+            
+            # Enhanced diagnostic logging
+            letterbox_type = "top/bottom" if original_aspect > target_aspect else "left/right"
+            logger.info(f"🔧 Clip {i+1}: {original_width}x{original_height} → {target_width}x{target_height}")
+            logger.info(f"   📏 Scale factor: {scale_factor:.3f}")
+            logger.info(f"   📐 Content size: {scaled_width}x{scaled_height} (centered)")
+            logger.info(f"   ⬛ Letterbox: {letterbox_type} bars")
+            logger.info(f"   📍 Position: ({x_offset}, {y_offset})")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to uniformize clip {i+1}: {e}")
+            # Fallback: use original clip (may cause dimension mismatch)
+            uniform_clips.append(clip)
+    
+    logger.info(f"✅ Uniformization complete: all clips are {target_width}x{target_height}")
+    return uniform_clips
+
 def render_video(
     timeline: ClipTimeline,
     audio_file: str,
@@ -3082,9 +3089,24 @@ def render_video(
             )
 
         if progress_callback:
+            progress_callback("Uniformizing video dimensions", 0.45)
+
+        # CRITICAL FIX: Uniformize all clip dimensions before concatenation
+        # This ensures all clips are exactly target_width x target_height, 
+        # preventing black bars caused by dimension mismatches
+        if canvas_format:
+            video_clips = uniformize_dimensions(
+                video_clips,
+                canvas_format["target_width"],
+                canvas_format["target_height"]
+            )
+        else:
+            logger.warning("⚠️ No canvas format provided - skipping dimension uniformization")
+
+        if progress_callback:
             progress_callback("Concatenating video clips", 0.5)
 
-        # Concatenate video clips
+        # Concatenate video clips (now all have identical dimensions)
         final_video = concatenate_videoclips(video_clips, method="compose")
 
         if progress_callback:
