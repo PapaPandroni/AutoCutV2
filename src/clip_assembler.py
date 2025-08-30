@@ -3780,12 +3780,12 @@ def assemble_clips(
         logger.info(
             f"  - Canvas format: {canvas_format['canvas_type']} ({canvas_format['target_width']}x{canvas_format['target_height']})"
         )
+        # CRITICAL FIX: Return in try block, not orphaned else block
+        return final_video_path
     except Exception as e:
         error_msg = f"Failed to render video: {e!s}"
         logger.exception(error_msg)
         raise RuntimeError(error_msg) from e
-    else:
-        return final_video_path
 
     # Export timeline JSON for debugging (optional)
     try:
