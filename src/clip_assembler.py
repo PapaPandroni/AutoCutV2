@@ -386,11 +386,12 @@ class VideoResourceManager:
             video = VideoFileClip(video_path)
             self.delayed_cleanup_videos[video_path] = video
             self.active_videos.add(id(video))
+            
+            # CRITICAL FIX: Return video in try block, not orphaned else block
+            return video
 
         except Exception as e:
             raise RuntimeError(f"Failed to load video {video_path}: {e!s}") from e
-        else:
-            return video
 
     def cleanup_delayed_videos(self) -> None:
         """Clean up all videos that were loaded with delayed cleanup.
