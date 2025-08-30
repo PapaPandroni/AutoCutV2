@@ -1547,15 +1547,21 @@ class RobustVideoLoader:
             try:
                 from compatibility.moviepy import resize_with_aspect_preservation
 
-                segment = resize_with_aspect_preservation(
+                # CRITICAL FIX: Preserve original segment if scaling fails
+                scaled_segment = resize_with_aspect_preservation(
                     segment,
                     target_width=canvas_format["target_width"],
                     target_height=canvas_format["target_height"],
                     scaling_mode="smart",  # Use smart scaling for optimal results
                 )
-            except Exception:
-                pass
-                # Continue with unscaled segment rather than failing
+                # Only use scaled version if it succeeded
+                if scaled_segment is not None:
+                    segment = scaled_segment
+            except Exception as e:
+                # DIAGNOSTIC: Log scaling failure but continue with original segment
+                logger = logging.getLogger("autocut.clip_assembler")
+                logger.warning(f"⚠️ Canvas scaling failed, using original segment: {e}")
+                # segment remains unchanged (original unscaled version)
 
         return segment
 
@@ -1631,8 +1637,8 @@ class RobustVideoLoader:
             if result.returncode != 0:
                 raise RuntimeError(f"FFmpeg conversion failed: {result.stderr[:200]}")
 
-            # Load converted clip
-            from moviepy.editor import VideoFileClip
+            # Load converted clip using safe import pattern
+            VideoFileClip, _, _, _ = import_moviepy_safely()
 
             converted_clip = VideoFileClip(converted_file)
 
@@ -1761,8 +1767,8 @@ class RobustVideoLoader:
                     f"FFmpeg quality reduction failed: {result.stderr[:200]}"
                 )
 
-            # Load reduced quality clip
-            from moviepy.editor import VideoFileClip
+            # Load reduced quality clip using safe import pattern
+            VideoFileClip, _, _, _ = import_moviepy_safely()
 
             reduced_clip = VideoFileClip(reduced_file)
             segment = (
@@ -1896,8 +1902,8 @@ class RobustVideoLoader:
                     f"FFmpeg emergency processing failed: {result.stderr[:200]}"
                 )
 
-            # Load minimal clip
-            from moviepy.editor import VideoFileClip
+            # Load minimal clip using safe import pattern
+            VideoFileClip, _, _, _ = import_moviepy_safely()
 
             minimal_clip = VideoFileClip(minimal_file)
             segment = minimal_clip  # Already processed with emergency settings
