@@ -2944,6 +2944,18 @@ def uniformize_dimensions(clips, target_width, target_height):
                 scaling_mode="fit"  # Preserve aspect ratio, no cropping
             )
             
+            # CRITICAL: Check if resize_clip_safely returned None or failed
+            if resized_clip is None:
+                logger.error(f"❌ resize_clip_safely returned None for clip {i+1}")
+                uniform_clips.append(clip)  # Use original clip as fallback
+                continue
+                
+            # Validate resized clip has required attributes
+            if not hasattr(resized_clip, 'duration'):
+                logger.error(f"❌ Resized clip {i+1} missing duration attribute")
+                uniform_clips.append(clip)  # Use original clip as fallback
+                continue
+            
             # Calculate position to center the resized clip
             x_offset = (target_width - scaled_width) // 2
             y_offset = (target_height - scaled_height) // 2
@@ -2955,8 +2967,8 @@ def uniformize_dimensions(clips, target_width, target_height):
                 duration=resized_clip.duration
             )
             
-            # Position resized clip on background canvas
-            positioned_clip = resized_clip.set_position((x_offset, y_offset))
+            # FIXED: Use with_position instead of set_position for MoviePy v2.0 compatibility
+            positioned_clip = resized_clip.with_position((x_offset, y_offset))
             
             # Composite to create exact target dimensions
             uniform_clip = CompositeVideoClip(
@@ -2976,6 +2988,8 @@ def uniformize_dimensions(clips, target_width, target_height):
             
         except Exception as e:
             logger.error(f"❌ Failed to uniformize clip {i+1}: {e}")
+            import traceback
+            logger.error(f"   Stack trace: {traceback.format_exc()}")
             # Fallback: use original clip (may cause dimension mismatch)
             uniform_clips.append(clip)
     
