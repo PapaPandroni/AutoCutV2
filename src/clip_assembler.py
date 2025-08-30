@@ -1456,14 +1456,16 @@ class RobustVideoLoader:
                         pass
 
                     return result, None
+                
+                # CRITICAL FIX: Return None for unsuccessful result, not in else block
+                return None, None
+                
             except Exception as e:
                 error_type = type(e).__name__
                 self.error_statistics["error_types"][error_type] = (
                     self.error_statistics["error_types"].get(error_type, 0) + 1
                 )
                 return None, e
-            else:
-                return None, None
 
         for strategy_name, strategy_func in strategies:
             result, error = _try_loading_strategy(strategy_name, strategy_func, clip_data, resource_manager, canvas_format)
