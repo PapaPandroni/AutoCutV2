@@ -7,6 +7,7 @@ to create beat-synced highlight videos.
 
 import threading
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import List, Optional
 

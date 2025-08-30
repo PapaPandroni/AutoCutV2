@@ -553,14 +553,14 @@ class TestAPIIntegration:
 
         # Test that API can import and access core modules
         import importlib.util
-        
+
         # Test audio analyzer availability
         if importlib.util.find_spec("audio_analyzer"):
             print("   ✅ Audio analyzer integration available")
         else:
             print("   ⚠️ Audio analyzer integration not available")
 
-        # Test video analyzer availability  
+        # Test video analyzer availability
         if importlib.util.find_spec("video_analyzer"):
             print("   ✅ Video analyzer integration available")
         else:

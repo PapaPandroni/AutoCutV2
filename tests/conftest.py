@@ -40,7 +40,7 @@ def sample_video_files(test_media_dir: Path) -> List[Path]:
             video_files.extend(list(test_media_dir.glob(f"*{ext}")))
             video_files.extend(list(test_media_dir.glob(f"*{ext.upper()}")))
 
-    # CRITICAL FIX: Filter out macOS resource fork files and system files  
+    # CRITICAL FIX: Filter out macOS resource fork files and system files
     from src.utils import filter_valid_video_files
     video_file_strings = [str(f) for f in video_files]
     filtered_strings = filter_valid_video_files(video_file_strings)

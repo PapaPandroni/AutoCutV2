@@ -921,7 +921,6 @@ def _log_transcoding_success(
 ) -> None:
     """Log successful transcoding with comprehensive information."""
     # Note: File size logging removed - not implemented in current version
-    pass
 
 
 # Legacy function for backward compatibility
@@ -2211,53 +2210,53 @@ def filter_valid_video_files(file_list: List[str]) -> List[str]:
         List of valid video file paths
     """
     import os
-    
+
     valid_files = []
     filtered_count = 0
-    
+
     for file_path in file_list:
         try:
             # Get filename from path
             filename = os.path.basename(file_path)
-            
+
             # Skip macOS resource fork files
-            if filename.startswith('._'):
+            if filename.startswith("._"):
                 filtered_count += 1
                 continue
-                
+
             # Skip common system files
-            if filename in ['.DS_Store', 'Thumbs.db', 'desktop.ini']:
+            if filename in [".DS_Store", "Thumbs.db", "desktop.ini"]:
                 filtered_count += 1
                 continue
-                
+
             # Skip hidden files (additional safety)
-            if filename.startswith('.'):
+            if filename.startswith("."):
                 filtered_count += 1
                 continue
-                
+
             # Check file exists and has size > 0
             if not os.path.exists(file_path):
                 filtered_count += 1
                 continue
-                
+
             if os.path.getsize(file_path) == 0:
                 filtered_count += 1
                 continue
-                
+
             # File passed all checks
             valid_files.append(file_path)
-            
-        except (OSError, IOError):
+
+        except OSError:
             # Skip files we can't access
             filtered_count += 1
             continue
-    
+
     # Log filtering results if any files were filtered
     if filtered_count > 0:
         import logging
         logger = logging.getLogger(__name__)
         logger.debug(f"Filtered out {filtered_count} invalid/system files from video collection")
-    
+
     return valid_files
 
 def find_all_video_files(directory: str) -> List[str]:

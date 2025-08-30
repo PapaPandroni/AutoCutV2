@@ -10,6 +10,7 @@ Extracted from clip_assembler.py as part of system consolidation.
 """
 
 import json
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 

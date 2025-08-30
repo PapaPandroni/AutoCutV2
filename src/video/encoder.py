@@ -10,6 +10,7 @@ Extracted from clip_assembler.py as part of system consolidation.
 """
 
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import psutil

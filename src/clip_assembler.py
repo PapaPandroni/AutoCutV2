@@ -350,7 +350,7 @@ class VideoResourceManager:
             try:
                 # Use safe import pattern instead of global variable
                 VideoFileClip, _, _, _ = import_moviepy_safely()
-                
+
                 video = VideoFileClip(video_path)
                 self.active_videos.add(id(video))
                 yield video
@@ -377,16 +377,16 @@ class VideoResourceManager:
         """
         logger = logging.getLogger("autocut.clip_assembler")
         logger.info(f"📁 Loading video with delayed cleanup: {video_path}")
-        
+
         # Check if file exists first
         from pathlib import Path
         if not Path(video_path).exists():
             raise FileNotFoundError(f"Video file does not exist: {video_path}")
-            
+
         try:
             # Use safe import pattern instead of global variable
             VideoFileClip, _, _, _ = import_moviepy_safely()
-            logger.info(f"📦 MoviePy classes imported successfully")
+            logger.info("📦 MoviePy classes imported successfully")
 
             # Check if we already have this video loaded for delayed cleanup
             if video_path in self.delayed_cleanup_videos:
@@ -398,10 +398,10 @@ class VideoResourceManager:
             video = VideoFileClip(video_path)
             logger.info(f"✅ VideoFileClip created successfully: {type(video)}")
             logger.info(f"   Duration: {video.duration:.2f}s, FPS: {video.fps}, Size: {video.size}")
-            
+
             self.delayed_cleanup_videos[video_path] = video
             self.active_videos.add(id(video))
-            
+
             # CRITICAL FIX: Return video in try block, not orphaned else block
             return video
 
@@ -451,7 +451,7 @@ class VideoResourceManager:
         Args:
             temp_file_path: Path to temporary file to be cleaned up later
         """
-        if not hasattr(self, '_temp_files'):
+        if not hasattr(self, "_temp_files"):
             self._temp_files = set()
         self._temp_files.add(str(temp_file_path))
 
@@ -463,7 +463,7 @@ class VideoResourceManager:
         self.cleanup_delayed_videos()
 
         # Clean up temporary files
-        if hasattr(self, '_temp_files'):
+        if hasattr(self, "_temp_files"):
             for temp_file_path in self._temp_files.copy():
                 try:
                     temp_path = Path(temp_file_path)
@@ -1463,7 +1463,7 @@ class RobustVideoLoader:
             logger = logging.getLogger("autocut.clip_assembler")
             video_file = clip_data.get("video_file", "UNKNOWN")
             logger.info(f"🔄 Trying {strategy_name} for {video_file}")
-            
+
             try:
                 # CRITICAL FIX: Pass canvas_format to all fallback strategies
                 result = strategy_func(
@@ -1480,12 +1480,11 @@ class RobustVideoLoader:
                         pass
 
                     return result, None
-                else:
-                    logger.warning(f"⚠️ {strategy_name} returned None for {video_file}")
-                
+                logger.warning(f"⚠️ {strategy_name} returned None for {video_file}")
+
                 # CRITICAL FIX: Return None for unsuccessful result, not in else block
                 return None, None
-                
+
             except Exception as e:
                 logger.error(f"❌ {strategy_name} FAILED for {video_file}: {e}")
                 error_type = type(e).__name__
@@ -1625,10 +1624,10 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(converted_file)
             resource_manager.register_temp_file(temp_dir)
-            
+
             # CRITICAL FIX: Return segment in try block, not orphaned else block
             return segment
-            
+
         except subprocess.TimeoutExpired as timeout_error:
             # Cleanup on timeout
             try:
@@ -1734,10 +1733,10 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(reduced_file)
             resource_manager.register_temp_file(temp_dir)
-            
+
             # CRITICAL FIX: Return segment in try block, not orphaned else block
             return segment
-            
+
         except subprocess.TimeoutExpired as timeout_error:
             # Cleanup on timeout
             try:
@@ -1851,10 +1850,10 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(minimal_file)
             resource_manager.register_temp_file(temp_dir)
-            
+
             # CRITICAL FIX: Return segment in try block, not orphaned else block
             return segment
-            
+
         except subprocess.TimeoutExpired as timeout_error:
             # Cleanup on timeout
             try:
@@ -1970,7 +1969,7 @@ def load_video_clips_with_robust_error_handling(
 
     # DIAGNOSTIC: Log what we're about to process
     logger = logging.getLogger("autocut.clip_assembler")
-    logger.info(f"🎯 Starting robust video loading:")
+    logger.info("🎯 Starting robust video loading:")
     logger.info(f"   Total clips to process: {len(sorted_clips)}")
     logger.info(f"   Grouped into {len(grouped_clips)} video files:")
     for video_file, file_clips in grouped_clips.items():
@@ -2004,7 +2003,7 @@ def load_video_clips_with_robust_error_handling(
             start_time = clip_data.get("start", 0)
             end_time = clip_data.get("end", 0)
             logger.info(f"🎬 Attempting to load clip {i+1}: {video_file} ({start_time:.2f}-{end_time:.2f}s)")
-            
+
             try:
                 # Use robust loader with multiple fallback strategies and delayed cleanup
                 # NEW: Pass canvas_format to the loader for intelligent scaling
@@ -2228,9 +2227,9 @@ def check_moviepy_api_compatibility():
         try:
             # Fallback to legacy import structure (MoviePy < 2.1.2)
             from moviepy.editor import (
-                AudioFileClip,  # noqa: F401
-                VideoFileClip,  # noqa: F401
-                concatenate_videoclips,  # noqa: F401
+                AudioFileClip,
+                VideoFileClip,
+                concatenate_videoclips,
             )
 
             import_pattern = "legacy"  # from moviepy.editor import ...
@@ -2444,7 +2443,7 @@ def import_moviepy_safely():
             from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
         except ImportError:
             from moviepy import CompositeVideoClip
-        
+
         # CRITICAL FIX: Return in try block, not orphaned else block
         return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
     except ImportError:
@@ -2456,7 +2455,7 @@ def import_moviepy_safely():
                 VideoFileClip,
                 concatenate_videoclips,
             )
-            
+
             # CRITICAL FIX: Return in try block, not orphaned else block
             return (
                 VideoFileClip,
@@ -2880,16 +2879,16 @@ def uniformize_dimensions(clips, target_width, target_height):
         List of VideoClip objects, all exactly target_width x target_height
     """
     import logging
-    
+
     logger = logging.getLogger("autocut.clip_assembler")
     logger.info(f"🎯 Uniformizing {len(clips)} clips to {target_width}x{target_height}")
-    
+
     # Import MoviePy classes safely using the same pattern as render_video
     try:
         VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = (
             import_moviepy_safely()
         )
-        
+
         # Import ColorClip with fallback pattern like in compatibility module
         ColorClip = None
         try:
@@ -2901,30 +2900,30 @@ def uniformize_dimensions(clips, target_width, target_height):
                 logger.error("❌ Cannot import ColorClip - letterboxing not available")
                 # Return clips unchanged if we can't do letterboxing
                 return clips
-                
+
         if ColorClip is None or CompositeVideoClip is None:
             logger.error("❌ Required MoviePy classes not available for uniformization")
             return clips
 
         # Import safe resize function from compatibility module
         from src.compatibility.moviepy import resize_clip_safely
-            
+
     except RuntimeError as e:
         logger.error(f"❌ MoviePy import failed: {e}")
         return clips
     except ImportError as e:
         logger.error(f"❌ Failed to import compatibility resize function: {e}")
         return clips
-    
+
     uniform_clips = []
     target_aspect = target_width / target_height
-    
+
     for i, clip in enumerate(clips):
         try:
             # Get original clip dimensions
             original_width, original_height = clip.size
             original_aspect = original_width / original_height
-            
+
             # Calculate maximum scale factor that preserves aspect ratio
             if original_aspect > target_aspect:
                 # Clip is wider than target - fit to width (letterbox top/bottom)
@@ -2936,48 +2935,48 @@ def uniformize_dimensions(clips, target_width, target_height):
                 scale_factor = target_height / original_height
                 scaled_width = int(original_width * scale_factor)
                 scaled_height = target_height
-            
+
             # Use safe resize function from compatibility module instead of direct resize
             resized_clip = resize_clip_safely(
-                clip, 
+                clip,
                 newsize=(scaled_width, scaled_height),
                 scaling_mode="fit"  # Preserve aspect ratio, no cropping
             )
-            
+
             # CRITICAL: Check if resize_clip_safely returned None or failed
             if resized_clip is None:
                 logger.error(f"❌ resize_clip_safely returned None for clip {i+1}")
                 uniform_clips.append(clip)  # Use original clip as fallback
                 continue
-                
+
             # Validate resized clip has required attributes
-            if not hasattr(resized_clip, 'duration'):
+            if not hasattr(resized_clip, "duration"):
                 logger.error(f"❌ Resized clip {i+1} missing duration attribute")
                 uniform_clips.append(clip)  # Use original clip as fallback
                 continue
-            
+
             # Calculate position to center the resized clip
             x_offset = (target_width - scaled_width) // 2
             y_offset = (target_height - scaled_height) // 2
-            
+
             # Create black background canvas
             background = ColorClip(
                 size=(target_width, target_height),
                 color=(0, 0, 0),  # Black background
                 duration=resized_clip.duration
             )
-            
+
             # FIXED: Use with_position instead of set_position for MoviePy v2.0 compatibility
             positioned_clip = resized_clip.with_position((x_offset, y_offset))
-            
+
             # Composite to create exact target dimensions
             uniform_clip = CompositeVideoClip(
                 [background, positioned_clip],
                 size=(target_width, target_height)
             )
-            
+
             uniform_clips.append(uniform_clip)
-            
+
             # Enhanced diagnostic logging
             letterbox_type = "top/bottom" if original_aspect > target_aspect else "left/right"
             logger.info(f"🔧 Clip {i+1}: {original_width}x{original_height} → {target_width}x{target_height}")
@@ -2985,14 +2984,14 @@ def uniformize_dimensions(clips, target_width, target_height):
             logger.info(f"   📐 Content size: {scaled_width}x{scaled_height} (centered)")
             logger.info(f"   ⬛ Letterbox: {letterbox_type} bars")
             logger.info(f"   📍 Position: ({x_offset}, {y_offset})")
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to uniformize clip {i+1}: {e}")
             import traceback
             logger.error(f"   Stack trace: {traceback.format_exc()}")
             # Fallback: use original clip (may cause dimension mismatch)
             uniform_clips.append(clip)
-    
+
     logger.info(f"✅ Uniformization complete: all clips are {target_width}x{target_height}")
     return uniform_clips
 
@@ -3026,6 +3025,9 @@ def render_video(
     Raises:
         RuntimeError: If rendering fails
     """
+    # Initialize logger for this function
+    logger = logging.getLogger("autocut.clip_assembler")
+
     try:
         # Import MoviePy components safely
         VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = (
@@ -3141,7 +3143,7 @@ def render_video(
             progress_callback("Uniformizing video dimensions", 0.45)
 
         # CRITICAL FIX: Uniformize all clip dimensions before concatenation
-        # This ensures all clips are exactly target_width x target_height, 
+        # This ensures all clips are exactly target_width x target_height,
         # preventing black bars caused by dimension mismatches
         if canvas_format:
             video_clips = uniformize_dimensions(
@@ -3340,7 +3342,7 @@ def render_video(
                 final_video.close()
         except Exception:
             pass
-        
+
         # CRITICAL FIX: Return in try block, not orphaned else block
         return output_path
     except Exception as e:
@@ -3510,8 +3512,8 @@ def assemble_clips(
                 logger.warning(
                     "   Will attempt to process but may encounter issues...",
                 )
-        
-            # CRITICAL FIX: Return in try block, not orphaned else block  
+
+            # CRITICAL FIX: Return in try block, not orphaned else block
             return True, None
         except Exception as e:
             return False, f"Unexpected error validating audio file: {e!s}"
