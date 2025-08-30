@@ -2880,10 +2880,35 @@ def uniformize_dimensions(clips, target_width, target_height):
         List of VideoClip objects, all exactly target_width x target_height
     """
     import logging
-    from moviepy.editor import ColorClip, CompositeVideoClip
     
     logger = logging.getLogger("autocut.clip_assembler")
     logger.info(f"🎯 Uniformizing {len(clips)} clips to {target_width}x{target_height}")
+    
+    # Import MoviePy classes safely using the same pattern as render_video
+    try:
+        VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip = (
+            import_moviepy_safely()
+        )
+        
+        # Import ColorClip with fallback pattern like in compatibility module
+        ColorClip = None
+        try:
+            from moviepy.editor import ColorClip
+        except ImportError:
+            try:
+                from moviepy import ColorClip
+            except ImportError:
+                logger.error("❌ Cannot import ColorClip - letterboxing not available")
+                # Return clips unchanged if we can't do letterboxing
+                return clips
+                
+        if ColorClip is None or CompositeVideoClip is None:
+            logger.error("❌ Required MoviePy classes not available for uniformization")
+            return clips
+            
+    except RuntimeError as e:
+        logger.error(f"❌ MoviePy import failed: {e}")
+        return clips
     
     uniform_clips = []
     target_aspect = target_width / target_height
