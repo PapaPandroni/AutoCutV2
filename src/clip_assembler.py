@@ -1619,6 +1619,20 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(converted_file)
             resource_manager.register_temp_file(temp_dir)
+            
+            # CRITICAL FIX: Return segment in try block, not orphaned else block
+            return segment
+            
+        except subprocess.TimeoutExpired as timeout_error:
+            # Cleanup on timeout
+            try:
+                if converted_file.exists():
+                    converted_file.unlink()
+                if Path(temp_dir).exists():
+                    Path(temp_dir).rmdir()
+            except Exception:
+                pass
+            raise RuntimeError("Format conversion timed out") from timeout_error
         except Exception as e:
             # Cleanup on failure
             try:
@@ -1629,10 +1643,6 @@ class RobustVideoLoader:
             except Exception:
                 pass
             raise RuntimeError(f"Format conversion failed: {e}") from e
-        except subprocess.TimeoutExpired as timeout_error:
-            raise RuntimeError("Format conversion timed out") from timeout_error
-        else:
-            return segment
 
     def _load_with_quality_reduction(
         self,
@@ -1733,6 +1743,20 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(reduced_file)
             resource_manager.register_temp_file(temp_dir)
+            
+            # CRITICAL FIX: Return segment in try block, not orphaned else block
+            return segment
+            
+        except subprocess.TimeoutExpired as timeout_error:
+            # Cleanup on timeout
+            try:
+                if reduced_file.exists():
+                    reduced_file.unlink()
+                if Path(temp_dir).exists():
+                    Path(temp_dir).rmdir()
+            except Exception:
+                pass  # Ignore cleanup errors
+            raise RuntimeError("Quality reduction timed out") from timeout_error
         except Exception as e:
             # Cleanup on failure
             try:
@@ -1743,10 +1767,6 @@ class RobustVideoLoader:
             except Exception:
                 pass  # Ignore cleanup errors
             raise RuntimeError(f"Quality reduction failed: {e}") from e
-        except subprocess.TimeoutExpired as timeout_error:
-            raise RuntimeError("Quality reduction timed out") from timeout_error
-        else:
-            return segment
 
     def _load_emergency_minimal(
         self,
@@ -1856,6 +1876,20 @@ class RobustVideoLoader:
             # Register for cleanup
             resource_manager.register_temp_file(minimal_file)
             resource_manager.register_temp_file(temp_dir)
+            
+            # CRITICAL FIX: Return segment in try block, not orphaned else block
+            return segment
+            
+        except subprocess.TimeoutExpired as timeout_error:
+            # Cleanup on timeout
+            try:
+                if minimal_file.exists():
+                    minimal_file.unlink()
+                if Path(temp_dir).exists():
+                    Path(temp_dir).rmdir()
+            except Exception:
+                pass  # Ignore cleanup errors
+            raise RuntimeError("Emergency loading timed out") from timeout_error
         except Exception as e:
             # Cleanup on failure
             try:
@@ -1866,10 +1900,6 @@ class RobustVideoLoader:
             except Exception:
                 pass  # Ignore cleanup errors
             raise RuntimeError(f"Emergency loading failed: {e}") from e
-        except subprocess.TimeoutExpired as timeout_error:
-            raise RuntimeError("Emergency loading timed out") from timeout_error
-        else:
-            return segment
 
     def get_error_report(self) -> Dict[str, Any]:
         """Get comprehensive error statistics report."""
