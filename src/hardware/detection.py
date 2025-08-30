@@ -477,7 +477,7 @@ class HardwareDetector:
                 acceptable in profile.lower() for acceptable in ["main", "baseline"]
             )
             pixfmt_ok = pix_fmt == "yuv420p"
-            
+
             # Return True only if all compatibility checks pass
             return codec_ok and profile_ok and pixfmt_ok
 

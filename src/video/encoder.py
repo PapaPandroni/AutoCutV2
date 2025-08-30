@@ -238,7 +238,7 @@ class VideoEncoder:
         except ImportError:
             # Fallback if compatibility module not available
             def write_videofile_safely(
-                video_clip: Any, output_path: str, compatibility_info: Dict[str, Any], **kwargs: Any
+                video_clip: Any, output_path: str, _compatibility_info: Dict[str, Any], **kwargs: Any
             ) -> Any:
                 return video_clip.write_videofile(output_path, **kwargs)
 

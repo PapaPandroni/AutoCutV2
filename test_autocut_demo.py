@@ -27,7 +27,7 @@ from src.utils import SUPPORTED_VIDEO_FORMATS
 
 def find_all_video_files(directory: str) -> list:
     """Find all supported video files in directory using enhanced format support.
-    
+
     CRITICAL FIX: Now uses centralized filtering to exclude macOS resource fork files.
     """
     # Import from utils to get consistent filtering behavior

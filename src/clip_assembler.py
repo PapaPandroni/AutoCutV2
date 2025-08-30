@@ -406,7 +406,7 @@ class VideoResourceManager:
             return video
 
         except Exception as e:
-            logger.error(f"❌ Failed to load video {video_path}: {e}")
+            logger.exception(f"❌ Failed to load video {video_path}: {e}")
             import traceback
             traceback.print_exc()
             raise RuntimeError(f"Failed to load video {video_path}: {e!s}") from e
@@ -447,7 +447,7 @@ class VideoResourceManager:
 
     def register_temp_file(self, temp_file_path) -> None:
         """Register a temporary file for cleanup.
-        
+
         Args:
             temp_file_path: Path to temporary file to be cleaned up later
         """
@@ -1486,7 +1486,7 @@ class RobustVideoLoader:
                 return None, None
 
             except Exception as e:
-                logger.error(f"❌ {strategy_name} FAILED for {video_file}: {e}")
+                logger.exception(f"❌ {strategy_name} FAILED for {video_file}: {e}")
                 error_type = type(e).__name__
                 self.error_statistics["error_types"][error_type] = (
                     self.error_statistics["error_types"].get(error_type, 0) + 1
@@ -1527,7 +1527,7 @@ class RobustVideoLoader:
         canvas_format: Optional[dict] = None,  # Kept for backward compatibility, no longer used
     ) -> Optional[Any]:
         """Direct loading with MoviePy.
-        
+
         NOTE: Canvas scaling is now handled centrally in uniformize_dimensions()
         before concatenation for better performance and consistency.
         """
@@ -2865,16 +2865,16 @@ def apply_variety_pattern(pattern_name: str, beat_count: int) -> List[int]:
 
 def uniformize_dimensions(clips, target_width, target_height):
     """Force all clips to exact canvas dimensions with maximum scaling and minimal letterboxing.
-    
+
     This function ensures all clips have identical final dimensions before concatenation,
     preventing black bars caused by dimension mismatches. Each clip is scaled to use
     the maximum possible screen space within the target canvas while preserving aspect ratio.
-    
+
     Args:
         clips: List of MoviePy VideoClip objects
         target_width: Canvas width in pixels
         target_height: Canvas height in pixels
-        
+
     Returns:
         List of VideoClip objects, all exactly target_width x target_height
     """
@@ -2897,7 +2897,7 @@ def uniformize_dimensions(clips, target_width, target_height):
             try:
                 from moviepy import ColorClip
             except ImportError:
-                logger.error("❌ Cannot import ColorClip - letterboxing not available")
+                logger.exception("❌ Cannot import ColorClip - letterboxing not available")
                 # Return clips unchanged if we can't do letterboxing
                 return clips
 
@@ -2909,10 +2909,10 @@ def uniformize_dimensions(clips, target_width, target_height):
         from src.compatibility.moviepy import resize_clip_safely
 
     except RuntimeError as e:
-        logger.error(f"❌ MoviePy import failed: {e}")
+        logger.exception(f"❌ MoviePy import failed: {e}")
         return clips
     except ImportError as e:
-        logger.error(f"❌ Failed to import compatibility resize function: {e}")
+        logger.exception(f"❌ Failed to import compatibility resize function: {e}")
         return clips
 
     uniform_clips = []
@@ -2986,9 +2986,9 @@ def uniformize_dimensions(clips, target_width, target_height):
             logger.info(f"   📍 Position: ({x_offset}, {y_offset})")
 
         except Exception as e:
-            logger.error(f"❌ Failed to uniformize clip {i+1}: {e}")
+            logger.exception(f"❌ Failed to uniformize clip {i+1}: {e}")
             import traceback
-            logger.error(f"   Stack trace: {traceback.format_exc()}")
+            logger.exception(f"   Stack trace: {traceback.format_exc()}")
             # Fallback: use original clip (may cause dimension mismatch)
             uniform_clips.append(clip)
 

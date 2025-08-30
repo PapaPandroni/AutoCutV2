@@ -13,40 +13,35 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Public API - explicitly exported symbols
 __all__ = [
+    "DEFAULT_CONFIG",
+    "SUPPORTED_AUDIO_FORMATS",
     # Constants
     "SUPPORTED_VIDEO_FORMATS",
-    "SUPPORTED_AUDIO_FORMATS",
-    "DEFAULT_CONFIG",
-
+    # Classes
+    "ProgressTracker",
     # Core functions
     "detect_optimal_codec_settings",
     "detect_optimal_codec_settings_enhanced",
+    # Video processing functions
+    "detect_video_codec",
+    # Utility functions
+    "ensure_output_directory",
+    "find_all_video_files",
+    "format_duration",
+    "get_config_value",
+    "get_file_size_mb",
+    "preprocess_video_if_needed",
+    "preprocess_video_if_needed_enhanced",
+    "safe_filename",
     "setup_logging",
-
-    # Validation functions
-    "validate_video_file",
+    "test_moviepy_h265_compatibility",
+    "transcode_hevc_to_h264",
+    "transcode_hevc_to_h264_enhanced",
     "validate_audio_file",
     "validate_input_files",
     "validate_transcoded_output",
-
-    # Video processing functions
-    "detect_video_codec",
-    "transcode_hevc_to_h264",
-    "transcode_hevc_to_h264_enhanced",
-    "preprocess_video_if_needed",
-    "preprocess_video_if_needed_enhanced",
-    "test_moviepy_h265_compatibility",
-
-    # Utility functions
-    "ensure_output_directory",
-    "format_duration",
-    "get_file_size_mb",
-    "safe_filename",
-    "find_all_video_files",
-    "get_config_value",
-
-    # Classes
-    "ProgressTracker",
+    # Validation functions
+    "validate_video_file",
 ]
 
 # Import codec settings function from clip_assembler
@@ -432,7 +427,7 @@ def detect_video_codec(file_path: str) -> Dict[str, Any]:
 def _calculate_compatibility_score(
     codec: str,
     container: str,
-    format_name: str,
+    _format_name: str,
     video_stream: Dict[str, Any],
     format_info: Dict[str, Any],
 ) -> Tuple[int, List[str]]:
@@ -1289,7 +1284,7 @@ def test_moviepy_h265_compatibility(
     def timeout_handler(seconds):
         """Context manager for timeout handling."""
 
-        def timeout_signal(signum, frame):
+        def timeout_signal(_signum, _frame):
             raise TimeoutError("MoviePy compatibility test timed out")
 
         # Set up timeout
@@ -1951,7 +1946,7 @@ def _test_moviepy_compatibility_enhanced(
     def timeout_handler(seconds):
         """Context manager for timeout handling."""
 
-        def timeout_signal(signum, frame):
+        def timeout_signal(_signum, _frame):
             raise TimeoutError("MoviePy compatibility test timed out")
 
         old_handler = signal.signal(signal.SIGALRM, timeout_signal)
@@ -2123,14 +2118,14 @@ def _validate_iphone_specific_requirements(video_path: str) -> Dict[str, Any]:
 
 
 # Legacy validation function for backward compatibility
-def _validate_encoder_output(video_path: str, expected_profile: str = "Main") -> bool:
+def _validate_encoder_output(video_path: str, _expected_profile: str = "Main") -> bool:
     """Legacy validation function - calls enhanced version for compatibility."""
     return _validate_transcoded_output_enhanced(video_path)
 
 
 def _validate_encoder_output_fast(
     video_path: str,
-    expected_profile: str = "Main",
+    _expected_profile: str = "Main",
 ) -> bool:
     """Fast encoder output validation for hardware detection testing.
 
@@ -2192,20 +2187,20 @@ def _validate_encoder_output_fast(
 def filter_valid_video_files(file_list: List[str]) -> List[str]:
     """
     Filter out invalid video files that cause loading failures.
-    
+
     CRITICAL FIX: Removes macOS resource fork files and other system files
     that can cause RuntimeError: "No video clips could be loaded successfully".
-    
+
     Filters out:
     - macOS resource fork files (._filename)
     - macOS system files (.DS_Store)
     - Windows thumbnail files (Thumbs.db)
     - Empty or non-existent files
     - Files with invalid extensions despite glob matching
-    
+
     Args:
         file_list: List of potential video file paths
-        
+
     Returns:
         List of valid video file paths
     """
@@ -2262,7 +2257,7 @@ def filter_valid_video_files(file_list: List[str]) -> List[str]:
 def find_all_video_files(directory: str) -> List[str]:
     """
     Find all supported video files in directory using enhanced format support.
-    
+
     CRITICAL FIX: Now filters out macOS resource fork files and other system files
     that can cause "video loading failures" when the system tries to process them.
 

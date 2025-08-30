@@ -421,7 +421,7 @@ class TranscodingService:
 
         @contextmanager
         def timeout_handler(seconds):
-            def timeout_signal(signum, frame):
+            def timeout_signal(_signum, _frame):
                 raise TimeoutError("MoviePy compatibility test timed out")
 
             old_handler = signal.signal(signal.SIGALRM, timeout_signal)
@@ -650,7 +650,7 @@ class TranscodingService:
                 or "baseline" in codec_info.get("profile", "").lower()
             )
             pixfmt_ok = codec_info.get("pixel_format") == "yuv420p"
-            
+
             # Return True only if all compatibility checks pass
             return codec_ok and profile_ok and pixfmt_ok
 

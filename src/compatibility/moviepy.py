@@ -133,7 +133,7 @@ def check_moviepy_api_compatibility() -> Dict[str, Any]:
 
 
 def subclip_safely(
-    clip, start_time: float, end_time: float, compatibility_info: Dict[str, Any]
+    clip, start_time: float, end_time: float, _compatibility_info: Dict[str, Any]
 ):
     """Create subclip using version-compatible method.
 
@@ -163,7 +163,7 @@ def subclip_safely(
         raise
 
 
-def attach_audio_safely(video_clip, audio_clip, compatibility_info: Dict[str, Any]):
+def attach_audio_safely(video_clip, audio_clip, _compatibility_info: Dict[str, Any]):
     """Attach audio to video using version-compatible method.
 
     Args:
@@ -197,7 +197,7 @@ def resize_clip_safely(
     width=None,
     height=None,
     scaling_mode="smart",
-    compatibility_info: Optional[Dict[str, Any]] = None,
+    _compatibility_info: Optional[Dict[str, Any]] = None,
 ):
     """Resize clip using MoviePy 2.x effects system with content-aware smart scaling for optimal screen utilization.
 
@@ -592,7 +592,7 @@ def resize_with_aspect_preservation(
 
 
 def set_fps_safely(
-    clip, fps: float, compatibility_info: Optional[Dict[str, Any]] = None
+    clip, fps: float, _compatibility_info: Optional[Dict[str, Any]] = None
 ):
     """Set FPS using version-compatible method.
 
@@ -645,7 +645,7 @@ def crop_clip_safely(
     height=None,
     x_center=None,
     y_center=None,
-    compatibility_info: Optional[Dict[str, Any]] = None,
+    _compatibility_info: Optional[Dict[str, Any]] = None,
 ):
     """Crop clip using version-compatible method.
 
@@ -694,7 +694,7 @@ def crop_clip_safely(
 
 
 def write_videofile_safely(
-    video_clip, output_path: str, compatibility_info: Dict[str, Any], **kwargs
+    video_clip, output_path: str, _compatibility_info: Dict[str, Any], **kwargs
 ):
     """Write video file using version-compatible parameters.
 

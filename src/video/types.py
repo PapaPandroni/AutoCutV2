@@ -222,46 +222,39 @@ AnalysisFunction = Callable[[PathLike], VideoAnalysisResult]
 
 # Export all types for use in other modules
 __all__ = [
+    "AnalysisFunction",
+    "AnalysisResultDict",
+    "AudioAnalyzer",
+    "AudioMetadata",
+    "BeatsInfo",
+    # Assembly types
+    "ClipCandidate",
+    "ClipCandidateList",
+    "EncoderType",
+    "HardwareCapabilities",
+    "HardwareDetector",
+    "HardwareSettingsDict",
     # Basic types
     "PathLike",
     "PatternType",
-    "EncoderType",
-
-    # Metadata types
-    "VideoMetadata",
-    "AudioMetadata",
-    "HardwareCapabilities",
-
-    # Analysis types
-    "VideoAnalysisResult",
-    "SceneSegment",
-    "BeatsInfo",
-
-    # Assembly types
-    "ClipCandidate",
-    "TimelineConfig",
-
-    # Processing types
-    "ProcessingProgress",
-    "ValidationIssue",
-    "ValidationResults",
-    "RenderingConfig",
-
-    # Protocols
-    "VideoAnalyzer",
-    "AudioAnalyzer",
-    "HardwareDetector",
-    "ProgressCallback",
-
-    # Type aliases
-    "VideoFileList",
-    "ClipCandidateList",
-    "AnalysisResultDict",
-    "HardwareSettingsDict",
-    "ProcessingOptionsDict",
-
     # Function types
     "ProcessingFunction",
+    "ProcessingOptionsDict",
+    # Processing types
+    "ProcessingProgress",
+    "ProgressCallback",
+    "RenderingConfig",
+    "SceneSegment",
+    "TimelineConfig",
     "ValidationFunction",
-    "AnalysisFunction",
+    "ValidationIssue",
+    "ValidationResults",
+    # Analysis types
+    "VideoAnalysisResult",
+    # Protocols
+    "VideoAnalyzer",
+    # Type aliases
+    "VideoFileList",
+    # Metadata types
+    "VideoMetadata",
 ]
