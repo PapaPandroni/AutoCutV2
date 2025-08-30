@@ -8,6 +8,7 @@ applying variety patterns, and rendering the final video.
 import builtins
 import contextlib
 import json
+import logging
 import os
 import threading
 from collections import defaultdict
