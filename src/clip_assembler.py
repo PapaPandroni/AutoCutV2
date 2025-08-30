@@ -2228,7 +2228,7 @@ def check_moviepy_api_compatibility():
 
     # Analyze write_videofile parameters
     try:
-        write_sig = inspect.signature(video_dummy.write_videofile)
+        write_sig = inspect.signature(VideoFileClip.write_videofile)
         compatibility["write_videofile_params"] = list(write_sig.parameters.keys())
     except Exception:
         compatibility["write_videofile_params"] = ["filename"]

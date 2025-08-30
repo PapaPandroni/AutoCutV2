@@ -141,6 +141,7 @@ def detect_scenes(
         """Safely get frame and calculate difference, returning (frame, diff)."""
         try:
             frame = video.get_frame(timestamp)
+            diff = None  # Initialize diff for first frame case
             if prev_frame is not None:
                 diff = np.mean(np.abs(frame.astype(float) - prev_frame.astype(float)))
         except Exception:
