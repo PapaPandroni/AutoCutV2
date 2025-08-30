@@ -343,18 +343,13 @@ class VideoResourceManager:
         import gc
         from contextlib import contextmanager
 
-        def _raise_moviepy_not_available():
-            raise RuntimeError(
-                "MoviePy not available. Please install moviepy>=1.0.3",
-            )
-
         @contextmanager
         def _video_context():
             video = None
             try:
-                if VideoFileClip is None:
-                    _raise_moviepy_not_available()
-
+                # Use safe import pattern instead of global variable
+                VideoFileClip, _, _, _ = import_moviepy_safely()
+                
                 video = VideoFileClip(video_path)
                 self.active_videos.add(id(video))
                 yield video
@@ -379,14 +374,9 @@ class VideoResourceManager:
         - Parent videos stay alive while their subclips are being used
         - Cleanup happens only after concatenation is complete
         """
-        def _raise_moviepy_unavailable():
-            raise RuntimeError(
-                "MoviePy not available. Please install moviepy>=1.0.3",
-            )
-
         try:
-            if VideoFileClip is None:
-                _raise_moviepy_unavailable()
+            # Use safe import pattern instead of global variable
+            VideoFileClip, _, _, _ = import_moviepy_safely()
 
             # Check if we already have this video loaded for delayed cleanup
             if video_path in self.delayed_cleanup_videos:
@@ -432,6 +422,41 @@ class VideoResourceManager:
 
         # Clean up delayed videos first
         self.cleanup_delayed_videos()
+
+        gc.collect()
+        self.active_videos.clear()
+
+    def register_temp_file(self, temp_file_path) -> None:
+        """Register a temporary file for cleanup.
+        
+        Args:
+            temp_file_path: Path to temporary file to be cleaned up later
+        """
+        if not hasattr(self, '_temp_files'):
+            self._temp_files = set()
+        self._temp_files.add(str(temp_file_path))
+
+    def cleanup_all(self) -> None:
+        """Clean up all resources including delayed videos and temporary files."""
+        import gc
+
+        # Clean up delayed videos
+        self.cleanup_delayed_videos()
+
+        # Clean up temporary files
+        if hasattr(self, '_temp_files'):
+            for temp_file_path in self._temp_files.copy():
+                try:
+                    temp_path = Path(temp_file_path)
+                    if temp_path.exists():
+                        if temp_path.is_file():
+                            temp_path.unlink()
+                        elif temp_path.is_dir():
+                            import shutil
+                            shutil.rmtree(temp_path, ignore_errors=True)
+                    self._temp_files.discard(temp_file_path)
+                except Exception:
+                    pass  # Ignore cleanup errors
 
         gc.collect()
         self.active_videos.clear()
