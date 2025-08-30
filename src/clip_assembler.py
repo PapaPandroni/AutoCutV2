@@ -2905,9 +2905,15 @@ def uniformize_dimensions(clips, target_width, target_height):
         if ColorClip is None or CompositeVideoClip is None:
             logger.error("❌ Required MoviePy classes not available for uniformization")
             return clips
+
+        # Import safe resize function from compatibility module
+        from src.compatibility.moviepy import resize_clip_safely
             
     except RuntimeError as e:
         logger.error(f"❌ MoviePy import failed: {e}")
+        return clips
+    except ImportError as e:
+        logger.error(f"❌ Failed to import compatibility resize function: {e}")
         return clips
     
     uniform_clips = []
@@ -2931,8 +2937,12 @@ def uniformize_dimensions(clips, target_width, target_height):
                 scaled_width = int(original_width * scale_factor)
                 scaled_height = target_height
             
-            # Resize clip to maximum possible size within canvas
-            resized_clip = clip.resize((scaled_width, scaled_height))
+            # Use safe resize function from compatibility module instead of direct resize
+            resized_clip = resize_clip_safely(
+                clip, 
+                newsize=(scaled_width, scaled_height),
+                scaling_mode="fit"  # Preserve aspect ratio, no cropping
+            )
             
             # Calculate position to center the resized clip
             x_offset = (target_width - scaled_width) // 2
