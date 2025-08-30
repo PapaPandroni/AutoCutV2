@@ -374,16 +374,30 @@ class VideoResourceManager:
         - Parent videos stay alive while their subclips are being used
         - Cleanup happens only after concatenation is complete
         """
+        logger = logging.getLogger("autocut.clip_assembler")
+        logger.info(f"📁 Loading video with delayed cleanup: {video_path}")
+        
+        # Check if file exists first
+        from pathlib import Path
+        if not Path(video_path).exists():
+            raise FileNotFoundError(f"Video file does not exist: {video_path}")
+            
         try:
             # Use safe import pattern instead of global variable
             VideoFileClip, _, _, _ = import_moviepy_safely()
+            logger.info(f"📦 MoviePy classes imported successfully")
 
             # Check if we already have this video loaded for delayed cleanup
             if video_path in self.delayed_cleanup_videos:
+                logger.info(f"♻️ Using cached video: {video_path}")
                 return self.delayed_cleanup_videos[video_path]
 
+            logger.info(f"🎬 Creating VideoFileClip for: {video_path}")
             # Load the video and store it for delayed cleanup
             video = VideoFileClip(video_path)
+            logger.info(f"✅ VideoFileClip created successfully: {type(video)}")
+            logger.info(f"   Duration: {video.duration:.2f}s, FPS: {video.fps}, Size: {video.size}")
+            
             self.delayed_cleanup_videos[video_path] = video
             self.active_videos.add(id(video))
             
@@ -391,6 +405,9 @@ class VideoResourceManager:
             return video
 
         except Exception as e:
+            logger.error(f"❌ Failed to load video {video_path}: {e}")
+            import traceback
+            traceback.print_exc()
             raise RuntimeError(f"Failed to load video {video_path}: {e!s}") from e
 
     def cleanup_delayed_videos(self) -> None:
@@ -1442,12 +1459,17 @@ class RobustVideoLoader:
 
         def _try_loading_strategy(strategy_name: str, strategy_func, clip_data, resource_manager, canvas_format):
             """Try a single loading strategy and return result or None."""
+            logger = logging.getLogger("autocut.clip_assembler")
+            video_file = clip_data.get("video_file", "UNKNOWN")
+            logger.info(f"🔄 Trying {strategy_name} for {video_file}")
+            
             try:
                 # CRITICAL FIX: Pass canvas_format to all fallback strategies
                 result = strategy_func(
                     clip_data, resource_manager, canvas_format=canvas_format
                 )
                 if result is not None:
+                    logger.info(f"✅ {strategy_name} SUCCESS for {video_file}")
                     self.error_statistics["successful_loads"] += 1
                     self.error_statistics["fallback_usage"][strategy_name] += 1
 
@@ -1457,11 +1479,14 @@ class RobustVideoLoader:
                         pass
 
                     return result, None
+                else:
+                    logger.warning(f"⚠️ {strategy_name} returned None for {video_file}")
                 
                 # CRITICAL FIX: Return None for unsuccessful result, not in else block
                 return None, None
                 
             except Exception as e:
+                logger.error(f"❌ {strategy_name} FAILED for {video_file}: {e}")
                 error_type = type(e).__name__
                 self.error_statistics["error_types"][error_type] = (
                     self.error_statistics["error_types"].get(error_type, 0) + 1
@@ -1996,6 +2021,14 @@ def load_video_clips_with_robust_error_handling(
     # Group clips for efficient processing
     grouped_clips = _group_clips_by_file(sorted_clips)
 
+    # DIAGNOSTIC: Log what we're about to process
+    logger = logging.getLogger("autocut.clip_assembler")
+    logger.info(f"🎯 Starting robust video loading:")
+    logger.info(f"   Total clips to process: {len(sorted_clips)}")
+    logger.info(f"   Grouped into {len(grouped_clips)} video files:")
+    for video_file, file_clips in grouped_clips.items():
+        logger.info(f"     📄 {video_file}: {len(file_clips)} clips")
+
     video_clips = []
     failed_indices = []
     processed_files = 0
@@ -2018,6 +2051,13 @@ def load_video_clips_with_robust_error_handling(
 
         # Process clips with robust error handling
         for i, clip_data in enumerate(file_clips):
+            # DIAGNOSTIC: Log every clip attempt
+            logger = logging.getLogger("autocut.clip_assembler")
+            video_file = clip_data.get("video_file", "UNKNOWN")
+            start_time = clip_data.get("start", 0)
+            end_time = clip_data.get("end", 0)
+            logger.info(f"🎬 Attempting to load clip {i+1}: {video_file} ({start_time:.2f}-{end_time:.2f}s)")
+            
             try:
                 # Use robust loader with multiple fallback strategies and delayed cleanup
                 # NEW: Pass canvas_format to the loader for intelligent scaling
@@ -2028,9 +2068,11 @@ def load_video_clips_with_robust_error_handling(
                 )
 
                 if segment is not None:
+                    logger.info(f"✅ Clip {i+1} loaded successfully: {type(segment)}")
                     video_clips.append(segment)
                     file_clips_loaded += 1
                 else:
+                    logger.error(f"❌ Clip {i+1} returned None - all fallback strategies failed")
                     # Use original_index from grouped clips to maintain timeline alignment
                     original_index = clip_data.get(
                         "original_index",
