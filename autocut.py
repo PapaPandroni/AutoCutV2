@@ -92,6 +92,10 @@ def process(video_files, audio, output, pattern, max_videos, memory_safe, verbos
                 click.echo(f"❌ File not found: {pattern_or_file}", err=True)
                 sys.exit(1)
 
+        # CRITICAL FIX: Filter out macOS resource fork files and system files
+        from src.utils import filter_valid_video_files
+        video_list = filter_valid_video_files(video_list)
+
         if not video_list:
             click.echo("❌ No valid video files provided", err=True)
             sys.exit(1)

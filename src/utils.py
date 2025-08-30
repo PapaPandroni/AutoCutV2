@@ -2190,15 +2190,88 @@ def _validate_encoder_output_fast(
         return codec_ok and profile_ok and pixfmt_ok
 
 
+def filter_valid_video_files(file_list: List[str]) -> List[str]:
+    """
+    Filter out invalid video files that cause loading failures.
+    
+    CRITICAL FIX: Removes macOS resource fork files and other system files
+    that can cause RuntimeError: "No video clips could be loaded successfully".
+    
+    Filters out:
+    - macOS resource fork files (._filename)
+    - macOS system files (.DS_Store)
+    - Windows thumbnail files (Thumbs.db)
+    - Empty or non-existent files
+    - Files with invalid extensions despite glob matching
+    
+    Args:
+        file_list: List of potential video file paths
+        
+    Returns:
+        List of valid video file paths
+    """
+    import os
+    
+    valid_files = []
+    filtered_count = 0
+    
+    for file_path in file_list:
+        try:
+            # Get filename from path
+            filename = os.path.basename(file_path)
+            
+            # Skip macOS resource fork files
+            if filename.startswith('._'):
+                filtered_count += 1
+                continue
+                
+            # Skip common system files
+            if filename in ['.DS_Store', 'Thumbs.db', 'desktop.ini']:
+                filtered_count += 1
+                continue
+                
+            # Skip hidden files (additional safety)
+            if filename.startswith('.'):
+                filtered_count += 1
+                continue
+                
+            # Check file exists and has size > 0
+            if not os.path.exists(file_path):
+                filtered_count += 1
+                continue
+                
+            if os.path.getsize(file_path) == 0:
+                filtered_count += 1
+                continue
+                
+            # File passed all checks
+            valid_files.append(file_path)
+            
+        except (OSError, IOError):
+            # Skip files we can't access
+            filtered_count += 1
+            continue
+    
+    # Log filtering results if any files were filtered
+    if filtered_count > 0:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Filtered out {filtered_count} invalid/system files from video collection")
+    
+    return valid_files
+
 def find_all_video_files(directory: str) -> List[str]:
     """
     Find all supported video files in directory using enhanced format support.
+    
+    CRITICAL FIX: Now filters out macOS resource fork files and other system files
+    that can cause "video loading failures" when the system tries to process them.
 
     Args:
         directory: Directory to search for video files
 
     Returns:
-        List of video file paths, sorted and deduplicated
+        List of valid video file paths, sorted and deduplicated
     """
     video_files = []
     search_patterns = []
@@ -2214,8 +2287,11 @@ def find_all_video_files(directory: str) -> List[str]:
         found_files = [str(p) for p in Path().glob(pattern)]
         video_files.extend(found_files)
 
+    # CRITICAL FIX: Filter out invalid files that cause loading failures
+    filtered_files = filter_valid_video_files(video_files)
+
     # Remove duplicates and sort
-    return sorted(set(video_files))
+    return sorted(set(filtered_files))
 
 
 # Configuration defaults

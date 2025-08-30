@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 # Import core AutoCut modules (src is in path, so no relative imports needed)
 from clip_assembler import assemble_clips
 from hardware.detection import HardwareDetector
-from utils import SUPPORTED_VIDEO_FORMATS, find_all_video_files
+from utils import SUPPORTED_VIDEO_FORMATS, find_all_video_files, filter_valid_video_files
 from video.validation import ValidationResult, VideoValidator
 
 
@@ -356,6 +356,9 @@ class AutoCutAPI:
             audio_files: List[str] = []
             for ext in audio_extensions:
                 audio_files.extend(str(p) for p in Path(test_media_dir).glob(ext))
+            
+            # CRITICAL FIX: Filter out macOS resource fork files from audio list too
+            audio_files = filter_valid_video_files(audio_files)  # Reuse same filtering logic
 
             if not audio_files:
                 return DemoResult(

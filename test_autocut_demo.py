@@ -26,23 +26,13 @@ from src.utils import SUPPORTED_VIDEO_FORMATS
 
 
 def find_all_video_files(directory: str) -> list:
-    """Find all supported video files in directory using enhanced format support."""
-    video_files = []
-    search_patterns = []
-
-    # Create search patterns for all supported formats (case-insensitive)
-    for ext in SUPPORTED_VIDEO_FORMATS:
-        # Add both lowercase and uppercase variants
-        search_patterns.append(f"{directory}/*{ext}")
-        search_patterns.append(f"{directory}/*{ext.upper()}")
-
-    # Search for all patterns
-    for pattern in search_patterns:
-        found_files = glob.glob(pattern)
-        video_files.extend(found_files)
-
-    # Remove duplicates and sort
-    return sorted(set(video_files))
+    """Find all supported video files in directory using enhanced format support.
+    
+    CRITICAL FIX: Now uses centralized filtering to exclude macOS resource fork files.
+    """
+    # Import from utils to get consistent filtering behavior
+    from src.utils import find_all_video_files as utils_find_files
+    return utils_find_files(directory)
 
 
 def main():
