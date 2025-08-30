@@ -1545,18 +1545,34 @@ class RobustVideoLoader:
         # NEW: Apply intelligent canvas scaling if provided
         if canvas_format and segment is not None:
             try:
-                from compatibility.moviepy import resize_with_aspect_preservation
-
-                # CRITICAL FIX: Preserve original segment if scaling fails
-                scaled_segment = resize_with_aspect_preservation(
-                    segment,
-                    target_width=canvas_format["target_width"],
-                    target_height=canvas_format["target_height"],
-                    scaling_mode="smart",  # Use smart scaling for optimal results
-                )
+                target_width = canvas_format["target_width"]
+                target_height = canvas_format["target_height"]
+                
+                # Get current segment dimensions
+                current_width, current_height = segment.size
+                
+                # Calculate aspect ratios
+                target_aspect = target_width / target_height
+                current_aspect = current_width / current_height
+                
+                logger = logging.getLogger("autocut.clip_assembler")
+                logger.info(f"🎯 Scaling {current_width}x{current_height} to {target_width}x{target_height}")
+                
+                # Use MoviePy's resize with aspect ratio preservation
+                if current_aspect > target_aspect:
+                    # Video is wider than target - fit to width, add letterbox bars top/bottom
+                    scaled_segment = segment.resize(width=target_width)
+                else:
+                    # Video is taller than target - fit to height, add pillarbox bars left/right  
+                    scaled_segment = segment.resize(height=target_height)
+                
                 # Only use scaled version if it succeeded
                 if scaled_segment is not None:
                     segment = scaled_segment
+                    logger.info(f"✅ Canvas scaling successful: {segment.size}")
+                else:
+                    logger.warning(f"⚠️ MoviePy resize returned None, using original segment")
+                    
             except Exception as e:
                 # DIAGNOSTIC: Log scaling failure but continue with original segment
                 logger = logging.getLogger("autocut.clip_assembler")
