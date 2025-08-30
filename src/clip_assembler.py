@@ -2455,6 +2455,9 @@ def import_moviepy_safely():
             from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
         except ImportError:
             from moviepy import CompositeVideoClip
+        
+        # CRITICAL FIX: Return in try block, not orphaned else block
+        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
     except ImportError:
         try:
             # Fallback to legacy import structure (MoviePy < 2.1.2)
@@ -2464,20 +2467,18 @@ def import_moviepy_safely():
                 VideoFileClip,
                 concatenate_videoclips,
             )
-
-        except ImportError as import_error:
-            raise RuntimeError(
-                "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
-            ) from import_error
-        else:
+            
+            # CRITICAL FIX: Return in try block, not orphaned else block
             return (
                 VideoFileClip,
                 AudioFileClip,
                 concatenate_videoclips,
                 CompositeVideoClip,
             )
-    else:
-        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
+        except ImportError as import_error:
+            raise RuntimeError(
+                "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
+            ) from import_error
 
 
 def write_videofile_safely(video_clip, output_path, compatibility_info=None, **kwargs):
