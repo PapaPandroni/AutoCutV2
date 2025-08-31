@@ -30,7 +30,7 @@ except ImportError:
         try:
             import sys
 
-            sys.path.append(os.path.dirname(__file__))
+            sys.path.append(str(Path(__file__).parent))
             from hardware.detection import HardwareDetector
             from video.codec_detection import CodecDetector
         except ImportError:

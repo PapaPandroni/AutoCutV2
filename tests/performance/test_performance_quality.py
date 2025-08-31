@@ -15,7 +15,7 @@ import psutil
 import pytest
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+sys.path.insert(0, str(Path(__file__).parent / ".." / ".." / "src"))
 
 from api import AutoCutAPI
 from audio_analyzer import analyze_audio
@@ -180,8 +180,8 @@ class TestPerformanceQuality:
         )
 
         # Validate output
-        if os.path.exists(output_path):
-            output_size = os.path.getsize(output_path) / (1024 * 1024)
+        if Path(output_path).exists():
+            output_size = Path(output_path).stat().st_size / (1024 * 1024)
             print(f"   📹 Output size: {output_size:.1f}MB")
 
             # Performance metrics
@@ -401,7 +401,7 @@ class TestPerformanceQuality:
                     verbose=False,
                 )
 
-                if os.path.exists(result_path):
+                if Path(result_path).exists():
                     print(f"     ✅ {pattern} pattern created output")
                     # Note: Detailed beat sync analysis would require video analysis tools
                     # For now, we validate that the processing completed successfully
@@ -579,7 +579,7 @@ class TestPerformanceQuality:
 
             if metrics["success"]:
                 output_size = (
-                    os.path.getsize(output_path) if os.path.exists(output_path) else 0
+                    Path(output_path).stat().st_size if Path(output_path).exists() else 0
                 )
 
                 result_data = {

@@ -2230,11 +2230,11 @@ def filter_valid_video_files(file_list: List[str]) -> List[str]:
                 continue
 
             # Check file exists and has size > 0
-            if not os.path.exists(file_path):
+            if not Path(file_path).exists():
                 filtered_count += 1
                 continue
 
-            if os.path.getsize(file_path) == 0:
+            if Path(file_path).stat().st_size == 0:
                 filtered_count += 1
                 continue
 
