@@ -5,7 +5,6 @@ Tests to prevent regression of previously fixed bugs and critical issues.
 These tests validate that resolved problems don't reoccur in future versions.
 """
 
-import os
 import sys
 from pathlib import Path
 
