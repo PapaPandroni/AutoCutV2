@@ -6,7 +6,6 @@ worker counts based on available memory, CPU cores, hardware acceleration,
 and video file characteristics.
 """
 
-import os
 import platform
 from dataclasses import dataclass
 from pathlib import Path

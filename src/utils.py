@@ -2204,15 +2204,13 @@ def filter_valid_video_files(file_list: List[str]) -> List[str]:
     Returns:
         List of valid video file paths
     """
-    import os
-
     valid_files = []
     filtered_count = 0
 
     for file_path in file_list:
         try:
             # Get filename from path
-            filename = os.path.basename(file_path)
+            filename = Path(file_path).name
 
             # Skip macOS resource fork files
             if filename.startswith("._"):

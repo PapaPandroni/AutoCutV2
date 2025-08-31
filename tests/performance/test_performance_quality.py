@@ -5,7 +5,6 @@ Tests to validate performance benchmarks, processing quality metrics, and resour
 These tests ensure the system meets v1.0 performance and quality requirements.
 """
 
-import os
 import statistics
 import sys
 import time

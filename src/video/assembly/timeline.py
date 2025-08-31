@@ -449,7 +449,7 @@ class ClipTimeline:
             export_data["metadata"] = self._metadata
             export_data["metadata"]["exported_at"] = time.time()
 
-        with open(file_path, "w", encoding="utf-8") as f:
+        with Path(file_path).open("w", encoding="utf-8") as f:
             json.dump(export_data, f, indent=2, ensure_ascii=False)
 
         self.logger.info(f"Exported timeline to {file_path}")
@@ -460,7 +460,7 @@ class ClipTimeline:
         Args:
             file_path: Input file path
         """
-        with open(file_path, encoding="utf-8") as f:
+        with Path(file_path).open(encoding="utf-8") as f:
             data = json.load(f)
 
         timeline_data = data.get("timeline", {})

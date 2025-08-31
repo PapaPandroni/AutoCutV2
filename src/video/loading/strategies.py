@@ -793,7 +793,7 @@ class VideoLoadingStrategy(ABC):
 
     def _generate_cache_key(self, spec: ClipSpec) -> str:
         """Generate cache key for clip specification."""
-        file_stat = os.stat(spec.file_path)
+        file_stat = Path(spec.file_path).stat()
         return (
             f"{spec.file_path}:"
             f"{spec.start_time:.2f}-{spec.end_time:.2f}:"

@@ -13,7 +13,6 @@ Usage:
 """
 
 import argparse
-import glob
 import sys
 import time
 from pathlib import Path
@@ -83,7 +82,7 @@ def main():
         audio_extensions = ["*.mp3", "*.wav", "*.m4a", "*.flac", "*.aac", "*.ogg"]
         audio_files = []
         for ext in audio_extensions:
-            audio_files.extend(glob.glob(f"test_media/{ext}"))
+            audio_files.extend(Path("test_media").glob(ext))
 
         if not audio_files:
             return False

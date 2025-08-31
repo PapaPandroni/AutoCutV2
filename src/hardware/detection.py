@@ -421,7 +421,7 @@ class HardwareDetector:
             # Clean up test file
             if temp_output:
                 with contextlib.suppress(OSError):
-                    os.unlink(temp_output)
+                    Path(temp_output).unlink()
 
         diagnostics.setdefault("encoder_test_results", {})[encoder_name] = result
         return result
