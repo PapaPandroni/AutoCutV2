@@ -517,7 +517,7 @@ def resize_clip_safely(
             )
             return resized_clip
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to resize clip with aspect ratio preservation")
         # Final fallback: attempt direct resize (old behavior)
         logger.warning(
@@ -534,7 +534,7 @@ def resize_clip_safely(
                 if newsize is not None:
                     return clip.resized(newsize)
                 return clip.resized((target_width, target_height))
-            except Exception as fallback_error:
+            except Exception:
                 logger.exception("Even fallback resize failed")
                 raise
 
@@ -576,7 +576,7 @@ def resize_with_aspect_preservation(
         logger.info("Aspect ratio preservation completed successfully")
         return result
 
-    except Exception as e:
+    except Exception:
         logger.exception("resize_with_aspect_preservation failed")
         logger.warning("Attempting fallback to fit mode")
 
@@ -585,7 +585,7 @@ def resize_with_aspect_preservation(
             return resize_clip_safely(
                 clip, newsize=(target_width, target_height), scaling_mode="fit"
             )
-        except Exception as fallback_error:
+        except Exception:
             logger.exception("Fallback to fit mode also failed")
             logger.warning("Returning original clip as final fallback")
             return clip
@@ -758,7 +758,7 @@ def write_videofile_safely(
 
         video_clip.write_videofile(output_path, **safe_kwargs)
 
-    except Exception as e:
+    except Exception:
         logger.exception(
             f"Video writing failed with parameters {list(kwargs.keys())}"
         )

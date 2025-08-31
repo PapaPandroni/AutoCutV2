@@ -562,7 +562,7 @@ class VideoLoadingStrategy(ABC):
                             f"Subclip get_frame returned None for {spec}"
                         )
                     self.logger.debug(f"Subclip validation successful for {spec}")
-                except Exception as e:
+                except Exception:
                     self.logger.exception(f"Subclip validation failed for {spec}")
                     raise
 
@@ -780,7 +780,7 @@ class VideoLoadingStrategy(ABC):
                 # If size check fails, still return the clip
                 self.logger.warning(f"Could not verify final dimensions for {spec}")
 
-        except Exception as e:
+        except Exception:
             self.logger.exception(f"Failed to standardize resolution for {spec}")
             import traceback
 
@@ -940,7 +940,7 @@ class SequentialLoader(VideoLoadingStrategy):
                 f"Emergency cleanup: cleared cache and freed {total_collected} objects"
             )
 
-        except Exception as e:
+        except Exception:
             self.logger.exception("Emergency cleanup failed")
 
 

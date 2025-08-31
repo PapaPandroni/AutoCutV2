@@ -176,7 +176,7 @@ def setup_logging(
             },
         )
 
-    except Exception as e:
+    except Exception:
         # Fallback to basic logging if configuration fails
         logging.basicConfig(
             level=getattr(logging, log_level.upper()),
