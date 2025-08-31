@@ -182,7 +182,7 @@ def setup_logging(
             level=getattr(logging, log_level.upper()),
             format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
         )
-        logging.exception(f"Failed to configure logging: {e}")
+        logging.exception("Failed to configure logging")
         raise
 
 

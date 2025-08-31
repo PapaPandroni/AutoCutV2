@@ -325,7 +325,7 @@ class TestFullPipeline:
             output_path = str(temp_dir / f"pattern_{pattern}_output.mp4")
 
             try:
-                result = assemble_clips(
+                assemble_clips(
                     video_files=video_files,
                     audio_file=audio_file,
                     output_path=output_path,
@@ -414,7 +414,7 @@ class TestPipelineComponentIntegration:
 
         for video_file in sample_video_files[:3]:
             # Codec detection
-            codec_info = codec_detector.detect_codec(str(video_file))
+            codec_detector.detect_codec(str(video_file))
 
             # Video analysis should work regardless of codec
             try:
@@ -493,7 +493,7 @@ class TestPipelineStressTests:
         start_time = time.time()
 
         try:
-            result = assemble_clips(
+            assemble_clips(
                 video_files=video_files,
                 audio_file=audio_file,
                 output_path=output_path,
@@ -540,7 +540,7 @@ class TestPipelineStressTests:
         output_path = str(temp_dir / "memory_test_output.mp4")
 
         try:
-            result = assemble_clips(
+            assemble_clips(
                 video_files=video_files,
                 audio_file=audio_file,
                 output_path=output_path,

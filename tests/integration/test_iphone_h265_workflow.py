@@ -155,7 +155,7 @@ class TestiPhoneH265Workflow:
         codec_detector = CodecDetector()
 
         # Basic validation should catch this
-        basic_validation = validator.validate_basic(str(fake_iphone_file))
+        validator.validate_basic(str(fake_iphone_file))
         # May pass basic checks (file exists, readable) but fail deeper analysis
 
         # Codec detection should handle this gracefully
@@ -182,7 +182,7 @@ class TestiPhoneH265Workflow:
         start_time = time.time()
 
         # Run preprocessing
-        processed_path = transcoding_service.preprocess_video_if_needed(
+        transcoding_service.preprocess_video_if_needed(
             str(iphone_h265_file_path),
         )
 

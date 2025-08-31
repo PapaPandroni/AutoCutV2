@@ -340,7 +340,7 @@ class TestProductionReliability:
 
         # Create a path in a location likely to have space issues
         # Note: This is a simulation - we can't actually fill up disk in tests
-        output_path = str(temp_dir / "disk_space_test.mp4")
+        str(temp_dir / "disk_space_test.mp4")
 
         # Test with non-existent directory that can't be created
         readonly_path = "/root/cannot_write_here/output.mp4"  # Likely to fail

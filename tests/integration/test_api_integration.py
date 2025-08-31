@@ -5,6 +5,7 @@ Tests the API layer integration with core components, parameter validation,
 error handling, and contract compliance for the AutoCutAPI class.
 """
 
+import contextlib
 import sys
 from pathlib import Path
 
@@ -452,16 +453,14 @@ class TestAPIIntegration:
                 results.append((worker_id, system_info))
 
                 # Test parameter validation (should not interfere between threads)
-                try:
+                with contextlib.suppress(Exception):
+                    # Expected to fail - we just want to test thread safety
                     local_api.process_videos(
                         video_files=["fake.mp4"],
                         audio_file="fake.mp3",
                         output_path="fake_output.mp4",
                         pattern="balanced",
                     )
-                except Exception:
-                    # Expected to fail - we just want to test thread safety
-                    pass
 
             except Exception as e:
                 errors.append((worker_id, e))
