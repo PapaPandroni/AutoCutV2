@@ -176,7 +176,7 @@ class TestHelpers:
         """Create a mock video file for testing."""
         file_path = temp_dir / filename
         # Create a dummy file with specified size
-        with open(file_path, "wb") as f:
+        with file_path.open("wb") as f:
             f.write(b"0" * int(size_mb * 1024 * 1024))
         return file_path
 
@@ -189,7 +189,7 @@ class TestHelpers:
         """Create a mock audio file for testing."""
         file_path = temp_dir / filename
         # Create a dummy file with specified size
-        with open(file_path, "wb") as f:
+        with file_path.open("wb") as f:
             f.write(b"0" * int(size_mb * 1024 * 1024))
         return file_path
 

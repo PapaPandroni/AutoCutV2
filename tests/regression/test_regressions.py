@@ -206,7 +206,7 @@ class TestRegressions:
 
                 # Clean up output to prevent disk space issues
                 if Path(result_path).exists():
-                    os.remove(result_path)
+                    Path(result_path).unlink()
 
             except Exception as e:
                 print(f"   ⚠️ Iteration {i + 1} failed: {e}")
@@ -272,7 +272,7 @@ class TestRegressions:
 
                 # Clean up output file
                 if Path(result_path).exists():
-                    os.remove(result_path)
+                    Path(result_path).unlink()
 
                 print(f"   ✅ Iteration {i + 1} completed")
 
@@ -593,7 +593,7 @@ class TestRegressions:
                 )
 
                 # Try to read file header to ensure it's not corrupted
-                with open(result_path, "rb") as f:
+                with Path(result_path).open("rb") as f:
                     header = f.read(12)
                     assert len(header) == 12, "Should be able to read file header"
 
