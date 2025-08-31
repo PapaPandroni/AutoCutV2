@@ -22,7 +22,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.clip_assembler import assemble_clips
-from src.utils import SUPPORTED_VIDEO_FORMATS
 
 
 def find_all_video_files(directory: str) -> list:

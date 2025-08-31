@@ -168,7 +168,7 @@ class TestFullPipeline:
             preprocessed_videos.append(preprocessed_path)
 
         # Run full pipeline
-        result = assemble_clips(
+        assemble_clips(
             video_files=preprocessed_videos,
             audio_file=audio_file,
             output_path=output_path,
@@ -261,7 +261,7 @@ class TestFullPipeline:
             start_time = time.time()
 
             try:
-                result = assemble_clips(
+                assemble_clips(
                     video_files=video_files,
                     audio_file=audio_file,
                     output_path=output_path,
