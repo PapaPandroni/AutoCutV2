@@ -400,7 +400,7 @@ def resize_clip_safely(
                     f"Used direct resize fallback: {current_width}x{current_height} → {new_width}x{new_height}"
                 )
             except Exception as e:
-                logger.exception(f"All resize methods failed: {e}")
+                logger.exception("All resize methods failed")
                 raise RuntimeError(f"Unable to resize clip: {e}") from e
 
         # CRITICAL FIX: Check if letterboxing should be applied based on scaling mode
@@ -518,7 +518,7 @@ def resize_clip_safely(
             return resized_clip
 
     except Exception as e:
-        logger.exception(f"Failed to resize clip with aspect ratio preservation: {e}")
+        logger.exception("Failed to resize clip with aspect ratio preservation")
         # Final fallback: attempt direct resize (old behavior)
         logger.warning(
             "Falling back to direct resize without aspect ratio preservation"
@@ -535,7 +535,7 @@ def resize_clip_safely(
                     return clip.resized(newsize)
                 return clip.resized((target_width, target_height))
             except Exception as fallback_error:
-                logger.exception(f"Even fallback resize failed: {fallback_error}")
+                logger.exception("Even fallback resize failed")
                 raise
 
 
@@ -577,7 +577,7 @@ def resize_with_aspect_preservation(
         return result
 
     except Exception as e:
-        logger.exception(f"resize_with_aspect_preservation failed: {e}")
+        logger.exception("resize_with_aspect_preservation failed")
         logger.warning("Attempting fallback to fit mode")
 
         # Fallback to conservative fit mode
@@ -586,7 +586,7 @@ def resize_with_aspect_preservation(
                 clip, newsize=(target_width, target_height), scaling_mode="fit"
             )
         except Exception as fallback_error:
-            logger.exception(f"Fallback to fit mode also failed: {fallback_error}")
+            logger.exception("Fallback to fit mode also failed")
             logger.warning("Returning original clip as final fallback")
             return clip
 
@@ -760,7 +760,7 @@ def write_videofile_safely(
 
     except Exception as e:
         logger.exception(
-            f"Video writing failed with parameters {list(kwargs.keys())}: {e}"
+            f"Video writing failed with parameters {list(kwargs.keys())}"
         )
 
         # Try with minimal parameters as fallback

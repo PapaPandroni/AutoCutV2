@@ -563,7 +563,7 @@ class VideoLoadingStrategy(ABC):
                         )
                     self.logger.debug(f"Subclip validation successful for {spec}")
                 except Exception as e:
-                    self.logger.exception(f"Subclip validation failed for {spec}: {e}")
+                    self.logger.exception(f"Subclip validation failed for {spec}")
                     raise
 
                 # CRITICAL: DO NOT close or copy the clip - this breaks the reader reference
@@ -584,7 +584,7 @@ class VideoLoadingStrategy(ABC):
             )
 
         except Exception as e:
-            self.logger.exception(f"Failed to load clip from disk for {spec}: {e}")
+            self.logger.exception(f"Failed to load clip from disk for {spec}")
             # Handle iPhone H.265 compatibility issues
             if "codec" in str(e).lower() or "h265" in str(e).lower():
                 raise iPhoneCompatibilityError(
@@ -781,7 +781,7 @@ class VideoLoadingStrategy(ABC):
                 self.logger.warning(f"Could not verify final dimensions for {spec}")
 
         except Exception as e:
-            self.logger.exception(f"Failed to standardize resolution for {spec}: {e}")
+            self.logger.exception(f"Failed to standardize resolution for {spec}")
             import traceback
 
             self.logger.exception(f"Traceback: {traceback.format_exc()}")
@@ -941,7 +941,7 @@ class SequentialLoader(VideoLoadingStrategy):
             )
 
         except Exception as e:
-            self.logger.exception(f"Emergency cleanup failed: {e}")
+            self.logger.exception("Emergency cleanup failed")
 
 
 class ParallelLoader(VideoLoadingStrategy):
