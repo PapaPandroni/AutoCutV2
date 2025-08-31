@@ -224,10 +224,8 @@ class VideoCache:
                 # Remove from cache if no more references
                 if self._ref_counts[video_path] <= 0:
                     if video_path in self._cache:
-                        try:
+                        with contextlib.suppress(Exception):
                             self._cache[video_path].close()
-                        except Exception:
-                            pass  # Ignore cleanup errors
                         del self._cache[video_path]
                     del self._ref_counts[video_path]
 
@@ -244,10 +242,8 @@ class VideoCache:
         """Clear all cached videos and close resources."""
         def _safe_close_video(video_clip):
             """Safely close video clip, ignoring any exceptions."""
-            try:
+            with contextlib.suppress(Exception):
                 video_clip.close()
-            except Exception:
-                pass  # Ignore cleanup errors
 
         with self._lock:
             for video_clip in self._cache.values():
@@ -2181,9 +2177,7 @@ def load_video_clips_parallel(
         monitor.stop_monitoring()
 
     # Reconstruct clips in original order, skipping failed ones
-    for i in range(len(sorted_clips)):
-        if i in clip_mapping:
-            video_clips.append(clip_mapping[i])
+    video_clips.extend(clip_mapping[i] for i in range(len(sorted_clips)) if i in clip_mapping)
 
     if not video_clips:
         video_cache.clear()
@@ -2791,11 +2785,12 @@ def select_best_clips(
 
         # Second pass: Fill remaining slots with highest quality clips
         if remaining_clips > 0:
-            all_remaining_clips = []
-            for video_path in clips_by_video:
-                for clip in clips_by_video[video_path][base_clips_per_video:]:
-                    if clip not in selected_clips:
-                        all_remaining_clips.append(clip)
+            all_remaining_clips = [
+                clip
+                for video_path in clips_by_video
+                for clip in clips_by_video[video_path][base_clips_per_video:]
+                if clip not in selected_clips
+            ]
 
             all_remaining_clips.sort(key=lambda x: x.score, reverse=True)
 
@@ -3498,9 +3493,11 @@ def assemble_clips(
 
             # Check for problematic characters that might cause FFmpeg issues
             problematic_chars = ["|", "<", ">", '"', "?", "*"]
-            for char in problematic_chars:
-                if char in audio_path:
-                    path_issues.append(f"Contains problematic character '{char}'")
+            path_issues.extend(
+                f"Contains problematic character '{char}'"
+                for char in problematic_chars
+                if char in audio_path
+            )
 
             if path_issues:
                 # These are warnings, not fatal errors

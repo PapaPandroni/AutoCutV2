@@ -502,14 +502,14 @@ class ClipTimeline:
         Returns:
             List of tuples containing overlapping entry pairs
         """
-        overlaps = []
-
-        for i, entry1 in enumerate(self.entries):
-            for entry2 in self.entries[i + 1 :]:
-                if entry1.video_file == entry2.video_file and self._entries_overlap(
-                    entry1, entry2
-                ):
-                    overlaps.append((entry1, entry2))
+        overlaps = [
+            (entry1, entry2)
+            for i, entry1 in enumerate(self.entries)
+            for entry2 in self.entries[i + 1 :]
+            if entry1.video_file == entry2.video_file and self._entries_overlap(
+                entry1, entry2
+            )
+        ]
 
         return overlaps
 
