@@ -210,7 +210,7 @@ def resize_clip_safely(
     - Landscape→Square: 25% crop threshold (moderate mismatch)
     - Portrait→Portrait: 15% crop threshold (same family)
     - Portrait→Square: 25% crop threshold (moderate mismatch)
-    - Cross-type (Land↔Port): 8% crop threshold (major mismatch)
+    - Cross-type (Land⇄Port): 8% crop threshold (major mismatch)
     - Square content: 15% crop threshold (universal)
 
     Args:
@@ -403,6 +403,11 @@ def resize_clip_safely(
                 logger.exception("All resize methods failed")
                 raise RuntimeError(f"Unable to resize clip: {e}") from e
 
+        # CRITICAL FIX: Ensure resized_clip is never None
+        if resized_clip is None:
+            logger.error("All resize methods failed to produce a valid clip")
+            raise RuntimeError("Failed to resize clip: all methods returned None")
+
         # CRITICAL FIX: Check if letterboxing should be applied based on scaling mode
         if new_width == target_width and new_height == target_height:
             # Perfect fit, no letterboxing needed
@@ -507,6 +512,8 @@ def resize_clip_safely(
                 f"  Mode: {scaling_mode} - letterboxing applied to preserve content and aspect ratio"
             )
 
+            return letterboxed_clip
+
         except Exception as letterbox_error:
             # Fallback: return resized clip without letterboxing if composition fails
             logger.warning(
@@ -534,9 +541,9 @@ def resize_clip_safely(
                 if newsize is not None:
                     return clip.resized(newsize)
                 return clip.resized((target_width, target_height))
-            except Exception:
+            except Exception as final_error:
                 logger.exception("Even fallback resize failed")
-                raise
+                raise RuntimeError(f"All resize methods failed: {final_error}") from final_error
 
 
 def resize_with_aspect_preservation(
