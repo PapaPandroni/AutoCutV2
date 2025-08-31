@@ -396,7 +396,7 @@ def detect_faces(video: VideoFileClip, start_time: float, end_time: float) -> in
                     face_cascade = cv2.CascadeClassifier(path)
                     if not face_cascade.empty():
                         break
-            except:
+            except Exception:
                 continue
 
         if face_cascade is None or face_cascade.empty():

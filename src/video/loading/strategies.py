@@ -776,7 +776,7 @@ class VideoLoadingStrategy(ABC):
                     self.logger.debug(
                         f"✅ Resolution standardized successfully for {spec}"
                     )
-            except:
+            except Exception:
                 # If size check fails, still return the clip
                 self.logger.warning(f"Could not verify final dimensions for {spec}")
 

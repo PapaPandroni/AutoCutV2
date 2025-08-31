@@ -348,7 +348,7 @@ class TranscodingService:
                 transcoded_path = self.transcode_hevc_to_h264(
                     file_path,
                     output_path,
-                    progress_callback=lambda msg, progress: logger.info(
+                    progress_callback=lambda msg, _: logger.info(
                         f"Transcoding: {msg}"
                     ),
                     max_retries=2,
@@ -488,7 +488,7 @@ class TranscodingService:
             try:
                 if "video_clip" in locals():
                     video_clip.close()
-            except:
+            except Exception:
                 pass
 
     def _build_transcoding_command(

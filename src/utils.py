@@ -764,31 +764,27 @@ def _build_transcoding_command(
     # Base command structure with encoder-specific optimizations
     if codec == "h264_nvenc":
         # OPTIMIZATION: Streamlined NVIDIA command with validated parameters
-        cmd = (
-            [
-                "ffmpeg",
-                "-y",
-                "-hwaccel",
-                "cuda",
-                "-hwaccel_output_format",
-                "cuda",
-                "-c:v",
-                "hevc_cuvid",
-                "-i",
-                input_path,
-                "-c:v",
-                "h264_nvenc",
-            ]
-            + ffmpeg_params
-            + iphone_params
-            + [
-                "-c:a",
-                "aac",
-                "-b:a",
-                "128k",  # Ensure AAC audio compatibility
-                output_path,
-            ]
-        )
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-hwaccel",
+            "cuda",
+            "-hwaccel_output_format",
+            "cuda",
+            "-c:v",
+            "hevc_cuvid",
+            "-i",
+            input_path,
+            "-c:v",
+            "h264_nvenc",
+            *ffmpeg_params,
+            *iphone_params,
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",  # Ensure AAC audio compatibility
+            output_path,
+        ]
         description = "NVIDIA GPU + iPhone params (validated)"
 
     elif codec == "h264_qsv":
@@ -1120,7 +1116,7 @@ def preprocess_video_if_needed_enhanced(
             transcoded_path = transcode_hevc_to_h264_enhanced(
                 file_path,
                 output_path,
-                progress_callback=lambda msg, progress: logger.info(
+                progress_callback=lambda msg, _: logger.info(
                     f"Transcoding: {msg}"
                 ),
                 max_retries=2,

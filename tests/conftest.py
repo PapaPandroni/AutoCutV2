@@ -224,7 +224,7 @@ def _has_gpu():
         detector = HardwareDetector()
         optimal_settings = detector.detect_optimal_settings("fast")
         return not optimal_settings.get("encoder_type", "").startswith("CPU")
-    except:
+    except Exception:
         return False
 
 
