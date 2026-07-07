@@ -37,6 +37,15 @@ except ImportError:
         # Fallback if VideoChunk not available
         VideoChunk = None
 
+# MoviePy 1.x/2.x compatibility shims all live in src/compatibility/moviepy.
+# import_moviepy_safely is called at module scope here; the other shims
+# (subclip_safely / attach_audio_safely / check_moviepy_api_compatibility /
+# write_videofile_safely / resize_clip_safely) are imported locally where used.
+try:
+    from compatibility.moviepy import import_moviepy_safely
+except ImportError:
+    from .compatibility.moviepy import import_moviepy_safely
+
 # Import extracted classes from new modular structure
 try:
     from video.encoder import (
@@ -1573,295 +1582,16 @@ def load_video_clips_with_robust_error_handling(
 
 
 
-def check_moviepy_api_compatibility():
-    """Comprehensive MoviePy API compatibility analysis for version 2.1.2+ changes.
-
-    Returns:
-        Dict with complete API mapping and compatibility information
-    """
-    import inspect
-
-    # Handle import structure changes in MoviePy 2.1.2
-    try:
-        # Try new import structure first (MoviePy 2.1.2+)
-        from moviepy import AudioFileClip, VideoFileClip, concatenate_videoclips
-
-        import_pattern = "new"  # from moviepy import ...
-    except ImportError:
-        try:
-            # Fallback to legacy import structure (MoviePy < 2.1.2)
-            from moviepy.editor import (
-                AudioFileClip,
-                VideoFileClip,
-                concatenate_videoclips,
-            )
-
-            import_pattern = "legacy"  # from moviepy.editor import ...
-        except ImportError as import_error:
-            raise RuntimeError("Could not import MoviePy with either import pattern") from import_error
-
-    # CRITICAL FIX: Proper API detection for MoviePy 2.2.1
-    # Use class inspection instead of unreliable dummy instances
-    compatibility = {
-        "import_pattern": import_pattern,
-        "version_detected": "new" if import_pattern == "new" else "legacy",
-        # FIXED: Direct method mappings based on MoviePy 2.2.1 patterns
-        "method_mappings": {
-            # Clip manipulation - MoviePy 2.2.1 uses subclipped
-            "subclip": "subclipped",
-            # Audio attachment - Test both options, prefer with_audio for 2.x
-            "set_audio": "with_audio" if import_pattern == "new" else "set_audio",
-            # Other method patterns (2.x uses with_ prefix)
-            "set_duration": "with_duration"
-            if import_pattern == "new"
-            else "set_duration",
-            "set_position": "with_position"
-            if import_pattern == "new"
-            else "set_position",
-            "set_start": "with_start" if import_pattern == "new" else "set_start",
-        },
-        # Method availability - assume new methods exist in new import pattern
-        "methods": {
-            "video_clip": {
-                "subclip": import_pattern == "legacy",
-                "subclipped": import_pattern == "new",
-                "set_audio": import_pattern == "legacy",
-                "with_audio": import_pattern == "new",
-                "write_videofile": True,  # Always available
-            },
-            "audio_clip": {
-                "subclip": import_pattern == "legacy",
-                "subclipped": import_pattern == "new",
-            },
-        },
-    }
-
-    # Analyze write_videofile parameters
-    try:
-        write_sig = inspect.signature(VideoFileClip.write_videofile)
-        compatibility["write_videofile_params"] = list(write_sig.parameters.keys())
-    except Exception:
-        compatibility["write_videofile_params"] = ["filename"]
-
-    return compatibility
 
 
-def attach_audio_safely(video_clip, audio_clip, compatibility_info=None):
-    """Safely attach audio to video using available API with robust fallbacks.
-
-    Args:
-        video_clip: VideoClip to attach audio to
-        audio_clip: AudioClip to attach
-        compatibility_info: Result from check_moviepy_api_compatibility()
-
-    Returns:
-        VideoClip with audio attached (never None)
-    """
-    if compatibility_info is None:
-        compatibility_info = check_moviepy_api_compatibility()
-
-    if video_clip is None:
-        raise RuntimeError("Cannot attach audio to None video clip")
-    if audio_clip is None:
-        raise RuntimeError("Cannot attach None audio clip")
-
-    # CRITICAL FIX: Try both methods with robust error handling
-    for method_name in ["with_audio", "set_audio"]:
-        if hasattr(video_clip, method_name):
-            try:
-                method = getattr(video_clip, method_name)
-                result = method(audio_clip)
-
-                # CRITICAL: Ensure we never return None
-                if result is None:
-                    continue
-                # CRITICAL FIX: Return in try block, not orphaned else block
-                return result
-            except Exception:
-                continue
-
-    # If all methods fail, this is a critical error
-    raise RuntimeError(
-        f"Could not attach audio using any method (tried: with_audio, set_audio) on {type(video_clip)}",
-    )
 
 
-def subclip_safely(clip, start_time, end_time=None, compatibility_info=None):
-    """Safely create subclip using available API (subclip vs subclipped).
-
-    Args:
-        clip: VideoClip or AudioClip to extract from
-        start_time: Start time in seconds
-        end_time: End time in seconds (None for rest of clip)
-        compatibility_info: Result from check_moviepy_api_compatibility()
-
-    Returns:
-        New clip with specified time range
-    """
-    if compatibility_info is None:
-        compatibility_info = check_moviepy_api_compatibility()
-
-    # Get the correct method name for subclip operation
-    method_name = compatibility_info["method_mappings"]["subclip"]
-
-    try:
-        # CRITICAL FIX: Always try subclipped first for MoviePy 2.2.1 compatibility
-        # Both video and audio clips use subclipped in 2.2.1
-        for method_name in ["subclipped", "subclip"]:
-            if hasattr(clip, method_name):
-                method = getattr(clip, method_name)
-                try:
-                    if end_time is not None:
-                        return method(start_time, end_time)
-                    return method(start_time)
-                except Exception:
-                    # If this method fails, try the next one
-                    continue
-
-        # If neither method works, raise an error
-        raise AttributeError(
-            f"Neither 'subclipped' nor 'subclip' methods work on {type(clip)}",
-        )
-
-    except AttributeError as attr_error:
-        raise RuntimeError(f"Could not find subclip method on clip type {type(clip)}") from attr_error
 
 
-def test_independent_subclip_creation(video_path: Optional[str] = None) -> bool:
-    """Test function to verify independent subclip creation works correctly.
-
-    This test validates that the fix for the NoneType get_frame error is working
-    by creating subclips and ensuring they remain functional after the parent
-    video is closed.
-
-    Args:
-        video_path: Optional path to test video (uses demo if None)
-
-    Returns:
-        True if test passes, False otherwise
-    """
-    if not video_path:
-        # Use a test media file if available
-        test_files = ["test_media/sample.mp4", "test_media/demo.mp4", "demo.mp4"]
-        for test_file in test_files:
-            if Path(test_file).exists():
-                video_path = test_file
-                break
-
-        if not video_path:
-            return True  # Skip test if no video available
-
-    try:
-        # Create resource manager and load video
-        resource_manager = VideoResourceManager()
-
-        # Test the critical scenario: parent video gets closed
-        with resource_manager.load_video_safely(video_path) as source_video:
-            duration = source_video.duration
-
-            # Create subclip using old method (should fail after parent closes)
-            old_subclip = subclip_safely(source_video, 0.5, min(2.0, duration - 0.5))
-
-            # Create subclip using new method (should work after parent closes)
-            new_subclip = source_video.subclipped(0.5, min(2.0, duration - 0.5))
-
-        # Parent video is now closed - test if subclips still work
-
-        # Test old subclip (should fail)
-        with contextlib.suppress(Exception):
-            old_frame = old_subclip.get_frame(0.1)
-
-        # Test new subclip (should work)
-        try:
-            new_frame = new_subclip.get_frame(0.1)
-        except Exception:
-            return False
-        else:
-            return new_frame is not None
-
-    except Exception:
-        return False
-
-    finally:
-        # Cleanup
-        try:
-            if "old_subclip" in locals():
-                old_subclip.close()
-            if "new_subclip" in locals():
-                new_subclip.close()
-        except Exception:
-            pass  # Ignore cleanup errors
 
 
-def import_moviepy_safely():
-    """Safely import MoviePy classes handling import structure changes.
-
-    Returns:
-        Tuple of (VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip)
-    """
-    try:
-        # Try new import structure first (MoviePy 2.1.2+)
-        from moviepy import AudioFileClip, VideoFileClip, concatenate_videoclips
-
-        try:
-            from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-        except ImportError:
-            from moviepy import CompositeVideoClip
-
-        # CRITICAL FIX: Return in try block, not orphaned else block
-        return VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip
-    except ImportError:
-        try:
-            # Fallback to legacy import structure (MoviePy < 2.1.2)
-            from moviepy.editor import (
-                AudioFileClip,
-                CompositeVideoClip,
-                VideoFileClip,
-                concatenate_videoclips,
-            )
-
-            # CRITICAL FIX: Return in try block, not orphaned else block
-            return (
-                VideoFileClip,
-                AudioFileClip,
-                concatenate_videoclips,
-                CompositeVideoClip,
-            )
-        except ImportError as import_error:
-            raise RuntimeError(
-                "Could not import MoviePy with either import pattern. Please check MoviePy installation.",
-            ) from import_error
 
 
-def write_videofile_safely(video_clip, output_path, compatibility_info=None, **kwargs):
-    """Safely write video file with parameter compatibility checking.
-
-    Args:
-        video_clip: VideoClip to write
-        output_path: Output file path
-        compatibility_info: Result from check_moviepy_api_compatibility()
-        **kwargs: Parameters to pass to write_videofile
-
-    Returns:
-        None
-    """
-    if compatibility_info is None:
-        compatibility_info = check_moviepy_api_compatibility()
-
-    available_params = compatibility_info["write_videofile_params"]
-
-    # Filter kwargs to only include supported parameters
-    safe_kwargs = {}
-    for key, value in kwargs.items():
-        if key in available_params:
-            safe_kwargs[key] = value
-        else:
-            pass
-
-    try:
-        video_clip.write_videofile(output_path, **safe_kwargs)
-    except Exception as e:
-        raise RuntimeError(f"Failed to write video file: {e!s}") from e
 
 
 # ClipTimeline class extracted to src/video/timeline_renderer.py

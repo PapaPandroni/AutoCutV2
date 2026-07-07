@@ -116,24 +116,27 @@ class VideoNormalizationPipeline:
             target_height: Target canvas height
             scaling_mode: "fit" (preserve all content) or "fill" (crop to fill)
         """
-        # Import the import_moviepy_safely function
+        # Import import_moviepy_safely from the single compat source.
         try:
-            from ..clip_assembler import import_moviepy_safely
+            from compatibility.moviepy import import_moviepy_safely
         except ImportError:
-            from moviepy.editor import (
-                AudioFileClip,
-                CompositeVideoClip,
-                VideoFileClip,
-                concatenate_videoclips,
-            )
-
-            def import_moviepy_safely():
-                return (
-                    VideoFileClip,
+            try:
+                from ..compatibility.moviepy import import_moviepy_safely
+            except ImportError:
+                from moviepy.editor import (
                     AudioFileClip,
-                    concatenate_videoclips,
                     CompositeVideoClip,
+                    VideoFileClip,
+                    concatenate_videoclips,
                 )
+
+                def import_moviepy_safely():
+                    return (
+                        VideoFileClip,
+                        AudioFileClip,
+                        concatenate_videoclips,
+                        CompositeVideoClip,
+                    )
 
         # Note: Aspect ratio calculations removed - not used in current implementation
 
