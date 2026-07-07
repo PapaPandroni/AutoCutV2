@@ -65,15 +65,8 @@ def load_video(file_path: PathLike) -> Tuple[VideoFileClip, Dict[str, Any]]:
         # Try absolute import first for autocut.py execution context
         from video.transcoding import preprocess_video_if_needed
     except ImportError:
-        try:
-            # Try relative import for package execution context
-            from .video.transcoding import preprocess_video_if_needed
-        except ImportError:
-            # Final fallback to utils module
-            try:
-                from utils import preprocess_video_if_needed
-            except ImportError:
-                from .utils import preprocess_video_if_needed
+        # Relative import for package execution context
+        from .video.transcoding import preprocess_video_if_needed
 
     if not Path(file_path).exists():
         raise FileNotFoundError(f"Video file not found: {file_path}")

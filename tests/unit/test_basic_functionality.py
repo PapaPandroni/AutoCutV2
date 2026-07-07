@@ -167,17 +167,10 @@ class TestWeek1Achievements:
         assert exceptions is not None
 
     def test_backwards_compatibility(self):
-        """Test that backwards compatibility is maintained."""
-        # Test that old imports still work through utils.py
-        try:
-            from src.utils import detect_video_codec
+        """Test that codec detection is available from its canonical module."""
+        from src.video.codec_detection import detect_video_codec
 
-            # Should still be available for backwards compatibility
-            assert callable(detect_video_codec)
-        except ImportError:
-            # It's okay if this specific function isn't available
-            # The important thing is the test doesn't crash
-            pass
+        assert callable(detect_video_codec)
 
     def test_validation_consolidation(self):
         """Test that validation has been consolidated."""
