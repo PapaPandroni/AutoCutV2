@@ -323,6 +323,24 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
         # Detect tempo and beats using the percussive component
         tempo, beat_frames = librosa.beat.beat_track(y=y_percussive, sr=sr)
 
+        # librosa >=0.10 may return tempo as a 0-d/1-d ndarray. Coerce to a plain
+        # float so all downstream scalar math (comparisons, int(), etc.) is safe.
+        tempo = float(np.atleast_1d(tempo)[0])
+
+        # Validate BPM range UP FRONT. detect_musical_start()/detect_intro_duration()
+        # below divide by tempo, so it must be valid before they run. Octave errors
+        # are common in beat tracking, so fold the tempo into 30-300 by repeatedly
+        # doubling/halving, then hard-clamp (this also turns a degenerate tempo of
+        # 0 into 30, preventing a division-by-zero further down).
+        for _ in range(8):
+            if 30 <= tempo <= 300:
+                break
+            if tempo < 30:
+                tempo *= 2  # Double tempo for very slow songs
+            else:
+                tempo /= 2  # Halve tempo for very fast songs
+        tempo = min(max(tempo, 30.0), 300.0)
+
         # Convert frame indices to timestamps
         beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
 
@@ -360,15 +378,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
             max_intro=8.0,
         )
 
-        # Validate BPM range
-        if not 30 <= tempo <= 300:
-            # If tempo is outside range, try alternative methods
-            if tempo < 30:
-                tempo = tempo * 2  # Double tempo for very slow songs
-            elif tempo > 300:
-                tempo = tempo / 2  # Half tempo for very fast songs
-
-        # Calculate allowed clip durations based on BPM
+        # Calculate allowed clip durations based on BPM (already validated above)
         min_duration, allowed_durations = calculate_clip_constraints(tempo)
 
         return {
@@ -399,9 +409,9 @@ def calculate_clip_constraints(bpm: float) -> Tuple[float, List[float]]:
     For a given BPM, calculate musically appropriate clip durations.
 
     Examples:
-    - 60 BPM = 1 beat/second → clips: 4s, 8s, 16s
-    - 120 BPM = 2 beats/second → clips: 2s, 4s, 8s
-    - 90 BPM = 1.5 beats/second → clips: 2.67s, 5.33s, 10.67s
+    - 60 BPM = 1 beat/second → clips: 2s, 4s, 8s, 16s
+    - 120 BPM = 2 beats/second → clips: 1s, 2s, 4s, 8s
+    - 90 BPM = 1.5 beats/second → clips: 1.33s, 2.67s, 5.33s, 10.67s
 
     Args:
         bpm: Beats per minute of the music track
@@ -420,8 +430,10 @@ def calculate_clip_constraints(bpm: float) -> Tuple[float, List[float]]:
     # Minimum clip is 4 beats (but at least 1.0 seconds for very slow songs)
     min_duration = max(float(beat_duration * 4), 1.0)
 
-    # Allowed durations are musical multiples starting from 4 beats
-    multipliers = [4, 8, 16]
+    # Allowed durations are the musical multiples used by the variety patterns
+    # (2, 4, 8 and 16 beats). Without the 2-beat entry the "energetic" pattern's
+    # fast cuts get rejected by _calculate_duration_fit and silently dropped.
+    multipliers = [2, 4, 8, 16]
     allowed_durations = [float(beat_duration * m) for m in multipliers]
 
     # Filter out clips longer than 16 seconds

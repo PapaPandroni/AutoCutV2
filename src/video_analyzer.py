@@ -747,6 +747,8 @@ def analyze_video_file(
         "errors": [],
     }
 
+    video = None  # Track the video reader so finally can always release it
+
     try:
         # Step 1: Load video with detailed error tracking
         logger.info(f"Loading video file: {filename}")
@@ -885,9 +887,6 @@ def analyze_video_file(
                 )
                 continue
 
-        # Clean up video object
-        video.close()
-
         # Final processing statistics and warnings
         logger.info(f"Video analysis complete for {filename}:")
         logger.info(f"  - Scenes detected: {processing_stats['scenes_found']}")
@@ -936,3 +935,11 @@ def analyze_video_file(
         raise ValueError(error_msg) from e
     else:
         return chunks
+    finally:
+        # Always release the video reader, even if analysis raised, to avoid
+        # leaking an open VideoFileClip / FFmpeg reader on error.
+        if video is not None:
+            try:
+                video.close()
+            except Exception:
+                pass

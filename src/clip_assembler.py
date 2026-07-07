@@ -1922,7 +1922,10 @@ def load_video_clips_with_robust_error_handling(
     This is the most robust version that tries multiple approaches for each failed clip.
 
     Returns:
-        Tuple of (video_clips, failed_indices, error_report, resource_manager)
+        Tuple of (video_clips, failed_indices, error_report, resource_manager).
+        video_clips is in timeline order and length == len(sorted_clips), with
+        None at any position whose clip failed to load. The caller must replace
+        those None gaps (e.g. with placeholders) before concatenation.
     """
 
     def report_progress(step: str, progress: float):
@@ -1971,7 +1974,7 @@ def load_video_clips_with_robust_error_handling(
     for video_file, file_clips in grouped_clips.items():
         logger.info(f"     📄 {video_file}: {len(file_clips)} clips")
 
-    video_clips = []
+    clip_results = {}  # Maps original_index -> segment (None for failed clips)
     failed_indices = []
     processed_files = 0
     total_clips_processed = 0
@@ -2009,22 +2012,24 @@ def load_video_clips_with_robust_error_handling(
                     canvas_format=canvas_format,
                 )
 
+                # Use original_index from grouped clips to maintain timeline alignment
+                original_index = clip_data.get(
+                    "original_index",
+                    total_clips_processed,
+                )
                 if segment is not None:
                     logger.info(f"✅ Clip {i+1} loaded successfully: {type(segment)}")
-                    video_clips.append(segment)
+                    clip_results[original_index] = segment
                     file_clips_loaded += 1
                 else:
                     logger.error(f"❌ Clip {i+1} returned None - all fallback strategies failed")
-                    # Use original_index from grouped clips to maintain timeline alignment
-                    original_index = clip_data.get(
-                        "original_index",
-                        total_clips_processed,
-                    )
+                    clip_results[original_index] = None
                     failed_indices.append(original_index)
 
             except Exception:
                 # Use original_index from grouped clips to maintain timeline alignment
                 original_index = clip_data.get("original_index", total_clips_processed)
+                clip_results[original_index] = None
                 failed_indices.append(original_index)
 
             total_clips_processed += 1
@@ -2046,27 +2051,34 @@ def load_video_clips_with_robust_error_handling(
 
     memory_manager.log_memory_summary("robust loading complete")
 
-    if not video_clips:
+    # Reconstruct the clip list in timeline (beat) order, with None where a clip
+    # failed to load. This preserves the beat-matched sequencing the timeline
+    # assigned (clips are loaded grouped-by-file for memory efficiency, so their
+    # load order does NOT match timeline order); the caller substitutes
+    # placeholders for the None gaps.
+    video_clips = [clip_results.get(i) for i in range(len(sorted_clips))]
+
+    successful_clips = [clip for clip in video_clips if clip is not None]
+    if not successful_clips:
         raise RuntimeError(
             "No video clips could be loaded successfully with any fallback strategy",
         )
 
-    success_count = len(video_clips)
+    success_count = len(successful_clips)
     success_rate = success_count / len(sorted_clips)
 
-    # NEW: Log canvas format success
-    if canvas_format:
-        pass
-
-    if success_rate < 0.5 or success_rate < 0.8:
-        pass
-    else:
-        pass
+    if success_rate < 1.0:
+        logger.warning(
+            f"⚠️ Loaded {success_count}/{len(sorted_clips)} clips "
+            f"({success_rate:.0%}); {len(failed_indices)} failed and will be "
+            f"replaced with placeholder gaps to preserve beat alignment.",
+        )
 
     report_progress(f"Robust loading complete: {success_count} clips", 0.7)
 
-    # Return clips with perfect index alignment, failed indices, error report, and resource manager
-    # The caller MUST call resource_manager.cleanup_delayed_videos() after concatenation
+    # Return clips in timeline order (None for failed positions), failed indices,
+    # error report, and resource manager. The caller MUST call
+    # resource_manager.cleanup_delayed_videos() after concatenation.
     return video_clips, failed_indices, error_report, resource_manager
 
 
@@ -2640,10 +2652,13 @@ def _calculate_duration_fit(
     Returns:
         Fit score between 0.0 and 1.0, or -1 if clip can't be used
     """
-    # Check if target duration is in allowed durations (with small tolerance)
+    # Check if target duration is in allowed durations. Target durations come from
+    # multiplier * avg_beat_interval while allowed come from multiplier * (60/bpm),
+    # so acceptable drift grows with the multiplier. A fixed 0.1s tolerance wrongly
+    # rejected long holds (e.g. the 16-beat "dramatic" cut) on tiny beat drift.
     duration_allowed = False
     for allowed in allowed_durations:
-        if abs(target_duration - allowed) < 0.1:
+        if abs(target_duration - allowed) <= max(0.1, 0.04 * allowed):
             duration_allowed = True
             break
 
@@ -2900,8 +2915,13 @@ def uniformize_dimensions(clips, target_width, target_height):
             logger.error("❌ Required MoviePy classes not available for uniformization")
             return clips
 
-        # Import safe resize function from compatibility module
-        from src.compatibility.moviepy import resize_clip_safely
+        # Import safe resize function from compatibility module (dual-import
+        # pattern — matches the rest of this file so it works both when src/ is
+        # on sys.path via autocut.py and when imported as the src package).
+        try:
+            from compatibility.moviepy import resize_clip_safely
+        except ImportError:
+            from .compatibility.moviepy import resize_clip_safely
 
     except RuntimeError as e:
         logger.exception(f"❌ MoviePy import failed: {e}")
@@ -2911,7 +2931,17 @@ def uniformize_dimensions(clips, target_width, target_height):
         return clips
 
     uniform_clips = []
+    failed_count = 0
     target_aspect = target_width / target_height
+
+    def _force_target_size(source_clip):
+        """Last-resort: force exact canvas dims via composite (no rescale).
+
+        Used when the aspect-preserving resize fails, so concatenation still
+        receives a uniformly-sized clip instead of a wrong-sized one that would
+        create dimension-mismatch artifacts.
+        """
+        return CompositeVideoClip([source_clip], size=(target_width, target_height))
 
     for i, clip in enumerate(clips):
         try:
@@ -2940,14 +2970,22 @@ def uniformize_dimensions(clips, target_width, target_height):
 
             # CRITICAL: Check if resize_clip_safely returned None or failed
             if resized_clip is None:
-                logger.error(f"❌ resize_clip_safely returned None for clip {i+1}")
-                uniform_clips.append(clip)  # Use original clip as fallback
+                logger.error(
+                    f"❌ resize_clip_safely returned None for clip {i+1}; "
+                    f"forcing exact canvas size as fallback"
+                )
+                uniform_clips.append(_force_target_size(clip))
+                failed_count += 1
                 continue
 
             # Validate resized clip has required attributes
             if not hasattr(resized_clip, "duration"):
-                logger.error(f"❌ Resized clip {i+1} missing duration attribute")
-                uniform_clips.append(clip)  # Use original clip as fallback
+                logger.error(
+                    f"❌ Resized clip {i+1} missing duration attribute; "
+                    f"forcing exact canvas size as fallback"
+                )
+                uniform_clips.append(_force_target_size(clip))
+                failed_count += 1
                 continue
 
             # Calculate position to center the resized clip
@@ -2982,12 +3020,27 @@ def uniformize_dimensions(clips, target_width, target_height):
 
         except Exception as e:
             logger.exception(f"❌ Failed to uniformize clip {i+1}: {e}")
-            import traceback
-            logger.exception(f"   Stack trace: {traceback.format_exc()}")
-            # Fallback: use original clip (may cause dimension mismatch)
-            uniform_clips.append(clip)
+            # Last resort: force exact canvas dims so concatenation stays uniform
+            try:
+                uniform_clips.append(_force_target_size(clip))
+            except Exception:
+                logger.exception(
+                    f"❌ Could not force canvas size for clip {i+1}; appending "
+                    f"original (may cause dimension mismatch)"
+                )
+                uniform_clips.append(clip)
+            failed_count += 1
 
-    logger.info(f"✅ Uniformization complete: all clips are {target_width}x{target_height}")
+    if failed_count:
+        logger.warning(
+            f"⚠️ Uniformization finished with {failed_count}/{len(clips)} clip(s) "
+            f"using the forced-size fallback; output is {target_width}x{target_height} "
+            f"but those clips may be cropped/letterboxed unexpectedly."
+        )
+    else:
+        logger.info(
+            f"✅ Uniformization complete: all clips are {target_width}x{target_height}"
+        )
     return uniform_clips
 
 def render_video(
@@ -3022,6 +3075,13 @@ def render_video(
     """
     # Initialize logger for this function
     logger = logging.getLogger("autocut.clip_assembler")
+
+    # Cleanup handles, initialized up front so the finally block is always safe
+    # even if a failure occurs before these are assigned.
+    resource_manager = None
+    video_clips: List[Any] = []
+    audio_clip = None
+    final_video = None
 
     try:
         # Import MoviePy components safely
@@ -3118,9 +3178,6 @@ def render_video(
                 )
             )
 
-            if error_report.get("total_errors", 0) > 0:
-                pass
-
         except Exception as e:
             import traceback
 
@@ -3129,10 +3186,71 @@ def render_video(
                 f"Failed to load video clips using robust loading system: {e}"
             ) from e
 
-        if not video_clips:
+        # video_clips is now in timeline order with None where a clip failed to
+        # load. Abort if too many failed, otherwise fill the gaps with black
+        # placeholders of the intended duration so surviving clips keep their
+        # beat-aligned positions (prevents silent audio desync — see C1).
+        total_positions = len(sorted_clips)
+        loaded_count = sum(1 for c in video_clips if c is not None)
+        if loaded_count == 0:
             raise RuntimeError(
-                f"No video clips could be loaded from {len(timeline.clips)} timeline clips using robust loading system"
+                f"No video clips could be loaded from {total_positions} timeline "
+                f"clips using robust loading system"
             )
+
+        def _failed_sources() -> list:
+            return sorted(
+                {
+                    sorted_clips[i]["video_file"]
+                    for i in failed_indices
+                    if 0 <= i < total_positions
+                }
+            )
+
+        success_rate = loaded_count / total_positions
+        if success_rate < 0.5:
+            raise RuntimeError(
+                f"Only {loaded_count}/{total_positions} clips loaded "
+                f"({success_rate:.0%}); too many failures to produce a usable "
+                f"video. Problem sources: {_failed_sources()}"
+            )
+
+        if failed_indices:
+            logger.warning(
+                f"⚠️ {len(failed_indices)} clip(s) failed to load and will be "
+                f"replaced with black placeholders to preserve beat sync. "
+                f"Sources: {_failed_sources()}"
+            )
+
+            # Import ColorClip using the same fallback pattern as uniformize_dimensions
+            ColorClip = None
+            try:
+                from moviepy.editor import ColorClip
+            except ImportError:
+                try:
+                    from moviepy import ColorClip
+                except ImportError:
+                    ColorClip = None
+
+            if ColorClip is None:
+                raise RuntimeError(
+                    "Cannot create placeholder clips (ColorClip unavailable); "
+                    f"{len(failed_indices)} clips failed to load."
+                )
+
+            placeholder_w = canvas_format["target_width"] if canvas_format else 1920
+            placeholder_h = canvas_format["target_height"] if canvas_format else 1080
+            for i in range(total_positions):
+                if video_clips[i] is None:
+                    clip_meta = sorted_clips[i]
+                    gap_duration = max(
+                        float(clip_meta["end"]) - float(clip_meta["start"]), 0.1
+                    )
+                    video_clips[i] = ColorClip(
+                        size=(placeholder_w, placeholder_h),
+                        color=(0, 0, 0),
+                        duration=gap_duration,
+                    )
 
         if progress_callback:
             progress_callback("Uniformizing video dimensions", 0.45)
@@ -3303,11 +3421,16 @@ def render_video(
         if progress_callback:
             progress_callback("Video rendering complete", 1.0)
 
-        # Clean up clips and resource manager
+        return output_path
+    except Exception as e:
+        raise RuntimeError(f"Failed to render video: {e!s}") from e
+    finally:
+        # Always release clips, audio readers, and FFmpeg subprocesses — on both
+        # success and failure — so a mid-render error can't orphan proc handles.
 
         # Clean up resource manager (prevents proc errors)
         try:
-            if "resource_manager" in locals():
+            if resource_manager is not None:
                 resource_manager.cleanup_all()
         except Exception:
             pass
@@ -3337,11 +3460,6 @@ def render_video(
                 final_video.close()
         except Exception:
             pass
-
-        # CRITICAL FIX: Return in try block, not orphaned else block
-        return output_path
-    except Exception as e:
-        raise RuntimeError(f"Failed to render video: {e!s}") from e
 
 
 def add_transitions(
