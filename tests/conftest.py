@@ -63,6 +63,20 @@ def sample_audio_files(test_media_dir: Path) -> List[Path]:
     return sorted(audio_files)
 
 
+@pytest.fixture(scope="session")
+def synthetic_media(tmp_path_factory) -> "tuple[List[str], str]":
+    """Generate tiny synthetic videos + audio once per session.
+
+    Lets the end-to-end smoke tests exercise the real ``assemble_clips`` pipeline
+    on a clean checkout where ``test_media/`` is absent. Returns
+    ``(video_paths, audio_path)``. See ``tests/synthetic_media.py``.
+    """
+    from tests.synthetic_media import generate_synthetic_media
+
+    dest = tmp_path_factory.mktemp("synthetic_media")
+    return generate_synthetic_media(dest)
+
+
 @pytest.fixture
 def temp_dir():
     """Temporary directory for test files."""
