@@ -105,9 +105,9 @@ class TestProjectStructure:
         assert (project_root / "src" / "core" / "exceptions.py").exists()
 
     def test_main_entry_point_exists(self):
-        """Test that main entry point is preserved."""
+        """Test that the main CLI entry point is preserved."""
         project_root = Path(__file__).parent.parent.parent
-        assert (project_root / "test_autocut_demo.py").exists()
+        assert (project_root / "autocut.py").exists()
 
     def test_scattered_scripts_removed(self):
         """Test that scattered test scripts were removed."""
@@ -119,6 +119,7 @@ class TestProjectStructure:
             "test_video_analysis.py",
             "debug_iphone_transcoding.py",
             "demo_iphone_h265_processing.py",
+            "test_autocut_demo.py",  # misnamed demo, removed in the streamline
         ]
 
         for script in removed_scripts:
