@@ -81,7 +81,43 @@ def test_estimate_downbeat_offset_finds_the_accented_phase():
     _place_kicks(y, SR, accented_beats, _kick(SR, freq=150.0))  # strong on the accent
     y = _normalized(y)
 
-    assert estimate_downbeat_offset(beats, y, SR) == accent_phase
+    assert estimate_downbeat_offset(beats, y, y, SR) == accent_phase
+
+
+def _snare(sr: int, length_s: float = 0.1) -> np.ndarray:
+    """Broadband noise burst -- louder across the spectrum than a kick."""
+    n = int(length_s * sr)
+    env = np.exp(-np.linspace(0, 10, n))
+    rng = np.random.default_rng(3)
+    return env * rng.standard_normal(n)
+
+
+def test_estimate_downbeat_offset_ignores_the_snare_backbeat():
+    """Realistic pop structure: kick on beats 1&3 (phases 0&2), a *louder
+    broadband* snare on 2&4 (phases 1&3), and a chord change on every bar
+    start (phase 0). The downbeat is phase 0. The old broadband-onset scoring
+    picked the snare phase (the loudest hit), which put "downbeat" cuts on
+    beats 2/4 -- and combined with index rotation, on beat 3."""
+    beats = list(np.arange(0, DURATION, INTERVAL))
+
+    y_perc = np.zeros(int(SR * DURATION), dtype=np.float64)
+    _place_kicks(y_perc, SR, beats[0::4], _kick(SR, freq=80.0))
+    _place_kicks(y_perc, SR, beats[2::4], _kick(SR, freq=80.0))
+    _place_kicks(y_perc, SR, beats[1::4], _snare(SR) * 2.0)
+    _place_kicks(y_perc, SR, beats[3::4], _snare(SR) * 2.0)
+    y_perc = _normalized(y_perc)
+
+    # Harmonic bed: a chord (three sines) whose root moves at every bar start.
+    t = np.linspace(0, DURATION, int(SR * DURATION), endpoint=False)
+    bar_len = 4 * INTERVAL
+    roots = np.array([220.0 * 2 ** ((k % 4) * 3 / 12) for k in range(64)])
+    root_of_t = roots[(t / bar_len).astype(int) % len(roots)]
+    y_harm = sum(
+        np.sin(2 * np.pi * root_of_t * ratio * t) for ratio in (1.0, 1.25, 1.5)
+    )
+    y_harm = _normalized(y_harm)
+
+    assert estimate_downbeat_offset(beats, y_perc, y_harm, SR) == 0
 
 
 # ------------------------- offset compensation --------------------------------

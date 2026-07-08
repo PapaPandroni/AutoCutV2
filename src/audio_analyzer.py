@@ -249,17 +249,34 @@ def verify_beat_phase(
     return beat_times
 
 
-def estimate_downbeat_offset(beat_times: List[float], y: np.ndarray, sr: int) -> int:
+def estimate_downbeat_offset(
+    beat_times: List[float],
+    y_percussive: np.ndarray,
+    y_harmonic: np.ndarray,
+    sr: int,
+    low_band_hz: float = 200.0,
+) -> int:
     """Estimate which beat index (0-3) is the downbeat, assuming 4/4 time.
 
-    The old ``create_beat_hierarchy`` hardcoded "downbeat = beat index 0".
-    Instead, evaluate mean onset strength at each of the 4 candidate phases'
-    downbeat positions (``beat_times[phase::4]``) and pick the strongest (D6).
+    The old ``create_beat_hierarchy`` hardcoded "downbeat = beat index 0",
+    and the first D6 version scored phases by *broadband* onset strength --
+    which reliably picks the snare backbeat (beats 2/4), since the snare is
+    the broadband-loudest hit in most kick-on-1&3 / snare-on-2&4 music.
+    Instead, combine two features that actually mark bar starts:
+
+    - low-band onset strength (kick/bass emphasis, <= ``low_band_hz``), and
+    - chroma flux on the harmonic component: chord changes align with the
+      "1" far more often than with any other beat.
+
+    Each feature's four phase scores are normalized to sum to 1 so neither
+    scale dominates, then averaged; the strongest phase wins (D6).
 
     Args:
         beat_times: Detected (and phase-corrected) beat timestamps in seconds
-        y: Audio time series used for beat detection
+        y_percussive: Percussive component used for beat detection
+        y_harmonic: Harmonic component (for chord-change detection)
         sr: Sample rate
+        low_band_hz: Upper frequency bound of the kick/bass band
 
     Returns:
         The strongest candidate phase, 0-3
@@ -267,19 +284,49 @@ def estimate_downbeat_offset(beat_times: List[float], y: np.ndarray, sr: int) ->
     if len(beat_times) < 4:
         return 0
 
-    onset_envelope, onset_times = _onset_envelope_and_times(y, sr)
+    hop_length = 512
 
-    best_phase, best_strength = 0, -1.0
-    for phase in range(4):
-        strength = _mean_onset_strength_at(
-            beat_times[phase::4],
-            onset_envelope,
-            onset_times,
+    # Feature A: onset strength restricted to the kick/bass band. The
+    # spectrogram is deliberately linear, not dB: in dB the rise from the
+    # noise floor to a quiet hit and to a loud hit look nearly identical, so
+    # accent contrast (downbeat kick vs ordinary kick) washes out; linear
+    # magnitude preserves it.
+    stft = np.abs(librosa.stft(y_percussive, hop_length=hop_length))
+    freqs = librosa.fft_frequencies(sr=sr)
+    low_onset = librosa.onset.onset_strength(
+        S=stft[freqs <= low_band_hz],
+        sr=sr,
+        hop_length=hop_length,
+    )
+
+    # Feature B: frame-to-frame chroma change on the harmonic component.
+    # nan_to_num: chroma normalization yields NaN columns on silent stretches.
+    chroma = np.nan_to_num(
+        librosa.feature.chroma_cqt(y=y_harmonic, sr=sr, hop_length=hop_length),
+    )
+    chroma_flux = np.concatenate(
+        [[0.0], np.linalg.norm(np.diff(chroma, axis=1), axis=0)],
+    )
+
+    def _phase_scores(envelope: np.ndarray) -> np.ndarray:
+        # Envelope lengths can differ by a frame between features, so each
+        # gets its own timestamp axis.
+        times = librosa.frames_to_time(
+            np.arange(len(envelope)),
+            sr=sr,
+            hop_length=hop_length,
         )
-        if strength > best_strength:
-            best_strength = strength
-            best_phase = phase
-    return best_phase
+        scores = np.array(
+            [
+                _mean_onset_strength_at(beat_times[phase::4], envelope, times)
+                for phase in range(4)
+            ],
+        )
+        total = scores.sum()
+        return scores / total if total > 0 else np.full(4, 0.25)
+
+    combined = 0.5 * _phase_scores(low_onset) + 0.5 * _phase_scores(chroma_flux)
+    return int(np.argmax(combined))
 
 
 def apply_offset_compensation(
@@ -369,7 +416,9 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
         - 'compensated_beats': Offset-corrected beat timestamps (List[float])
         - 'musical_start_time': First significant beat timestamp (float)
         - 'intro_duration': Length of intro section in seconds (float)
-        - 'downbeat_offset': Beat index (0-3) estimated to be the downbeat (int)
+        - 'downbeat_times': Timestamps of estimated downbeats, compensated,
+          unfiltered -- valid anchors for any downstream-trimmed beat list
+          (List[float])
         - 'duration': Total audio duration in seconds (float)
         - 'allowed_durations': Musically appropriate clip durations (List[float])
         - 'min_duration': Minimum clip duration (float)
@@ -453,8 +502,23 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
             strength_threshold=0.3,
         )
 
-        # 5. Estimate which beat index is the downbeat (D6)
-        downbeat_offset = estimate_downbeat_offset(beat_times, y_percussive, sr)
+        # 5. Estimate which beat index is the downbeat (D6) and convert it to
+        # *timestamps* on the compensated grid. Downstream both analyze_audio
+        # (weak-intro filter above) and match_clips_to_beats (musical_start
+        # trim) drop beats from the front of the list, so a phase *index*
+        # stops pointing at the estimated downbeat after either step -- the
+        # cause of cuts landing on beat 3 instead of the "1". Timestamps
+        # survive any amount of filtering.
+        downbeat_phase = estimate_downbeat_offset(
+            beat_times,
+            y_percussive,
+            y_harmonic,
+            sr,
+        )
+        downbeat_times = apply_offset_compensation(
+            beat_times,
+            offset=LIBROSA_BEAT_LATENCY_OFFSET_SECONDS,
+        )[downbeat_phase::4]
 
         # Calculate allowed clip durations based on BPM (already validated above)
         min_duration, allowed_durations = calculate_clip_constraints(tempo)
@@ -470,7 +534,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
             "compensated_beats": filtered_beats,  # Offset-corrected and filtered beats
             "musical_start_time": float(musical_start_time),
             "intro_duration": float(intro_duration),
-            "downbeat_offset": downbeat_offset,
+            "downbeat_times": downbeat_times,
             # === METADATA ===
             "analysis_version": "2.0",
             "librosa_offset_compensation": LIBROSA_BEAT_LATENCY_OFFSET_SECONDS,

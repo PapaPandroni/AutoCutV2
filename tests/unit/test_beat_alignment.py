@@ -182,6 +182,41 @@ def test_whole_second_chunks_do_not_drift():
     _assert_timeline_on_grid(timeline, expected)
 
 
+# ------------------- D6: downbeat anchoring by timestamp --------------------
+@pytest.mark.parametrize("n_trimmed", [0, 1, 2, 3])
+def test_downbeat_anchor_survives_front_trimming(n_trimmed):
+    """The weak-intro filter and the musical_start trim both drop beats from
+    the front of the list between analysis and planning, so a downbeat
+    carried as a phase *index* rotates by one for every dropped beat (the
+    "cuts on beat 3" bug: estimator picked beat 2, one dropped beat rotated
+    it to beat 3). Carried as *timestamps*, every 4-beat cut must land on a
+    true downbeat no matter how many beats were trimmed."""
+    full = _make_uniform_beats(0.0)
+    downbeats = full[0::4]
+    beats = full[n_trimmed:]
+    chunks = _make_chunks()
+
+    timeline = match_clips_to_beats(
+        chunks,
+        beats,
+        ALLOWED_DURATIONS,
+        pattern="balanced",
+        musical_start_time=0.0,
+        downbeat_times=downbeats,
+    )
+
+    assert len(timeline.clips) > 5
+    # Clip 0 starts at output 0 by construction (D1, absorbs the intro);
+    # every later clip must start exactly on a downbeat timestamp.
+    for i, clip in enumerate(timeline.clips[1:], start=1):
+        cut = clip["cumulative_start"]
+        nearest = min(abs(cut - d) for d in downbeats)
+        assert nearest <= FRAME, (
+            f"clip {i} (trim={n_trimmed}): cut at {cut:.3f} is {nearest:.3f}s "
+            f"from the nearest downbeat"
+        )
+
+
 def test_dropped_slot_keeps_later_cuts_on_grid():
     """When a slot is unfillable (D4 step 3) the output plays the rest of the
     song that much earlier, since clips concatenate with no hole. Later cuts

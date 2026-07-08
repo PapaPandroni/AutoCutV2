@@ -326,7 +326,7 @@ def assemble_clips(
         musical_start_time = audio_data["musical_start_time"]
         intro_duration = audio_data["intro_duration"]
         allowed_durations = audio_data["allowed_durations"]
-        downbeat_offset = audio_data.get("downbeat_offset", 0)
+        downbeat_times = audio_data.get("downbeat_times")
 
         if len(beats) < 2:
             error_msg = f"Insufficient beats detected in audio file: {len(beats)} beats"
@@ -549,7 +549,7 @@ def assemble_clips(
             allowed_durations=allowed_durations,
             pattern=pattern,
             musical_start_time=musical_start_time,  # Use musical intelligence for sync
-            downbeat_offset=downbeat_offset,
+            downbeat_times=downbeat_times,
         )
 
         if not timeline.clips:

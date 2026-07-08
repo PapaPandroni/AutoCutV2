@@ -35,7 +35,7 @@ def match_clips_to_beats(
     allowed_durations: List[float],
     pattern: str = "balanced",
     musical_start_time: float = 0.0,
-    downbeat_offset: int = 0,
+    downbeat_times: Optional[List[float]] = None,
 ) -> ClipTimeline:
     """Match video chunks to beat grid using variety patterns with musical intelligence.
 
@@ -45,10 +45,14 @@ def match_clips_to_beats(
         allowed_durations: List of musically appropriate durations
         pattern: Variety pattern to use ('energetic', 'buildup', 'balanced', 'dramatic')
         musical_start_time: First significant beat timestamp (skip intro/buildup)
-        downbeat_offset: Beat index (0-3) estimated to be the downbeat (D6).
-            Starting the pattern here means every 4/8/16-beat cut lands on a
-            downbeat (all multiples of a 4/4 bar); 2-beat cuts may still land
-            mid-bar by design.
+        downbeat_times: Timestamps of estimated downbeats (D6). Starting the
+            pattern on the first downbeat found in the (filtered) beat grid
+            means every 4/8/16-beat cut lands on a downbeat (all multiples of
+            a 4/4 bar); 2-beat cuts may still land mid-bar by design.
+            Timestamps rather than a phase index, because ``beats`` has
+            usually been trimmed (weak-intro filter, musical_start) since
+            analysis and an index into the original grid would point at the
+            wrong beat here.
 
     Returns:
         ClipTimeline object with matched clips starting from musical content
@@ -80,8 +84,13 @@ def match_clips_to_beats(
 
     # D6: start the pattern on the estimated downbeat so 4/8/16-beat cuts
     # (all multiples of a 4/4 bar) land on downbeats, not an arbitrary parity.
-    if not 0 <= downbeat_offset < len(effective_beats):
-        downbeat_offset = 0
+    # Resolve the downbeat timestamps against the (possibly trimmed) grid:
+    # the first effective beat lying on a downbeat becomes the start index.
+    downbeat_offset = _resolve_downbeat_start(
+        effective_beats,
+        downbeat_times,
+        avg_beat_interval,
+    )
 
     # Apply variety pattern to get beat multipliers
     total_beats = (
@@ -261,6 +270,28 @@ def match_clips_to_beats(
     )
 
     return timeline
+
+
+def _resolve_downbeat_start(
+    effective_beats: List[float],
+    downbeat_times: Optional[List[float]],
+    avg_beat_interval: float,
+) -> int:
+    """Index of the first beat in ``effective_beats`` sitting on an estimated
+    downbeat (within a quarter beat), or 0 if none matches.
+
+    ``downbeat_times`` come from the full analysis-time grid while
+    ``effective_beats`` has typically lost beats to the weak-intro filter and
+    the musical_start trim, so matching must be by timestamp -- an index
+    carried over from analysis would be rotated by every dropped beat.
+    """
+    if not downbeat_times:
+        return 0
+    tolerance = avg_beat_interval / 4
+    for index, beat in enumerate(effective_beats):
+        if any(abs(beat - downbeat) <= tolerance for downbeat in downbeat_times):
+            return index
+    return 0
 
 
 def _calculate_duration_fit(
