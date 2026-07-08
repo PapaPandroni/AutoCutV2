@@ -34,9 +34,9 @@ class TestiPhoneH265Workflow:
 
         # Step 1: Basic validation
         basic_validation = validator.validate_basic(str(iphone_h265_file_path))
-        assert basic_validation.is_valid, (
-            f"Basic validation failed: {basic_validation.errors}"
-        )
+        assert (
+            basic_validation.is_valid
+        ), f"Basic validation failed: {basic_validation.errors}"
 
         # Step 2: Codec detection
         codec_info = codec_detector.detect_codec(str(iphone_h265_file_path))
@@ -107,9 +107,10 @@ class TestiPhoneH265Workflow:
         final_codec = codec_detector.detect_codec(processed_path)
 
         # Should be either original H.265 (if compatible) or transcoded H.264
-        assert final_codec.codec in ["h264", "hevc"], (
-            f"Unexpected codec: {final_codec.codec}"
-        )
+        assert final_codec.codec in [
+            "h264",
+            "hevc",
+        ], f"Unexpected codec: {final_codec.codec}"
 
     def test_hardware_specific_transcoding(self, iphone_h265_file_path, temp_dir):
         """Test transcoding with different hardware configurations."""
@@ -132,14 +133,15 @@ class TestiPhoneH265Workflow:
 
         if capabilities.has_gpu_acceleration:
             # With GPU acceleration, transcoding should be relatively fast
-            assert result.encoder_used in ["nvenc", "qsv"], (
-                f"Expected GPU encoder, got {result.encoder_used}"
-            )
+            assert result.encoder_used in [
+                "nvenc",
+                "qsv",
+            ], f"Expected GPU encoder, got {result.encoder_used}"
         else:
             # CPU fallback
-            assert result.encoder_used == "cpu", (
-                f"Expected CPU encoder, got {result.encoder_used}"
-            )
+            assert (
+                result.encoder_used == "cpu"
+            ), f"Expected CPU encoder, got {result.encoder_used}"
 
         # Verify the result is valid regardless of encoder used
         if result.success:
@@ -195,13 +197,13 @@ class TestiPhoneH265Workflow:
 
         # Should process reasonably quickly (adjust thresholds as needed)
         if file_size_mb < 50:  # Small files should process quickly
-            assert processing_time < 30, (
-                f"Small file took too long: {processing_time:.2f}s for {file_size_mb:.1f}MB"
-            )
+            assert (
+                processing_time < 30
+            ), f"Small file took too long: {processing_time:.2f}s for {file_size_mb:.1f}MB"
         elif file_size_mb < 200:  # Medium files
-            assert processing_time < 120, (
-                f"Medium file took too long: {processing_time:.2f}s for {file_size_mb:.1f}MB"
-            )
+            assert (
+                processing_time < 120
+            ), f"Medium file took too long: {processing_time:.2f}s for {file_size_mb:.1f}MB"
 
         # Log performance for analysis
         print(
@@ -241,6 +243,31 @@ class TestiPhoneH265ErrorScenarios:
             transcoding_service.transcode_hevc_to_h264(
                 str(input_file),
                 restricted_output,
+            )
+
+    def test_transcoding_non_decodable_input_raises(self, temp_dir, test_helpers):
+        """A non-decodable input must raise, not silently return a bogus path.
+
+        Locks in the IMPROVEMENTS.md Stage-3 fix: on FFmpeg failure, every
+        retry attempt used to fall through to the try/except/else's
+        `return output_path` instead of retrying or raising, so a failed
+        transcode returned a path to a file that was never produced.
+        """
+        # src/video/transcoding.py raises via the bare `core.exceptions`
+        # import (src/ on sys.path), a different module identity than this
+        # file's `src.core.exceptions` package import -- match it here so
+        # pytest.raises catches the actual exception class being raised.
+        from core.exceptions import TranscodingError as RuntimeTranscodingError
+
+        input_file = test_helpers.create_mock_video_file(temp_dir, "garbage.mp4")
+        output_path = temp_dir / "output.mp4"
+
+        transcoding_service = TranscodingService()
+
+        with pytest.raises(RuntimeTranscodingError):
+            transcoding_service.transcode_hevc_to_h264(
+                str(input_file),
+                str(output_path),
             )
 
     def test_ffmpeg_not_available(self, iphone_h265_file_path, temp_dir):
@@ -299,9 +326,9 @@ class TestiPhoneH265RealWorldScenarios:
 
         # All files should process successfully
         successful_results = [r for r in results if r["success"]]
-        assert len(successful_results) == len(results), (
-            f"Some files failed to process: {results}"
-        )
+        assert len(successful_results) == len(
+            results
+        ), f"Some files failed to process: {results}"
 
     def test_iphone_file_format_variations(self, sample_video_files, temp_dir):
         """Test different iPhone file format variations."""
@@ -369,15 +396,15 @@ class TestiPhoneH265RealWorldScenarios:
 
                 # Size should be reasonable (not too much larger, allowing for some increase due to encoding differences)
                 size_ratio = transcoded_size_mb / original_size_mb
-                assert 0.5 < size_ratio < 3.0, (
-                    f"Size ratio {size_ratio:.2f} outside acceptable range"
-                )
+                assert (
+                    0.5 < size_ratio < 3.0
+                ), f"Size ratio {size_ratio:.2f} outside acceptable range"
 
                 # Resolution should be preserved
                 if original_codec.resolution and transcoded_codec.resolution:
-                    assert original_codec.resolution == transcoded_codec.resolution, (
-                        "Resolution should be preserved"
-                    )
+                    assert (
+                        original_codec.resolution == transcoded_codec.resolution
+                    ), "Resolution should be preserved"
 
                 print(
                     f"Transcoding quality check passed: {original_size_mb:.1f}MB → {transcoded_size_mb:.1f}MB (ratio: {size_ratio:.2f})",

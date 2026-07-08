@@ -183,15 +183,15 @@ def uniformize_dimensions(clips, target_width, target_height):
             letterbox_type = (
                 "top/bottom" if original_aspect > target_aspect else "left/right"
             )
-            logger.info(
+            logger.debug(
                 f"🔧 Clip {i+1}: {original_width}x{original_height} → {target_width}x{target_height}"
             )
-            logger.info(f"   📏 Scale factor: {scale_factor:.3f}")
-            logger.info(
+            logger.debug(f"   📏 Scale factor: {scale_factor:.3f}")
+            logger.debug(
                 f"   📐 Content size: {scaled_width}x{scaled_height} (centered)"
             )
-            logger.info(f"   ⬛ Letterbox: {letterbox_type} bars")
-            logger.info(f"   📍 Position: ({x_offset}, {y_offset})")
+            logger.debug(f"   ⬛ Letterbox: {letterbox_type} bars")
+            logger.debug(f"   📍 Position: ({x_offset}, {y_offset})")
 
         except Exception as e:
             logger.exception(f"❌ Failed to uniformize clip {i+1}: {e}")
@@ -223,9 +223,7 @@ def render_video(
     timeline: ClipTimeline,
     audio_file: str,
     output_path: str,
-    max_workers: int = 3,
     progress_callback: Optional[callable] = None,
-    bpm: Optional[float] = None,
     avg_beat_interval: Optional[float] = None,
     canvas_format: Optional[
         dict
@@ -237,9 +235,7 @@ def render_video(
         timeline: ClipTimeline with all clips and timing
         audio_file: Path to music file
         output_path: Path for output video
-        max_workers: Maximum parallel workers (legacy parameter)
         progress_callback: Optional callback for progress updates
-        bpm: Beats per minute for musical fade calculations
         avg_beat_interval: Average time between beats in seconds
         canvas_format: Intelligent canvas format from VideoFormatAnalyzer
 
@@ -272,19 +268,12 @@ def render_video(
 
         # Import robust audio loading system to prevent proc errors
         try:
-            # Try to import from audio_loader module first
             from audio_loader import load_audio_robust
         except ImportError:
-            try:
-                # Fallback: try local definition in this file
-                load_audio_robust = locals().get("load_audio_robust")
-                if load_audio_robust is None:
-                    raise ImportError("load_audio_robust not found in local scope")
-            except Exception:
-                # Final fallback: define a minimal robust audio loader
-                def load_audio_robust(audio_file):
-                    """Minimal robust audio loader as final fallback."""
-                    return AudioFileClip(audio_file)
+
+            def load_audio_robust(audio_file):
+                """Minimal robust audio loader as fallback."""
+                return AudioFileClip(audio_file)
 
         # Validate audio file before processing
         if not Path(audio_file).exists():
@@ -311,12 +300,6 @@ def render_video(
             compatibility_info = None
             subclip_safely = None
             attach_audio_safely = None
-
-        # CRITICAL FIX: Log canvas format usage
-        if canvas_format:
-            pass
-        else:
-            pass
 
         if progress_callback:
             progress_callback("Loading video clips", 0.1)
@@ -642,39 +625,3 @@ def render_video(
                 final_video.close()
         except Exception:
             pass
-
-
-def add_transitions(
-    clips: List[VideoFileClip],
-    transition_duration: float = 0.5,
-) -> VideoFileClip:
-    """Add crossfade transitions between clips - REFACTORED.
-
-    This function now delegates to the new modular TransitionEngine
-    extracted as part of Phase 3 refactoring while maintaining full
-    backward compatibility with existing AutoCut code.
-
-    Args:
-        clips: List of video clips
-        transition_duration: Duration of crossfade in seconds
-
-    Returns:
-        Composite video with transitions
-    """
-    try:
-        # Import the new modular transition system with dual import pattern
-        try:
-            from video.rendering import add_transitions as add_transitions_modular
-        except ImportError:
-            from .video.rendering import add_transitions as add_transitions_modular
-
-        # Delegate to the new modular system
-        return add_transitions_modular(clips, transition_duration)
-
-    except ImportError as import_error:
-        # Fallback to legacy implementation if modules not available
-        raise RuntimeError(
-            "New transition system not available - refactoring incomplete"
-        ) from import_error
-    except Exception as e:
-        raise RuntimeError(f"Transition creation failed: {e!s}") from e

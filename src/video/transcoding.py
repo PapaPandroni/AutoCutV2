@@ -196,6 +196,8 @@ class TranscodingService:
                             attempt + 1,
                             encoder_type,
                         )
+                        return output_path
+
                     error_msg = f"Attempt {attempt + 1}: Output validation failed - not iPhone compatible"
                     attempt_log.append(error_msg)
                     if attempt < max_retries:
@@ -209,8 +211,12 @@ class TranscodingService:
                     error_msg = f"Attempt {attempt + 1} failed ({attempt_time:.1f}s): FFmpeg execution failed"
                     attempt_log.append(error_msg)
 
-                    if attempt >= max_retries:
-                        break
+                    if attempt < max_retries:
+                        continue
+                    raise_transcoding_error(
+                        f"All attempts failed: {'; '.join(attempt_log)}",
+                        input_path,
+                    )
 
             except Exception as e:
                 attempt_time = (
@@ -223,14 +229,11 @@ class TranscodingService:
 
                 if attempt >= max_retries:
                     break
-            else:
-                return output_path
 
         # All attempts failed
         total_time = time.time() - start_time
         comprehensive_error = f"Enhanced transcoding failed after {max_retries + 1} attempts ({total_time:.1f}s): {'; '.join(attempt_log)}"
         raise_transcoding_error(comprehensive_error, input_path)
-        return None
 
     def preprocess_video_if_needed(
         self,
@@ -338,7 +341,9 @@ class TranscodingService:
             # Generate output path
             input_stem = Path(file_path).stem
             cache_key = self._get_file_cache_key(file_path)[:8]
-            output_path = str(Path(temp_dir) / f"{input_stem}_h264_iphone_{cache_key}.mp4")
+            output_path = str(
+                Path(temp_dir) / f"{input_stem}_h264_iphone_{cache_key}.mp4"
+            )
 
             # Enhanced transcoding
             try:
@@ -348,9 +353,7 @@ class TranscodingService:
                 transcoded_path = self.transcode_hevc_to_h264(
                     file_path,
                     output_path,
-                    progress_callback=lambda msg, _: logger.info(
-                        f"Transcoding: {msg}"
-                    ),
+                    progress_callback=lambda msg, _: logger.info(f"Transcoding: {msg}"),
                     max_retries=2,
                 )
 
@@ -634,9 +637,11 @@ class TranscodingService:
                 time.sleep(1)
 
             # Get final result
-            stdout, stderr = process.communicate()
+            process.communicate()
         except subprocess.SubprocessError:
             return False
+
+        return process.returncode == 0
 
     def _validate_iphone_compatibility(self, file_path: str) -> bool:
         """Validate that transcoded output meets iPhone compatibility requirements."""

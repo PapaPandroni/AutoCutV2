@@ -32,7 +32,7 @@ try:
     )
     from .format_analyzer import VideoFormatAnalyzer
     from .normalization import VideoNormalizationPipeline
-    from .timeline_renderer import ClipTimeline, TimelineRenderer
+    from .timeline_renderer import ClipTimeline
 except ImportError:
     pass
 
@@ -42,7 +42,6 @@ __author__ = "AutoCut Development Team"
 
 __all__ = [
     "ClipTimeline",
-    "TimelineRenderer",
     "VideoChunk",
     "VideoEncoder",
     "VideoFormatAnalyzer",

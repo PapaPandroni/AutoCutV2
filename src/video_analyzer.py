@@ -5,12 +5,15 @@ Handles video processing including scene detection, quality scoring,
 motion analysis, and face detection.
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
 from numpy.typing import NDArray
+
+logger = logging.getLogger("autocut.video_analyzer")
 
 # Import our domain-specific types
 try:
@@ -679,20 +682,6 @@ def analyze_video_file(
         FileNotFoundError: If video file doesn't exist
         ValueError: If video format is unsupported
     """
-    import logging
-
-    # Set up detailed logging for video analysis
-    logger = logging.getLogger("autocut.video_analyzer")
-    logger.setLevel(logging.INFO)
-
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-
     # Calculate minimum scene duration using beat-based logic or fallback
     if min_scene_duration is not None:
         # Explicit override provided - use it
