@@ -80,8 +80,13 @@ def generate_audio(
     duration: float = 12.0,
     bpm: int = 120,
     sr: int = 22050,
+    start_offset: float = 0.0,
 ) -> str:
-    """Write a short WAV click track with a clearly detectable beat."""
+    """Write a short WAV click track with a clearly detectable beat.
+
+    ``start_offset`` places the first click at that many seconds instead of
+    0.0 (silence before it), so tests can exercise musical-intro skew (D1).
+    """
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     t = np.linspace(0, duration, int(sr * duration), endpoint=False)
@@ -89,7 +94,7 @@ def generate_audio(
     kick_len = int(0.15 * sr)
     env = np.exp(-np.linspace(0, 8, kick_len))
     kick = env * np.sin(2 * np.pi * 60 * np.linspace(0, 0.15, kick_len))
-    for beat_t in np.arange(0, duration, 60.0 / bpm):
+    for beat_t in np.arange(start_offset, duration, 60.0 / bpm):
         i = int(beat_t * sr)
         n = min(kick_len, len(sig) - i)
         sig[i : i + n] += kick[:n]

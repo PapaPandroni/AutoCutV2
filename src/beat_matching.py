@@ -5,7 +5,8 @@ timeline-planning logic: it maps scored :class:`VideoChunk` objects onto a beat
 grid using variety patterns, with no video loading or rendering.
 """
 
-from typing import List, Tuple
+import logging
+from typing import List, Optional, Tuple
 
 try:
     from video import VideoChunk
@@ -16,6 +17,8 @@ try:
     from video.timeline_renderer import ClipTimeline
 except ImportError:
     from .video.timeline_renderer import ClipTimeline
+
+logger = logging.getLogger("autocut.beat_matching")
 
 
 VARIETY_PATTERNS = {
@@ -32,6 +35,7 @@ def match_clips_to_beats(
     allowed_durations: List[float],
     pattern: str = "balanced",
     musical_start_time: float = 0.0,
+    downbeat_offset: int = 0,
 ) -> ClipTimeline:
     """Match video chunks to beat grid using variety patterns with musical intelligence.
 
@@ -41,6 +45,10 @@ def match_clips_to_beats(
         allowed_durations: List of musically appropriate durations
         pattern: Variety pattern to use ('energetic', 'buildup', 'balanced', 'dramatic')
         musical_start_time: First significant beat timestamp (skip intro/buildup)
+        downbeat_offset: Beat index (0-3) estimated to be the downbeat (D6).
+            Starting the pattern here means every 4/8/16-beat cut lands on a
+            downbeat (all multiples of a 4/4 bar); 2-beat cuts may still land
+            mid-bar by design.
 
     Returns:
         ClipTimeline object with matched clips starting from musical content
@@ -60,26 +68,29 @@ def match_clips_to_beats(
         # Fallback to all beats if musical start filtering leaves too few
         effective_beats = beats
 
-    # Calculate beat interval (average time between beats)
+    # Calculate beat interval (average time between beats). Only used as a
+    # fallback for the tail past the last detected beat (D3) and for the
+    # audio fade calculation in rendering.py -- per-segment targets below use
+    # the actual beat gap instead.
     beat_intervals = [
         effective_beats[i + 1] - effective_beats[i]
         for i in range(len(effective_beats) - 1)
     ]
     avg_beat_interval = sum(beat_intervals) / len(beat_intervals)
 
+    # D6: start the pattern on the estimated downbeat so 4/8/16-beat cuts
+    # (all multiples of a 4/4 bar) land on downbeats, not an arbitrary parity.
+    if not 0 <= downbeat_offset < len(effective_beats):
+        downbeat_offset = 0
+
     # Apply variety pattern to get beat multipliers
     total_beats = (
-        len(effective_beats) - 1
+        len(effective_beats) - 1 - downbeat_offset
     )  # Don't count the last beat as start of a clip
     beat_multipliers = apply_variety_pattern(pattern, total_beats)
 
-    # Convert beat multipliers to target durations
-    target_durations = [
-        multiplier * avg_beat_interval for multiplier in beat_multipliers
-    ]
-
     # Estimate total clips needed
-    estimated_clips = len(target_durations)
+    estimated_clips = len(beat_multipliers)
 
     # Select best clips with variety (request more than needed for flexibility)
     selected_clips = select_best_clips(
@@ -89,52 +100,122 @@ def match_clips_to_beats(
     )
 
     timeline = ClipTimeline()
-    current_beat_index = 0
+    current_beat_index = downbeat_offset
     used_clips = set()  # Track used clips to avoid repetition
+    # Bookkeeping for D4's "extend the previous clip" fallback: the source
+    # chunk and absolute output-time anchor of the most recently committed
+    # clip (None until the first clip is actually added).
+    last_clip: Optional[VideoChunk] = None
+    last_anchor = 0.0
 
-    for i, target_duration in enumerate(target_durations):
+    def _segment_target(anchor: float, multiplier: int) -> Tuple[float, int]:
+        """Target duration for a slot starting at ``anchor`` (an absolute
+        output-time position) and spanning ``multiplier`` beats from
+        ``current_beat_index`` (D3: the actual beat gap, not an average).
+        Falls back to the song-wide average only past the last detected beat.
+        """
+        end_index = current_beat_index + multiplier
+        if end_index < len(effective_beats):
+            return effective_beats[end_index] - anchor, end_index
+        return multiplier * avg_beat_interval, end_index
+
+    def _find_best_clip(pool, target_duration: float, ignore_fit_penalty=False):
+        best_clip, best_score = None, -1.0
+        for clip in pool:
+            if id(clip) in used_clips:
+                continue
+            if ignore_fit_penalty:
+                # D4 last-resort: any long-enough, unused clip is acceptable
+                # (a visible longer clip beats a permanently shifted grid).
+                if clip.duration < target_duration:
+                    continue
+                score = clip.score / 100.0
+            else:
+                duration_fit = _calculate_duration_fit(
+                    clip.duration,
+                    target_duration,
+                    allowed_durations,
+                )
+                if duration_fit < 0:  # Clip can't be used for this duration
+                    continue
+                # Combined score: 70% quality, 30% duration fit
+                score = 0.7 * (clip.score / 100.0) + 0.3 * duration_fit
+            if score > best_score:
+                best_score = score
+                best_clip = clip
+        return best_clip
+
+    def _extend_last_clip(new_target_duration: float) -> None:
+        """Pop the most recently committed clip and re-add it trimmed to
+        ``new_target_duration`` from the same source chunk/anchor (D4: swallow
+        an unfillable slot into the previous one instead of leaving a hole)."""
+        popped = timeline.clips.pop()
+        timeline._cumulative_start -= popped["duration"]
+        start, end, _duration = _fit_clip_to_duration(last_clip, new_target_duration)
+        timeline.add_clip(
+            video_file=last_clip.video_path,
+            start=start,
+            end=end,
+            beat_position=last_anchor,
+            score=last_clip.score,
+        )
+
+    for slot_index, multiplier in enumerate(beat_multipliers):
         if current_beat_index >= len(effective_beats):
             break
 
-        # Find best matching clip for this target duration
-        best_clip = None
-        best_fit_score = -1
+        # D1: anchor the very first slot to absolute output-time 0 (the video
+        # absorbs the intro) instead of effective_beats[downbeat_offset] --
+        # every later segment anchors to wherever the beat grid actually is.
+        # This is a one-time attempt tied to loop position, not "nothing
+        # committed yet": retrying it on every slot until one finally commits
+        # would make the target grow without bound if the first slot(s) get
+        # dropped for lack of long-enough footage (each retry still measures
+        # from 0, but current_beat_index has moved further on).
+        is_first_slot = slot_index == 0
+        anchor = 0.0 if is_first_slot else effective_beats[current_beat_index]
+        target_duration, next_index = _segment_target(anchor, multiplier)
 
-        for clip in selected_clips:
-            if id(clip) in used_clips:
-                continue
-
-            # Calculate fit score based on:
-            # 1. How close clip duration is to target duration
-            # 2. Clip quality score
-            # 3. Whether clip can be trimmed to fit exactly
-
-            duration_fit = _calculate_duration_fit(
-                clip.duration,
-                target_duration,
-                allowed_durations,
-            )
-            if duration_fit < 0:  # Clip can't be used for this duration
-                continue
-
-            # Combined score: 70% quality, 30% duration fit
-            fit_score = 0.7 * (clip.score / 100.0) + 0.3 * duration_fit
-
-            if fit_score > best_fit_score:
-                best_fit_score = fit_score
-                best_clip = clip
+        best_clip = _find_best_clip(selected_clips, target_duration)
+        if best_clip is None and is_first_slot:
+            # The anchored first slot needs extra footage to absorb the
+            # intro -- the pre-filtered pool may lack a long-enough
+            # candidate even though the full chunk list has one.
+            best_clip = _find_best_clip(video_chunks, target_duration)
 
         if best_clip is None:
-            # No suitable clip found, skip this position
-            current_beat_index += beat_multipliers[i]
+            # D4, step 1: extend the previous clip to swallow this slot too,
+            # if its source chunk has the footage for the combined span.
+            if last_clip is not None:
+                combined_duration, combined_next_index = _segment_target(
+                    last_anchor,
+                    multiplier,
+                )
+                if last_clip.duration >= combined_duration:
+                    _extend_last_clip(combined_duration)
+                    current_beat_index = combined_next_index
+                    continue
+
+            # D4, step 2: fall back to any long-enough clip, ignoring the
+            # fit-score rejection (a visible longer clip beats a hole).
+            best_clip = _find_best_clip(
+                video_chunks,
+                target_duration,
+                ignore_fit_penalty=True,
+            )
+
+        if best_clip is None:
+            # D4, step 3: nothing long enough exists -- drop the slot. The
+            # next successful slot re-anchors from wherever
+            # current_beat_index actually ends up, so this doesn't
+            # permanently shift the grid.
+            current_beat_index = next_index
             continue
 
         # Mark clip as used
         used_clips.add(id(best_clip))
 
-        # Determine actual clip timing
-        beat_position = effective_beats[current_beat_index]
-        clip_start, clip_end, clip_duration = _fit_clip_to_duration(
+        clip_start, clip_end, _clip_duration = _fit_clip_to_duration(
             best_clip,
             target_duration,
         )
@@ -144,12 +225,19 @@ def match_clips_to_beats(
             video_file=best_clip.video_path,
             start=clip_start,
             end=clip_end,
-            beat_position=beat_position,
+            beat_position=anchor,
             score=best_clip.score,
         )
+        last_clip, last_anchor = best_clip, anchor
 
         # Move to next beat position
-        current_beat_index += beat_multipliers[i]
+        current_beat_index = next_index
+
+    report = timeline.get_alignment_report()
+    logger.info(
+        f"Beat alignment: max |delta|={report['max_abs_delta']:.3f}s, "
+        f"mean |delta|={report['mean_abs_delta']:.3f}s over {len(timeline.clips)} clips"
+    )
 
     return timeline
 
@@ -169,24 +257,21 @@ def _calculate_duration_fit(
     Returns:
         Fit score between 0.0 and 1.0, or -1 if clip can't be used
     """
-    # Check if target duration is in allowed durations. Target durations come from
-    # multiplier * avg_beat_interval while allowed come from multiplier * (60/bpm),
-    # so acceptable drift grows with the multiplier. A fixed 0.1s tolerance wrongly
-    # rejected long holds (e.g. the 16-beat "dramatic" cut) on tiny beat drift.
-    duration_allowed = False
-    for allowed in allowed_durations:
-        if abs(target_duration - allowed) <= max(0.1, 0.04 * allowed):
-            duration_allowed = True
-            break
-
-    if not duration_allowed:
-        return -1  # Target duration is not musically appropriate
+    # allowed_durations is kept in the signature for call-site compatibility,
+    # but no longer used to reject target_duration: earlier versions rejected
+    # anything outside tolerance of it because targets came from
+    # multiplier * avg_beat_interval, a global estimate that could drift away
+    # from anything musically sensible. Targets are now the actual
+    # beat-to-beat gap for a real pattern multiplier (D3) and so are musically
+    # appropriate by construction.
 
     # Perfect match
     if abs(clip_duration - target_duration) < 0.1:
         return 1.0
 
-    # Clip is longer than target - can be trimmed
+    # Clip is longer than target - can be trimmed exactly (D2: trimming to
+    # the exact target never loses precision, so only the trim's *size* -- not
+    # whether it happens -- affects the score).
     if clip_duration > target_duration:
         # Prefer clips that are close to target but slightly longer
         excess = clip_duration - target_duration
@@ -194,11 +279,10 @@ def _calculate_duration_fit(
             return 1.0 - (excess / 4.0)  # Gentle penalty for trimming
         return 0.3  # Heavy penalty for lots of trimming
 
-    # Clip is shorter than target
-    shortage = target_duration - clip_duration
-    if shortage <= 0.5:  # Small shortage is acceptable
-        return 0.8 - (shortage / 1.0)
-    return -1  # Too short, can't use
+    # Clip is shorter than target: unusable. A clip that comes up short can't
+    # be trimmed to fit -- accepting it (as the old code did up to 0.5s
+    # short) leaves that shortfall as permanent drift in every later cut (D2).
+    return -1
 
 
 def _fit_clip_to_duration(
@@ -214,11 +298,14 @@ def _fit_clip_to_duration(
     Returns:
         Tuple of (start_time, end_time, actual_duration)
     """
-    if clip.duration <= target_duration + 0.1:
-        # Clip fits as-is
+    if clip.duration <= target_duration:
+        # Clip is already exactly (or, in the D4 extend-previous fallback,
+        # as close as possible to) the target -- no +/- slack here, since any
+        # slack becomes permanent drift once clips are concatenated (D2).
         return clip.start_time, clip.end_time, clip.duration
 
-    # Clip needs trimming - trim from the end to preserve the beginning
+    # Clip needs trimming - trim from the end to preserve the beginning,
+    # landing on exactly target_duration.
     new_end_time = clip.start_time + target_duration
 
     # Make sure we don't exceed the original clip bounds

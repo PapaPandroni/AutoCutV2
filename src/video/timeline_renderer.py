@@ -11,7 +11,7 @@ Extracted from clip_assembler.py as part of system consolidation.
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 class ClipTimeline:
@@ -19,6 +19,7 @@ class ClipTimeline:
 
     def __init__(self):
         self.clips: List[Dict[str, Any]] = []
+        self._cumulative_start: float = 0.0
 
     def add_clip(
         self,
@@ -29,6 +30,9 @@ class ClipTimeline:
         score: float,
     ):
         """Add a clip to the timeline."""
+        duration = end - start
+        cumulative_start = self._cumulative_start
+        self._cumulative_start += duration
         self.clips.append(
             {
                 "video_file": video_file,
@@ -36,7 +40,9 @@ class ClipTimeline:
                 "end": end,
                 "beat_position": beat_position,
                 "score": score,
-                "duration": end - start,
+                "duration": duration,
+                "cumulative_start": cumulative_start,
+                "beat_delta": cumulative_start - beat_position,
             },
         )
 
@@ -44,6 +50,21 @@ class ClipTimeline:
         """Export timeline as JSON for debugging."""
         with Path(file_path).open("w") as f:
             json.dump(self.clips, f, indent=2)
+
+    def get_alignment_report(self) -> Dict[str, float]:
+        """Summarize how well cumulative render-time positions track the beat grid.
+
+        ``beat_delta`` (cumulative_start - beat_position) is 0 when a clip's
+        position in the concatenated output lands exactly on its intended beat.
+        """
+        if not self.clips:
+            return {"max_abs_delta": 0.0, "mean_abs_delta": 0.0}
+
+        deltas = [abs(clip["beat_delta"]) for clip in self.clips]
+        return {
+            "max_abs_delta": max(deltas),
+            "mean_abs_delta": sum(deltas) / len(deltas),
+        }
 
     def get_total_duration(self) -> float:
         """Get total duration of all clips."""
@@ -141,74 +162,3 @@ class ClipTimeline:
             "warnings": warnings,
             "stats": self.get_summary_stats(),
         }
-
-
-class TimelineRenderer:
-    """Orchestrates the rendering of video timelines with beat synchronization."""
-
-    def __init__(self):
-        self.timeline = None
-
-    def render_video(
-        self,
-        timeline: ClipTimeline,
-        audio_file: str,
-        output_path: str,
-        max_workers: int = 3,
-        progress_callback: Optional[Callable] = None,
-        bpm: Optional[float] = None,
-        avg_beat_interval: Optional[float] = None,
-    ) -> str:
-        """Render final video with music synchronization.
-
-        This is the legacy function maintained for backward compatibility.
-        It attempts to delegate to the new modular rendering system
-        but will fall back to raise an appropriate error if not available.
-
-        Args:
-            timeline: ClipTimeline with all clips and timing
-            audio_file: Path to music file
-            output_path: Path for output video
-            max_workers: Maximum parallel workers (legacy parameter)
-            progress_callback: Optional callback for progress updates
-            bpm: Beats per minute for musical fade calculations
-            avg_beat_interval: Average time between beats in seconds
-
-        Returns:
-            Path to rendered video file
-
-        Raises:
-            RuntimeError: If rendering fails (for backward compatibility)
-        """
-        try:
-            # Import the new modular rendering system with dual import pattern
-            try:
-                # Try absolute import first for autocut.py context
-                from video.rendering.renderer import (
-                    render_video as render_video_modular,
-                )
-            except ImportError:
-                # Fallback for package execution context
-                from .video.rendering.renderer import (
-                    render_video as render_video_modular,
-                )
-
-            # Delegate to the new modular system
-            return render_video_modular(
-                timeline=timeline,
-                audio_file=audio_file,
-                output_path=output_path,
-                max_workers=max_workers,
-                progress_callback=progress_callback,
-                bpm=bpm,
-                avg_beat_interval=avg_beat_interval,
-            )
-
-        except ImportError as import_err:
-            # Log the import issue for debugging
-            raise RuntimeError(
-                f"New rendering system not available - import failed: {import_err}"
-            ) from import_err
-        except Exception as e:
-            # Maintain backward compatibility with RuntimeError
-            raise RuntimeError(f"Video rendering failed: {e!s}") from e

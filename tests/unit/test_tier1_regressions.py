@@ -37,10 +37,17 @@ def test_constraints_include_two_beat_duration():
 
 
 def test_duration_fit_accepts_two_beat_target():
-    """A 2-beat target is rejected under the old 4/8/16 set, accepted under new."""
+    """A 2-beat target is usable regardless of allowed_durations' contents.
+
+    Stage-1 beat-sync fix (IMPROVEMENTS.md D3): target durations are now
+    always the actual beat-to-beat gap for a real pattern multiplier, so
+    they're musically appropriate by construction -- _calculate_duration_fit
+    no longer rejects a target for not matching allowed_durations (the old
+    tolerance-based rejection this test used to lock in, from back when
+    targets came from multiplier * avg_beat_interval, is gone)."""
     old_allowed = [2.0, 4.0, 8.0]
     _min_dur, new_allowed = calculate_clip_constraints(120.0)
-    assert _calculate_duration_fit(3.0, 1.0, old_allowed) < 0
+    assert _calculate_duration_fit(3.0, 1.0, old_allowed) >= 0
     assert _calculate_duration_fit(3.0, 1.0, new_allowed) >= 0
 
 
