@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from src.core.exceptions import TranscodingError
 from src.hardware.detection import HardwareDetector
 from src.video.codec_detection import CodecDetector
 from src.video.transcoding import TranscodingService
@@ -212,51 +213,34 @@ class TestiPhoneH265Workflow:
 class TestiPhoneH265ErrorScenarios:
     """Test error scenarios in iPhone H.265 processing."""
 
-    def test_transcoding_insufficient_disk_space(self, temp_dir, test_helpers):
-        """Test transcoding behavior with insufficient disk space."""
-        # Create a large mock file
-        large_input = test_helpers.create_mock_video_file(
-            temp_dir,
-            "large_input.mov",
-            100.0,
-        )
-
+    def test_transcoding_missing_input_raises(self, temp_dir):
+        """Transcoding a nonexistent input raises FileNotFoundError (input guard)."""
         transcoding_service = TranscodingService()
+        missing_input = temp_dir / "does_not_exist.mov"
+        output_path = temp_dir / "output.mp4"
 
-        # Try to transcode to a path that might fail due to disk space
-        # This is a simulation - actual behavior depends on available space
-        output_path = temp_dir / "large_output.mp4"
+        with pytest.raises(FileNotFoundError):
+            transcoding_service.transcode_hevc_to_h264(
+                str(missing_input),
+                str(output_path),
+            )
 
-        result = transcoding_service.transcode_h265_to_h264(
-            str(large_input),
-            str(output_path),
-        )
+    def test_transcoding_unwritable_output_raises(self, temp_dir, test_helpers):
+        """Transcoding to an unwritable location raises rather than swallowing the failure.
 
-        # Should handle the error gracefully
-        assert isinstance(result.success, bool)
-        if not result.success:
-            assert result.error_message is not None
-            assert len(result.error_message) > 0
-
-    def test_transcoding_permission_denied(self, temp_dir, test_helpers):
-        """Test transcoding behavior with permission issues."""
+        Either the output directory cannot be created (OSError/PermissionError)
+        or, if it can, FFmpeg fails on the non-video input (TranscodingError).
+        Both are acceptable — the point is the error is surfaced, not hidden.
+        """
         input_file = test_helpers.create_mock_video_file(temp_dir, "input.mov")
-
-        # Try to write to a restricted location (this may not always fail in test environments)
         restricted_output = "/root/restricted_output.mp4"
 
         transcoding_service = TranscodingService()
-        result = transcoding_service.transcode_h265_to_h264(
-            str(input_file),
-            restricted_output,
-        )
 
-        # Should handle permission errors gracefully
-        assert isinstance(result, object)  # TranscodingResult
-        if not result.success:
-            assert (
-                "permission" in result.error_message.lower()
-                or "denied" in result.error_message.lower()
+        with pytest.raises((OSError, TranscodingError)):
+            transcoding_service.transcode_hevc_to_h264(
+                str(input_file),
+                restricted_output,
             )
 
     def test_ffmpeg_not_available(self, iphone_h265_file_path, temp_dir):
