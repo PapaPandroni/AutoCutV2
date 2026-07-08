@@ -7,6 +7,7 @@ It analyzes video quality, detects music rhythm, and intelligently assembles cli
 that match the beat - all without requiring video editing knowledge.
 """
 
+import logging
 import sys
 import time
 from pathlib import Path
@@ -32,6 +33,11 @@ def cli():
     Transform hours of raw footage into polished, music-synced highlight reels
     in minutes. Professional results with minimal effort.
     """
+    # Entry point for all logging setup -- modules only call getLogger().
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
 
 @cli.command()
