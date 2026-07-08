@@ -5,19 +5,25 @@ Handles music analysis including BPM detection, beat tracking, and
 calculation of musically appropriate clip durations.
 """
 
-import contextlib
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import librosa
 import numpy as np
 
+# librosa.beat.beat_track's detected beat consistently lags the true beat by
+# a small, fairly constant amount. Measured against tests/synthetic_media.py's
+# WAV click track (exact known click times) across several BPMs (90/120/140):
+# mean offset ~+0.034s, std ~0.007s. Compensation shifts beats earlier by that
+# amount to cancel it out.
+LIBROSA_BEAT_LATENCY_OFFSET_SECONDS = -0.034
+
 
 def detect_musical_start(
     y: np.ndarray,
     sr: int,
     tempo: float,
-) -> Tuple[float, float]:
+) -> float:
     """Detect the start of significant musical content using onset detection and energy analysis.
 
     Args:
@@ -26,7 +32,7 @@ def detect_musical_start(
         tempo: Detected BPM
 
     Returns:
-        Tuple of (musical_start_time, intro_duration)
+        musical_start_time in seconds
     """
     # Calculate energy-based onset detection
     onset_frames = librosa.onset.onset_detect(
@@ -42,7 +48,7 @@ def detect_musical_start(
     )
 
     if len(onset_frames) == 0:
-        return 0.0, 0.0
+        return 0.0
 
     # Convert to time
     onset_times = librosa.frames_to_time(onset_frames, sr=sr)
@@ -92,9 +98,7 @@ def detect_musical_start(
             musical_start_time = onset_time
             break
 
-    intro_duration = musical_start_time
-
-    return musical_start_time, intro_duration
+    return musical_start_time
 
 
 def detect_intro_duration(
@@ -169,52 +173,119 @@ def detect_intro_duration(
     return max(min_intro, min(intro_end_time, max_intro))
 
 
-def create_beat_hierarchy(
-    beats: np.ndarray,
+def _onset_envelope_and_times(
+    y: np.ndarray,
     sr: int,
-) -> Dict[str, List[float]]:
-    """Create hierarchical beat structure with downbeats, half-beats, and measures.
+    hop_length: int = 512,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Onset-strength envelope and its frame timestamps, shared by the
+    beat-phase (D5) and downbeat (D6) estimators."""
+    onset_envelope = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+    onset_times = librosa.frames_to_time(
+        np.arange(len(onset_envelope)),
+        sr=sr,
+        hop_length=hop_length,
+    )
+    return onset_envelope, onset_times
+
+
+def _mean_onset_strength_at(
+    times: List[float],
+    onset_envelope: np.ndarray,
+    onset_times: np.ndarray,
+) -> float:
+    """Mean onset-strength value at the nearest frame to each of ``times``."""
+    if not times:
+        return 0.0
+    strengths = [onset_envelope[int(np.argmin(np.abs(onset_times - t)))] for t in times]
+    return float(np.mean(strengths))
+
+
+def verify_beat_phase(
+    beat_times: List[float],
+    y: np.ndarray,
+    sr: int,
+) -> List[float]:
+    """Check whether librosa locked onto the off-beat phase and correct it.
+
+    ``librosa.beat.beat_track`` sometimes tracks the up-beats instead of the
+    downbeats. Compare mean onset-envelope strength at the detected beat
+    times against the same grid shifted by half a beat interval; if the
+    shifted grid is meaningfully (>15%) stronger, the detector locked onto
+    the wrong phase, so shift all beats to match (D5).
 
     Args:
-        beats: Beat frame indices
+        beat_times: Detected beat timestamps in seconds
+        y: Audio time series used for beat detection (e.g. the percussive
+            component), so the phase check reflects the same signal
         sr: Sample rate
 
     Returns:
-        Dictionary with beat hierarchy
+        Beat timestamps, shifted by half a beat interval if the shifted grid
+        is the stronger phase, otherwise unchanged
     """
-    beat_times = librosa.frames_to_time(beats, sr=sr)
+    if len(beat_times) < 2:
+        return beat_times
 
-    # Generate half-beats (between main beats)
-    half_beats = []
-    for i in range(len(beat_times) - 1):
-        half_beat_time = beat_times[i] + (beat_times[i + 1] - beat_times[i]) / 2
-        half_beats.append(half_beat_time)
+    onset_envelope, onset_times = _onset_envelope_and_times(y, sr)
 
-    # Estimate time signature (assume 4/4 for most popular music)
-    # Downbeats occur every 4 beats
-    downbeats = [beat_times[i] for i in range(0, len(beat_times), 4)]
+    avg_interval = sum(
+        beat_times[i + 1] - beat_times[i] for i in range(len(beat_times) - 1)
+    ) / (len(beat_times) - 1)
+    half_interval = avg_interval / 2
 
-    # Measures (bars) - same as downbeats for 4/4 time
-    measures = downbeats.copy()
+    detected_strength = _mean_onset_strength_at(beat_times, onset_envelope, onset_times)
+    shifted_times = [t + half_interval for t in beat_times]
+    shifted_strength = _mean_onset_strength_at(
+        shifted_times,
+        onset_envelope,
+        onset_times,
+    )
 
-    # Quarter note subdivisions (double-time)
-    quarter_notes = []
-    for i in range(len(beat_times) - 1):
-        beat_gap = beat_times[i + 1] - beat_times[i]
-        quarter_notes.append(beat_times[i] + beat_gap * 0.25)
-        quarter_notes.append(beat_times[i] + beat_gap * 0.5)
-        quarter_notes.append(beat_times[i] + beat_gap * 0.75)
-
-    return {
-        "main_beats": beat_times.tolist(),
-        "half_beats": half_beats,
-        "downbeats": downbeats,
-        "measures": measures,
-        "quarter_notes": quarter_notes,
-    }
+    # max(..., 1e-6) so a completely silent detected phase (0.0) still
+    # counts as "meaningfully weaker" rather than failing the check.
+    if shifted_strength > max(detected_strength * 1.15, 1e-6):
+        return shifted_times
+    return beat_times
 
 
-def apply_offset_compensation(beats: List[float], offset: float = -0.04) -> List[float]:
+def estimate_downbeat_offset(beat_times: List[float], y: np.ndarray, sr: int) -> int:
+    """Estimate which beat index (0-3) is the downbeat, assuming 4/4 time.
+
+    The old ``create_beat_hierarchy`` hardcoded "downbeat = beat index 0".
+    Instead, evaluate mean onset strength at each of the 4 candidate phases'
+    downbeat positions (``beat_times[phase::4]``) and pick the strongest (D6).
+
+    Args:
+        beat_times: Detected (and phase-corrected) beat timestamps in seconds
+        y: Audio time series used for beat detection
+        sr: Sample rate
+
+    Returns:
+        The strongest candidate phase, 0-3
+    """
+    if len(beat_times) < 4:
+        return 0
+
+    onset_envelope, onset_times = _onset_envelope_and_times(y, sr)
+
+    best_phase, best_strength = 0, -1.0
+    for phase in range(4):
+        strength = _mean_onset_strength_at(
+            beat_times[phase::4],
+            onset_envelope,
+            onset_times,
+        )
+        if strength > best_strength:
+            best_strength = strength
+            best_phase = phase
+    return best_phase
+
+
+def apply_offset_compensation(
+    beats: List[float],
+    offset: float = LIBROSA_BEAT_LATENCY_OFFSET_SECONDS,
+) -> List[float]:
     """Apply systematic offset compensation for librosa timing latency.
 
     Args:
@@ -286,7 +357,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
     """Analyze audio file and extract comprehensive tempo and beat information.
 
     This enhanced version provides musical intelligence including intro detection,
-    beat hierarchy, and offset compensation for professional synchronization.
+    downbeat estimation, and offset compensation for professional synchronization.
 
     Args:
         file_path: Path to the audio file
@@ -298,7 +369,7 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
         - 'compensated_beats': Offset-corrected beat timestamps (List[float])
         - 'musical_start_time': First significant beat timestamp (float)
         - 'intro_duration': Length of intro section in seconds (float)
-        - 'beat_hierarchy': Hierarchical beat structure (Dict)
+        - 'downbeat_offset': Beat index (0-3) estimated to be the downbeat (int)
         - 'duration': Total audio duration in seconds (float)
         - 'allowed_durations': Musically appropriate clip durations (List[float])
         - 'min_duration': Minimum clip duration (float)
@@ -344,19 +415,36 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
         # Convert frame indices to timestamps
         beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
 
+        # Verify librosa didn't lock onto the off-beat phase (D5), before any
+        # further processing that assumes beat_times are on the downbeat.
+        beat_times = verify_beat_phase(beat_times, y_percussive, sr)
+
         # === ENHANCED MUSICAL INTELLIGENCE ===
 
-        # 1. Detect musical start and intro duration
-        musical_start_time, intro_duration = detect_musical_start(
+        # 1. Detect the start of significant musical content (for beat-grid
+        # filtering downstream, e.g. match_clips_to_beats' musical_start_time).
+        musical_start_time = detect_musical_start(y, sr, tempo)
+
+        # 2. Detect intro/buildup duration -- the single canonical value, used
+        # both for weak-beat filtering below and reported in the result dict
+        # (previously a second, cruder duplicate of musical_start_time was
+        # used for filtering while this one was only reported, never applied).
+        intro_duration = detect_intro_duration(
             y,
             sr,
             tempo,
+            energy_threshold=0.3,
+            min_intro=0.5,
+            max_intro=8.0,
         )
 
-        # 2. Apply systematic offset compensation for librosa latency
-        compensated_beats = apply_offset_compensation(beat_times, offset=-0.04)
+        # 3. Apply systematic offset compensation for librosa latency
+        compensated_beats = apply_offset_compensation(
+            beat_times,
+            offset=LIBROSA_BEAT_LATENCY_OFFSET_SECONDS,
+        )
 
-        # 3. Filter weak beats during intro sections
+        # 4. Filter weak beats during intro sections
         filtered_beats = filter_weak_beats_in_intro(
             compensated_beats,
             y,
@@ -365,18 +453,8 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
             strength_threshold=0.3,
         )
 
-        # 4. Create beat hierarchy structure
-        beat_hierarchy = create_beat_hierarchy(beat_frames, sr)
-
-        # 5. Enhanced intro detection with configurable thresholds
-        refined_intro_duration = detect_intro_duration(
-            y,
-            sr,
-            tempo,
-            energy_threshold=0.3,
-            min_intro=0.5,
-            max_intro=8.0,
-        )
+        # 5. Estimate which beat index is the downbeat (D6)
+        downbeat_offset = estimate_downbeat_offset(beat_times, y_percussive, sr)
 
         # Calculate allowed clip durations based on BPM (already validated above)
         min_duration, allowed_durations = calculate_clip_constraints(tempo)
@@ -391,11 +469,11 @@ def analyze_audio(file_path: str) -> Dict[str, Union[float, List[float]]]:
             # === ENHANCED MUSICAL INTELLIGENCE FIELDS ===
             "compensated_beats": filtered_beats,  # Offset-corrected and filtered beats
             "musical_start_time": float(musical_start_time),
-            "intro_duration": float(refined_intro_duration),
-            "beat_hierarchy": beat_hierarchy,
+            "intro_duration": float(intro_duration),
+            "downbeat_offset": downbeat_offset,
             # === METADATA ===
             "analysis_version": "2.0",
-            "librosa_offset_compensation": -0.04,
+            "librosa_offset_compensation": LIBROSA_BEAT_LATENCY_OFFSET_SECONDS,
             "intro_detection_method": "onset_energy_analysis",
         }
 
@@ -440,69 +518,3 @@ def calculate_clip_constraints(bpm: float) -> Tuple[float, List[float]]:
     allowed_durations = [d for d in allowed_durations if d <= 16.0]
 
     return min_duration, allowed_durations
-
-
-def get_cut_points(beats: List[float], song_duration: float) -> List[float]:
-    """Convert beat timestamps to potential video cut points.
-
-    Args:
-        beats: List of beat timestamps in seconds
-        song_duration: Total duration of the song in seconds
-
-    Returns:
-        List of timestamps suitable for video cuts
-    """
-    if not beats:
-        return []
-
-    # Filter beats to avoid cuts too close together (minimum 0.5 seconds apart)
-    min_gap = 0.5
-    filtered_beats = [beats[0]]  # Always include first beat
-
-    for beat in beats[1:]:
-        if beat - filtered_beats[-1] >= min_gap:
-            filtered_beats.append(beat)
-
-    # Ensure we have cuts throughout the song duration
-    cut_points = []
-
-    # Add beginning if first beat is not at the start
-    if filtered_beats[0] > 1.0:
-        cut_points.append(0.0)
-
-    # Add all filtered beats as cut points
-    cut_points.extend(filtered_beats)
-
-    # Add end point if needed
-    if cut_points[-1] < song_duration - 1.0:
-        cut_points.append(song_duration)
-
-    # Remove any cut points beyond song duration
-    return [cp for cp in cut_points if cp <= song_duration]
-
-
-def test_audio_analyzer():
-    """Test the audio analyzer with sample data."""
-
-    # Test calculate_clip_constraints function
-    test_bpms = [60, 120, 90, 140]
-
-    for bpm in test_bpms:
-        with contextlib.suppress(ValueError):
-            min_dur, allowed_durs = calculate_clip_constraints(bpm)
-
-    # Test edge cases
-    edge_cases = [25, 350]  # Should be rejected
-    for bpm in edge_cases:
-        with contextlib.suppress(ValueError):
-            min_dur, allowed_durs = calculate_clip_constraints(bpm)
-
-    # Test get_cut_points function
-    test_beats = [0.5, 1.0, 1.3, 2.0, 2.8, 3.5, 4.0, 4.2, 5.0]
-    song_duration = 6.0
-
-    # Test that get_cut_points doesn't crash with normal data
-    get_cut_points(test_beats, song_duration)
-
-    # Test that get_cut_points doesn't crash with empty beats
-    get_cut_points([], 5.0)

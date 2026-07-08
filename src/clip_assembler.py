@@ -5,11 +5,13 @@ Handles the core logic of matching video clips to musical beats,
 applying variety patterns, and rendering the final video.
 """
 
-import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger("autocut.clip_assembler")
 
 # Import VideoChunk from canonical location
 try:
@@ -98,9 +100,9 @@ except ImportError:
 
 # Rendering (uniformize/concat/encode) extracted to src/rendering.py
 try:
-    from rendering import add_transitions, render_video, uniformize_dimensions
+    from rendering import render_video, uniformize_dimensions
 except ImportError:
-    from .rendering import add_transitions, render_video, uniformize_dimensions
+    from .rendering import render_video, uniformize_dimensions
 
 
 def assemble_clips(
@@ -136,7 +138,6 @@ def assemble_clips(
         ValueError: If no suitable clips found or invalid audio file
         RuntimeError: If rendering fails
     """
-    import logging
     import mimetypes
 
     # Dual import pattern for package/direct execution compatibility
@@ -224,7 +225,6 @@ def assemble_clips(
 
             if path_issues:
                 # These are warnings, not fatal errors
-                logger = logging.getLogger("autocut.clip_assembler")
                 logger.warning(
                     f"⚠️  Audio path has potential issues: {'; '.join(path_issues)}",
                 )
@@ -237,18 +237,6 @@ def assemble_clips(
             return True, None
         except Exception as e:
             return False, f"Unexpected error validating audio file: {e!s}"
-
-    # Set up detailed logging for the main pipeline
-    logger = logging.getLogger("autocut.clip_assembler")
-    logger.setLevel(logging.INFO)
-
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
 
     def report_progress(step: str, progress: float):
         """Helper to report progress if callback provided."""
@@ -338,6 +326,7 @@ def assemble_clips(
         musical_start_time = audio_data["musical_start_time"]
         intro_duration = audio_data["intro_duration"]
         allowed_durations = audio_data["allowed_durations"]
+        downbeat_offset = audio_data.get("downbeat_offset", 0)
 
         if len(beats) < 2:
             error_msg = f"Insufficient beats detected in audio file: {len(beats)} beats"
@@ -376,8 +365,6 @@ def assemble_clips(
         }
 
         logger.info(f"--- Processing video {i + 1}/{len(video_files)}: {filename} ---")
-
-        import time
 
         start_time = time.time()
 
@@ -562,6 +549,7 @@ def assemble_clips(
             allowed_durations=allowed_durations,
             pattern=pattern,
             musical_start_time=musical_start_time,  # Use musical intelligence for sync
+            downbeat_offset=downbeat_offset,
         )
 
         if not timeline.clips:
@@ -610,16 +598,13 @@ def assemble_clips(
             avg_beat_interval = sum(beat_intervals) / len(beat_intervals)
             logger.info(f"Average beat interval calculated: {avg_beat_interval:.3f}s")
 
-        # CRITICAL FIX: Pass canvas format to render_video function
         final_video_path = render_video(
             timeline=timeline,
             audio_file=audio_file,
             output_path=output_path,
-            max_workers=max_workers,
             progress_callback=render_progress,
-            bpm=audio_data.get("bpm"),
             avg_beat_interval=avg_beat_interval,
-            canvas_format=canvas_format,  # NEW: Pass canvas format for optimal sizing
+            canvas_format=canvas_format,
         )
 
         logger.info(f"✅ Video rendering complete: {final_video_path}")
@@ -649,23 +634,6 @@ def assemble_clips(
         error_msg = f"Failed to render video: {e!s}"
         logger.exception(error_msg)
         raise RuntimeError(error_msg) from e
-
-    # Export timeline JSON for debugging (optional)
-    try:
-        timeline_path = output_path.replace(".mp4", "_timeline.json")
-        timeline.export_json(timeline_path)
-        logger.info(f"Debug: Timeline exported to {timeline_path}")
-
-        # Export processing summary for debugging
-        summary_path = output_path.replace(".mp4", "_processing_summary.json")
-        import json
-
-        with Path(summary_path).open("w") as f:
-            json.dump(processing_summary, f, indent=2)
-        logger.info(f"Debug: Processing summary exported to {summary_path}")
-
-    except Exception:
-        pass  # Non-critical, ignore errors  # Non-critical, ignore errors  # Non-critical, ignore errors  # Non-critical, ignore errors
 
 
 def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
