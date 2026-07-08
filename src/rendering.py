@@ -557,7 +557,10 @@ def render_video(
             "ffmpeg_params": ffmpeg_params,
             "temp_audiofile": "temp-audio.m4a",
             "remove_temp": True,
-            "verbose": False,
+            # No "verbose" here: MoviePy 2.x removed the kwarg. The primary
+            # path (write_videofile_safely) strips it anyway, but the
+            # ImportError fallback below passes these params straight to
+            # write_videofile, where it would crash the render.
             "logger": None,
         }
 

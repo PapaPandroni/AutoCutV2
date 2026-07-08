@@ -133,3 +133,91 @@ def test_calculate_duration_fit_rejects_short_clips():
     anything up to 0.5s short, letting the shortfall drift the timeline."""
     fit = _calculate_duration_fit(1.7, 2.0, ALLOWED_DURATIONS)
     assert fit < 0, fit
+
+
+def test_calculate_duration_fit_rejects_slightly_short_clips():
+    """A clip even a few ms short of target must be unusable: the old
+    symmetric <0.1 'perfect match' branch scored a 2.000s chunk as 1.0 for a
+    2.043s slot (4 beats at ~117 BPM), and since scene detection produces
+    whole-second chunks, that ~43ms shortfall recurred on every cut and
+    accumulated into audible off-beat drift in rendered output."""
+    four_beat_gap = 4 * 60.0 / 117.45  # ~2.043s
+    fit = _calculate_duration_fit(2.0, four_beat_gap, ALLOWED_DURATIONS)
+    assert fit < 0, fit
+    # ...while a clip the same distance *over* target is a near-perfect fit.
+    fit_over = _calculate_duration_fit(2.09, four_beat_gap, ALLOWED_DURATIONS)
+    assert fit_over == 1.0, fit_over
+
+
+# ---------------- whole-second chunk pools (detect_scenes quantization) -----
+def test_whole_second_chunks_do_not_drift():
+    """detect_scenes samples frames at 1.0s intervals, so every real chunk
+    duration is a whole number of seconds. At ~117 BPM a 4-beat bar is
+    ~2.043s: the planner must reject the tempting-but-short 2.0s chunks and
+    trim longer ones exactly, or ~40-90ms of drift stacks up per cut
+    (observed in rendered output as cuts sliding progressively off the beat).
+    The short chunks get the best quality scores here to maximize the
+    temptation."""
+    interval = 60.0 / 117.45  # 4-beat gap ~2.043s, just above a whole second
+    beats = [i * interval for i in range(57)]
+    allowed = [interval, 2 * interval, 4 * interval, 8 * interval]
+
+    chunks = [
+        VideoChunk(
+            video_path=f"/fake/int_{v}.mp4",
+            start_time=k * 10.0,
+            # two top-scored 2.0s chunks per video (the trap), then 5.0s ones
+            # long enough for any slot so every slot can commit from the pool
+            end_time=k * 10.0 + (2.0 if k < 2 else 5.0),
+            score=98 if k < 2 else 85 - k,
+        )
+        for v in range(6)
+        for k in range(8)
+    ]
+
+    timeline = match_clips_to_beats(
+        chunks, beats, allowed, pattern="balanced", musical_start_time=0.0
+    )
+    expected = _expected_boundaries(beats, "balanced")
+    _assert_timeline_on_grid(timeline, expected)
+
+
+def test_dropped_slot_keeps_later_cuts_on_grid():
+    """When a slot is unfillable (D4 step 3) the output plays the rest of the
+    song that much earlier, since clips concatenate with no hole. Later cuts
+    must land on the beat grid as *heard* (shifted by the dropped whole-beat
+    span), and beat_delta must report against that reachable grid -- not
+    chase absolute positions the output can no longer hit."""
+    beats = _make_uniform_beats(0.0)  # 0.5s interval
+    # Longest chunk is 5.0s; the 'dramatic' pattern's 16-beat slot needs 8.0s,
+    # so that one slot must be dropped while everything else commits.
+    chunks = [
+        VideoChunk(
+            video_path=f"/fake/file_{v}.mp4",
+            start_time=k * 10.0,
+            end_time=k * 10.0 + 5.0,
+            score=95 - k,
+        )
+        for v in range(6)
+        for k in range(8)
+    ]
+
+    timeline = match_clips_to_beats(
+        chunks, beats, ALLOWED_DURATIONS, pattern="dramatic", musical_start_time=0.0
+    )
+
+    # dramatic over 56 beats -> slots [4,4,4,4,16,4,4,4,4,8]; the 16 drops.
+    assert len(timeline.clips) == 9, len(timeline.clips)
+    for i, clip in enumerate(timeline.clips):
+        # Musically on-beat: on a uniform 0.5s grid every reachable cut
+        # position is a whole multiple of the beat interval, drop or no drop.
+        remainder = clip["cumulative_start"] % BEAT_INTERVAL
+        off_grid = min(remainder, BEAT_INTERVAL - remainder)
+        assert off_grid <= FRAME, (
+            f"clip {i}: cut at {clip['cumulative_start']:.3f} is "
+            f"{off_grid:.3f}s off the beat grid"
+        )
+        # ...and honestly labeled: beat_delta ~0 against the shifted grid.
+        assert (
+            abs(clip["beat_delta"]) <= FRAME
+        ), f"clip {i}: beat_delta={clip['beat_delta']:.3f}"

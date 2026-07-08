@@ -102,11 +102,18 @@ def match_clips_to_beats(
     timeline = ClipTimeline()
     current_beat_index = downbeat_offset
     used_clips = set()  # Track used clips to avoid repetition
+    # Total beat-grid span of slots dropped for lack of footage (D4 step 3).
+    # Clips are concatenated with no holes, so after a drop the whole rest of
+    # the output plays that much earlier against the music; later targets and
+    # beat_position labels must subtract it or they'd chase (and report
+    # against) grid positions the output can no longer reach.
+    dropped_span = 0.0
     # Bookkeeping for D4's "extend the previous clip" fallback: the source
-    # chunk and absolute output-time anchor of the most recently committed
-    # clip (None until the first clip is actually added).
+    # chunk, actual output-time start, and intended grid label of the most
+    # recently committed clip (None until the first clip is actually added).
     last_clip: Optional[VideoChunk] = None
     last_anchor = 0.0
+    last_intended = 0.0
 
     def _segment_target(anchor: float, multiplier: int) -> Tuple[float, int]:
         """Target duration for a slot starting at ``anchor`` (an absolute
@@ -116,7 +123,7 @@ def match_clips_to_beats(
         """
         end_index = current_beat_index + multiplier
         if end_index < len(effective_beats):
-            return effective_beats[end_index] - anchor, end_index
+            return effective_beats[end_index] - dropped_span - anchor, end_index
         return multiplier * avg_beat_interval, end_index
 
     def _find_best_clip(pool, target_duration: float, ignore_fit_penalty=False):
@@ -156,7 +163,7 @@ def match_clips_to_beats(
             video_file=last_clip.video_path,
             start=start,
             end=end,
-            beat_position=last_anchor,
+            beat_position=last_intended,
             score=last_clip.score,
         )
 
@@ -164,16 +171,25 @@ def match_clips_to_beats(
         if current_beat_index >= len(effective_beats):
             break
 
-        # D1: anchor the very first slot to absolute output-time 0 (the video
-        # absorbs the intro) instead of effective_beats[downbeat_offset] --
-        # every later segment anchors to wherever the beat grid actually is.
-        # This is a one-time attempt tied to loop position, not "nothing
-        # committed yet": retrying it on every slot until one finally commits
-        # would make the target grow without bound if the first slot(s) get
-        # dropped for lack of long-enough footage (each retry still measures
-        # from 0, but current_beat_index has moved further on).
+        # D1: the very first slot spans from absolute output-time 0 (the video
+        # absorbs the intro); the widened-pool retry below is a one-time
+        # attempt tied to loop position, not "nothing committed yet" --
+        # retrying it on every slot until one finally commits would make the
+        # target grow without bound if the first slot(s) get dropped for lack
+        # of long-enough footage.
+        #
+        # Every slot's target is measured from the *actual* end of the
+        # assembled timeline (which is where its cut really lands in the
+        # output), not from the theoretical grid position: if an earlier clip
+        # came up short despite the fit checks (e.g. the D4 extend fallback
+        # clamps to the source chunk's end), measuring from the grid would
+        # carry that shortfall into every later cut, while measuring from the
+        # timeline end lets the very next clip absorb it and re-sync.
         is_first_slot = slot_index == 0
-        anchor = 0.0 if is_first_slot else effective_beats[current_beat_index]
+        anchor = timeline.get_total_duration()
+        intended_position = (
+            0.0 if is_first_slot else effective_beats[current_beat_index] - dropped_span
+        )
         target_duration, next_index = _segment_target(anchor, multiplier)
 
         best_clip = _find_best_clip(selected_clips, target_duration)
@@ -205,10 +221,13 @@ def match_clips_to_beats(
             )
 
         if best_clip is None:
-            # D4, step 3: nothing long enough exists -- drop the slot. The
-            # next successful slot re-anchors from wherever
-            # current_beat_index actually ends up, so this doesn't
-            # permanently shift the grid.
+            # D4, step 3: nothing long enough exists -- drop the slot and
+            # record the output-time span it was going to fill (its target,
+            # which for the first slot includes the intro), so later targets
+            # aim for the beats as the output will actually hear them
+            # (shifted earlier by the drop) rather than chasing unreachable
+            # absolute grid positions.
+            dropped_span += target_duration
             current_beat_index = next_index
             continue
 
@@ -225,16 +244,18 @@ def match_clips_to_beats(
             video_file=best_clip.video_path,
             start=clip_start,
             end=clip_end,
-            beat_position=anchor,
+            beat_position=intended_position,
             score=best_clip.score,
         )
-        last_clip, last_anchor = best_clip, anchor
+        last_clip, last_anchor, last_intended = best_clip, anchor, intended_position
 
         # Move to next beat position
         current_beat_index = next_index
 
     report = timeline.get_alignment_report()
-    logger.info(
+    # >50ms is at the edge of audibility for an off-beat cut -- surface it.
+    log = logger.warning if report["max_abs_delta"] > 0.05 else logger.info
+    log(
         f"Beat alignment: max |delta|={report['max_abs_delta']:.3f}s, "
         f"mean |delta|={report['mean_abs_delta']:.3f}s over {len(timeline.clips)} clips"
     )
@@ -265,24 +286,28 @@ def _calculate_duration_fit(
     # beat-to-beat gap for a real pattern multiplier (D3) and so are musically
     # appropriate by construction.
 
-    # Perfect match
-    if abs(clip_duration - target_duration) < 0.1:
+    # Clip is shorter than target: unusable. A clip that comes up short can't
+    # be trimmed to fit -- accepting it leaves that shortfall as permanent
+    # drift in every later cut (D2). This must be checked before any
+    # "close enough" tolerance: scene detection samples on whole seconds, so
+    # chunk durations are integers, and at e.g. 117 BPM a 4-beat target is
+    # 2.04s -- a 2.00s chunk is 40ms short *every time*, which used to pass
+    # the old symmetric <0.1 "perfect match" branch and accumulate into
+    # audible off-beat cuts.
+    if clip_duration < target_duration:
+        return -1
+
+    # Essentially exact -- nothing (or almost nothing) to trim away.
+    excess = clip_duration - target_duration
+    if excess < 0.1:
         return 1.0
 
     # Clip is longer than target - can be trimmed exactly (D2: trimming to
     # the exact target never loses precision, so only the trim's *size* -- not
     # whether it happens -- affects the score).
-    if clip_duration > target_duration:
-        # Prefer clips that are close to target but slightly longer
-        excess = clip_duration - target_duration
-        if excess <= 2.0:  # Can trim up to 2 seconds
-            return 1.0 - (excess / 4.0)  # Gentle penalty for trimming
-        return 0.3  # Heavy penalty for lots of trimming
-
-    # Clip is shorter than target: unusable. A clip that comes up short can't
-    # be trimmed to fit -- accepting it (as the old code did up to 0.5s
-    # short) leaves that shortfall as permanent drift in every later cut (D2).
-    return -1
+    if excess <= 2.0:  # Can trim up to 2 seconds
+        return 1.0 - (excess / 4.0)  # Gentle penalty for trimming
+    return 0.3  # Heavy penalty for lots of trimming
 
 
 def _fit_clip_to_duration(
