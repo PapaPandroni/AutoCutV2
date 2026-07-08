@@ -130,7 +130,9 @@ def detect_scenes(
     prev_frame = None
     scene_changes = [0.0]  # Always start with beginning
 
-    def _safe_get_frame_diff(timestamp: float) -> Tuple[Optional[np.ndarray], Optional[float]]:
+    def _safe_get_frame_diff(
+        timestamp: float,
+    ) -> Tuple[Optional[np.ndarray], Optional[float]]:
         """Safely get frame and calculate difference, returning (frame, diff)."""
         try:
             frame = video.get_frame(timestamp)

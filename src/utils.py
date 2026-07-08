@@ -239,19 +239,6 @@ def safe_filename(filename: str) -> str:
 
     return safe_name
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     # Note: File size logging removed - not implemented in current version
 
 
@@ -263,44 +250,18 @@ _TRANSCODING_CACHE: Dict[str, Dict[str, Any]] = {}
 _TRANSCODING_CACHE_TIMEOUT: int = 3600  # 1 hour
 
 
-
-
-
-
-
-
-
-
-
-
 # Legacy function for backward compatibility
 
 
-
-
 # Enhanced hardware detection cache for performance
-_HARDWARE_DETECTION_CACHE: Optional[Tuple[Dict[str, Any], List[str], Dict[str, Any]]] = None
+_HARDWARE_DETECTION_CACHE: Optional[
+    Tuple[Dict[str, Any], List[str], Dict[str, Any]]
+] = None
 _CACHE_TIMESTAMP: Optional[float] = None
 _CACHE_TIMEOUT: int = 300  # 5 minutes
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Legacy validation function for backward compatibility
-
-
 
 
 def filter_valid_video_files(file_list: List[str]) -> List[str]:
@@ -366,10 +327,14 @@ def filter_valid_video_files(file_list: List[str]) -> List[str]:
     # Log filtering results if any files were filtered
     if filtered_count > 0:
         import logging
+
         logger = logging.getLogger(__name__)
-        logger.debug(f"Filtered out {filtered_count} invalid/system files from video collection")
+        logger.debug(
+            f"Filtered out {filtered_count} invalid/system files from video collection"
+        )
 
     return valid_files
+
 
 def find_all_video_files(directory: str) -> List[str]:
     """

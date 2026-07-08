@@ -103,9 +103,6 @@ except ImportError:
     from .rendering import add_transitions, render_video, uniformize_dimensions
 
 
-
-
-
 def assemble_clips(
     video_files: List[str],
     audio_file: str,
@@ -517,7 +514,9 @@ def assemble_clips(
         logger.info(
             f"      - Square: {canvas_format['aspect_ratio_analysis']['square_count']} clips ({(canvas_format['aspect_ratio_analysis']['square_count'] / len(all_video_chunks)) * 100:.1f}%)"
         )
-        logger.info(f"   💡 Strategy: {canvas_format.get('description', canvas_format.get('aspect_ratio_analysis', {}).get('decision_rationale', 'Canvas analysis'))}")
+        logger.info(
+            f"   💡 Strategy: {canvas_format.get('description', canvas_format.get('aspect_ratio_analysis', {}).get('decision_rationale', 'Canvas analysis'))}"
+        )
 
         # Log letterboxing expectations
         if canvas_format.get("letterboxing_analysis"):
@@ -704,11 +703,13 @@ def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
         return moviepy_params, ffmpeg_params
 
 
-def detect_optimal_codec_settings_with_diagnostics() -> Tuple[
-    Dict[str, Any],
-    List[str],
-    Dict[str, str],
-]:
+def detect_optimal_codec_settings_with_diagnostics() -> (
+    Tuple[
+        Dict[str, Any],
+        List[str],
+        Dict[str, str],
+    ]
+):
     """Enhanced codec settings detection with full diagnostic information.
 
     Returns:

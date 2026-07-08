@@ -24,6 +24,8 @@ VARIETY_PATTERNS = {
     "balanced": [4, 4, 4, 8, 4, 4],  # Consistent 4-beat pacing with variety
     "dramatic": [4, 4, 4, 4, 16],  # Build tension with 4-beat base, long dramatic hold
 }
+
+
 def match_clips_to_beats(
     video_chunks: List[VideoChunk],
     beats: List[float],
@@ -150,6 +152,8 @@ def match_clips_to_beats(
         current_beat_index += beat_multipliers[i]
 
     return timeline
+
+
 def _calculate_duration_fit(
     clip_duration: float,
     target_duration: float,
@@ -195,6 +199,8 @@ def _calculate_duration_fit(
     if shortage <= 0.5:  # Small shortage is acceptable
         return 0.8 - (shortage / 1.0)
     return -1  # Too short, can't use
+
+
 def _fit_clip_to_duration(
     clip: VideoChunk,
     target_duration: float,
@@ -220,6 +226,8 @@ def _fit_clip_to_duration(
     actual_duration = new_end_time - clip.start_time
 
     return clip.start_time, new_end_time, actual_duration
+
+
 def select_best_clips(
     video_chunks: List[VideoChunk],
     target_count: int,
@@ -325,6 +333,8 @@ def select_best_clips(
                     selected_clips.append(clip)
 
     return selected_clips[:target_count]
+
+
 def _clips_overlap(
     clip: VideoChunk,
     existing_clips: List[VideoChunk],
@@ -342,11 +352,15 @@ def _clips_overlap(
     """
     for existing in existing_clips:
         # Check for overlap or too close proximity from same video
-        if (existing.video_path == clip.video_path
+        if (
+            existing.video_path == clip.video_path
             and clip.start_time < existing.end_time + min_gap
-            and clip.end_time > existing.start_time - min_gap):
+            and clip.end_time > existing.start_time - min_gap
+        ):
             return True
     return False
+
+
 def apply_variety_pattern(pattern_name: str, beat_count: int) -> List[int]:
     """Apply variety pattern to determine clip lengths.
 

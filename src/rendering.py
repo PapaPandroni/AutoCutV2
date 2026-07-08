@@ -75,7 +75,9 @@ def uniformize_dimensions(clips, target_width, target_height):
             try:
                 from moviepy import ColorClip
             except ImportError:
-                logger.exception("❌ Cannot import ColorClip - letterboxing not available")
+                logger.exception(
+                    "❌ Cannot import ColorClip - letterboxing not available"
+                )
                 # Return clips unchanged if we can't do letterboxing
                 return clips
 
@@ -133,7 +135,7 @@ def uniformize_dimensions(clips, target_width, target_height):
             resized_clip = resize_clip_safely(
                 clip,
                 newsize=(scaled_width, scaled_height),
-                scaling_mode="fit"  # Preserve aspect ratio, no cropping
+                scaling_mode="fit",  # Preserve aspect ratio, no cropping
             )
 
             # CRITICAL: Check if resize_clip_safely returned None or failed
@@ -164,7 +166,7 @@ def uniformize_dimensions(clips, target_width, target_height):
             background = ColorClip(
                 size=(target_width, target_height),
                 color=(0, 0, 0),  # Black background
-                duration=resized_clip.duration
+                duration=resized_clip.duration,
             )
 
             # FIXED: Use with_position instead of set_position for MoviePy v2.0 compatibility
@@ -172,17 +174,22 @@ def uniformize_dimensions(clips, target_width, target_height):
 
             # Composite to create exact target dimensions
             uniform_clip = CompositeVideoClip(
-                [background, positioned_clip],
-                size=(target_width, target_height)
+                [background, positioned_clip], size=(target_width, target_height)
             )
 
             uniform_clips.append(uniform_clip)
 
             # Enhanced diagnostic logging
-            letterbox_type = "top/bottom" if original_aspect > target_aspect else "left/right"
-            logger.info(f"🔧 Clip {i+1}: {original_width}x{original_height} → {target_width}x{target_height}")
+            letterbox_type = (
+                "top/bottom" if original_aspect > target_aspect else "left/right"
+            )
+            logger.info(
+                f"🔧 Clip {i+1}: {original_width}x{original_height} → {target_width}x{target_height}"
+            )
             logger.info(f"   📏 Scale factor: {scale_factor:.3f}")
-            logger.info(f"   📐 Content size: {scaled_width}x{scaled_height} (centered)")
+            logger.info(
+                f"   📐 Content size: {scaled_width}x{scaled_height} (centered)"
+            )
             logger.info(f"   ⬛ Letterbox: {letterbox_type} bars")
             logger.info(f"   📍 Position: ({x_offset}, {y_offset})")
 
@@ -210,6 +217,8 @@ def uniformize_dimensions(clips, target_width, target_height):
             f"✅ Uniformization complete: all clips are {target_width}x{target_height}"
         )
     return uniform_clips
+
+
 def render_video(
     timeline: ClipTimeline,
     audio_file: str,
@@ -429,10 +438,12 @@ def render_video(
             video_clips = uniformize_dimensions(
                 video_clips,
                 canvas_format["target_width"],
-                canvas_format["target_height"]
+                canvas_format["target_height"],
             )
         else:
-            logger.warning("⚠️ No canvas format provided - skipping dimension uniformization")
+            logger.warning(
+                "⚠️ No canvas format provided - skipping dimension uniformization"
+            )
 
         if progress_callback:
             progress_callback("Concatenating video clips", 0.5)
@@ -447,7 +458,9 @@ def render_video(
         try:
             audio_clip = load_audio_robust(audio_file)
         except Exception as audio_error:
-            raise RuntimeError(f"Failed to load audio file {audio_file}: {audio_error}") from audio_error
+            raise RuntimeError(
+                f"Failed to load audio file {audio_file}: {audio_error}"
+            ) from audio_error
 
         # Trim audio to match video duration or vice versa
         video_duration = final_video.duration
@@ -535,7 +548,9 @@ def render_video(
                             f"Cannot attach audio to {type(final_video)} - no compatible method found"
                         ) from attr_error
         except Exception as audio_attach_error:
-            raise RuntimeError(f"Failed to attach audio to video: {audio_attach_error}") from audio_attach_error
+            raise RuntimeError(
+                f"Failed to attach audio to video: {audio_attach_error}"
+            ) from audio_attach_error
 
         if progress_callback:
             progress_callback("Encoding video", 0.7)
@@ -627,6 +642,8 @@ def render_video(
                 final_video.close()
         except Exception:
             pass
+
+
 def add_transitions(
     clips: List[VideoFileClip],
     transition_duration: float = 0.5,

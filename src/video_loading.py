@@ -69,6 +69,7 @@ class VideoResourceManager:
 
         # Check if file exists first
         from pathlib import Path
+
         if not Path(video_path).exists():
             raise FileNotFoundError(f"Video file does not exist: {video_path}")
 
@@ -86,7 +87,9 @@ class VideoResourceManager:
             # Load the video and store it for delayed cleanup
             video = VideoFileClip(video_path)
             logger.info(f"✅ VideoFileClip created successfully: {type(video)}")
-            logger.info(f"   Duration: {video.duration:.2f}s, FPS: {video.fps}, Size: {video.size}")
+            logger.info(
+                f"   Duration: {video.duration:.2f}s, FPS: {video.fps}, Size: {video.size}"
+            )
 
             self.delayed_cleanup_videos[video_path] = video
             self.active_videos.add(id(video))
@@ -97,6 +100,7 @@ class VideoResourceManager:
         except Exception as e:
             logger.exception(f"❌ Failed to load video {video_path}: {e}")
             import traceback
+
             traceback.print_exc()
             raise RuntimeError(f"Failed to load video {video_path}: {e!s}") from e
 
@@ -161,6 +165,7 @@ class VideoResourceManager:
                             temp_path.unlink()
                         elif temp_path.is_dir():
                             import shutil
+
                             shutil.rmtree(temp_path, ignore_errors=True)
                     self._temp_files.discard(temp_file_path)
                 except Exception:
@@ -168,6 +173,8 @@ class VideoResourceManager:
 
         gc.collect()
         self.active_videos.clear()
+
+
 def _group_clips_by_file(
     sorted_clips: List[Dict[str, Any]],
 ) -> Dict[str, List[Dict[str, Any]]]:
@@ -204,6 +211,8 @@ def _group_clips_by_file(
         ordered_groups[video_file] = file_groups[video_file]
 
     return ordered_groups
+
+
 class VideoPreprocessor:
     """Smart video preprocessing for format compatibility and memory optimization."""
 
@@ -386,7 +395,10 @@ class VideoPreprocessor:
         processed_path = Path(output_dir) / processed_name
 
         # If processed version already exists and is newer, use it
-        if processed_path.exists() and processed_path.stat().st_mtime > Path(video_path).stat().st_mtime:
+        if (
+            processed_path.exists()
+            and processed_path.stat().st_mtime > Path(video_path).stat().st_mtime
+        ):
             self.preprocessing_cache[cache_key] = str(processed_path)
             return str(processed_path)
 
@@ -515,7 +527,9 @@ class VideoPreprocessor:
 
         for cached_path in list(self.preprocessing_cache.values()):
             if Path(cached_path).exists():
-                file_age_hours = (current_time - Path(cached_path).stat().st_mtime) / 3600
+                file_age_hours = (
+                    current_time - Path(cached_path).stat().st_mtime
+                ) / 3600
                 if file_age_hours > max_age_hours:
                     try:
                         Path(cached_path).unlink()
@@ -530,6 +544,8 @@ class VideoPreprocessor:
 
         if cleaned_count > 0:
             pass
+
+
 def preprocess_videos_smart(
     video_files: List[str],
     canvas_format: Optional[dict] = None,  # NEW: Intelligent canvas format
@@ -590,6 +606,8 @@ def preprocess_videos_smart(
         progress_callback("Smart preprocessing complete", 1.0)
 
     return video_map
+
+
 class AdvancedMemoryManager:
     """Advanced memory management for video processing with adaptive strategies."""
 
@@ -712,6 +730,8 @@ class AdvancedMemoryManager:
             pass
         if self.memory_warnings > 0:
             pass
+
+
 class RobustVideoLoader:
     """Robust video loading with multiple fallback strategies and detailed error reporting.
 
@@ -766,7 +786,13 @@ class RobustVideoLoader:
             ("emergency_mode", self._load_emergency_minimal),
         ]
 
-        def _try_loading_strategy(strategy_name: str, strategy_func, clip_data, resource_manager, canvas_format):
+        def _try_loading_strategy(
+            strategy_name: str,
+            strategy_func,
+            clip_data,
+            resource_manager,
+            canvas_format,
+        ):
             """Try a single loading strategy and return result or None."""
             logger = logging.getLogger("autocut.clip_assembler")
             video_file = clip_data.get("video_file", "UNKNOWN")
@@ -802,7 +828,9 @@ class RobustVideoLoader:
                 return None, e
 
         for strategy_name, strategy_func in strategies:
-            result, error = _try_loading_strategy(strategy_name, strategy_func, clip_data, resource_manager, canvas_format)
+            result, error = _try_loading_strategy(
+                strategy_name, strategy_func, clip_data, resource_manager, canvas_format
+            )
             if result is not None:
                 return result
             if error is not None:
@@ -832,7 +860,9 @@ class RobustVideoLoader:
         self,
         clip_data: Dict[str, Any],
         resource_manager: VideoResourceManager,
-        canvas_format: Optional[dict] = None,  # Kept for backward compatibility, no longer used
+        canvas_format: Optional[
+            dict
+        ] = None,  # Kept for backward compatibility, no longer used
     ) -> Optional[Any]:
         """Direct loading with MoviePy.
 
@@ -1214,6 +1244,8 @@ class RobustVideoLoader:
         if report["error_types"]:
             for count in report["error_types"].values():
                 pass
+
+
 def load_video_clips_with_robust_error_handling(
     sorted_clips: List[Dict[str, Any]],
     video_files: List[str],
@@ -1311,7 +1343,9 @@ def load_video_clips_with_robust_error_handling(
             video_file = clip_data.get("video_file", "UNKNOWN")
             start_time = clip_data.get("start", 0)
             end_time = clip_data.get("end", 0)
-            logger.info(f"🎬 Attempting to load clip {i+1}: {video_file} ({start_time:.2f}-{end_time:.2f}s)")
+            logger.info(
+                f"🎬 Attempting to load clip {i+1}: {video_file} ({start_time:.2f}-{end_time:.2f}s)"
+            )
 
             try:
                 # Use robust loader with multiple fallback strategies and delayed cleanup
@@ -1332,7 +1366,9 @@ def load_video_clips_with_robust_error_handling(
                     clip_results[original_index] = segment
                     file_clips_loaded += 1
                 else:
-                    logger.error(f"❌ Clip {i+1} returned None - all fallback strategies failed")
+                    logger.error(
+                        f"❌ Clip {i+1} returned None - all fallback strategies failed"
+                    )
                     clip_results[original_index] = None
                     failed_indices.append(original_index)
 
