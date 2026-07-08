@@ -10,6 +10,7 @@ Extracted from clip_assembler.py as part of system consolidation.
 """
 
 import logging
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -128,9 +129,7 @@ class VideoEncoder:
                 current_bitrate = moviepy_params["bitrate"]
                 if current_bitrate.endswith("k"):
                     bitrate_val = int(current_bitrate[:-1])
-                    reduced_bitrate = max(
-                        2000, int(bitrate_val * 0.6)
-                    )  # Minimum 2Mbps
+                    reduced_bitrate = max(2000, int(bitrate_val * 0.6))  # Minimum 2Mbps
                     moviepy_params["bitrate"] = f"{reduced_bitrate}k"
 
         except Exception as e:
@@ -204,7 +203,9 @@ class VideoEncoder:
         return {
             **moviepy_params,
             "ffmpeg_params": enhanced_ffmpeg_params,
-            "temp_audiofile": "temp-audio.m4a",
+            # Unique per render: a fixed shared name lets concurrent renders
+            # in the same directory clobber each other's temp audio track.
+            "temp_audiofile": f"temp-audio-{uuid.uuid4().hex[:8]}.m4a",
             "remove_temp": True,
             "fps": target_format["target_fps"],
             "audio_fps": 44100,
@@ -238,7 +239,10 @@ class VideoEncoder:
         except ImportError:
             # Fallback if compatibility module not available
             def write_videofile_safely(
-                video_clip: Any, output_path: str, _compatibility_info: Dict[str, Any], **kwargs: Any
+                video_clip: Any,
+                output_path: str,
+                _compatibility_info: Dict[str, Any],
+                **kwargs: Any,
             ) -> Any:
                 return video_clip.write_videofile(output_path, **kwargs)
 
@@ -293,11 +297,13 @@ def detect_optimal_codec_settings() -> Tuple[Dict[str, Any], List[str]]:
     return encoder.detect_optimal_codec_settings()
 
 
-def detect_optimal_codec_settings_with_diagnostics() -> Tuple[
-    Dict[str, Any],
-    List[str],
-    Dict[str, str],
-]:
+def detect_optimal_codec_settings_with_diagnostics() -> (
+    Tuple[
+        Dict[str, Any],
+        List[str],
+        Dict[str, str],
+    ]
+):
     """Legacy function for backward compatibility."""
     encoder = VideoEncoder()
     return encoder.detect_optimal_codec_settings_with_diagnostics()

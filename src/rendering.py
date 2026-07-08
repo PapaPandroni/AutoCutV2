@@ -9,6 +9,7 @@ fade, and encodes the result with hardware-accelerated settings when available.
 import builtins
 import contextlib
 import logging
+import uuid
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -551,11 +552,22 @@ def render_video(
             }
             ffmpeg_params = ["-preset", "medium", "-crf", "23"]
 
-        # Prepare encoding parameters
+        # Prepare encoding parameters. The temp audio file must be unique per
+        # render: MoviePy writes the whole audio track there first, then muxes
+        # it while encoding and finally deletes it -- with a fixed shared name,
+        # concurrent renders in the same directory overwrite/delete each
+        # other's temp audio, producing outputs with missing/truncated sound.
+        # Placed next to the output file so it's on the same volume and easy
+        # to spot if a crashed render leaves it behind.
+        temp_audiofile = str(
+            Path(output_path).with_name(
+                f"{Path(output_path).stem}-temp-audio-{uuid.uuid4().hex[:8]}.m4a",
+            ),
+        )
         encoding_params = {
             **moviepy_params,
             "ffmpeg_params": ffmpeg_params,
-            "temp_audiofile": "temp-audio.m4a",
+            "temp_audiofile": temp_audiofile,
             "remove_temp": True,
             # No "verbose" here: MoviePy 2.x removed the kwarg. The primary
             # path (write_videofile_safely) strips it anyway, but the
