@@ -24,6 +24,11 @@ except ImportError:
         VideoProcessingError,
     )
 
+try:
+    from ffmpeg_paths import get_ffprobe_exe
+except ImportError:
+    from ..ffmpeg_paths import get_ffprobe_exe
+
 
 class ValidationType(Enum):
     """Types of validation that can be performed."""
@@ -501,7 +506,7 @@ class VideoValidator:
 
         # Run comprehensive FFprobe command
         cmd = [
-            "ffprobe",
+            get_ffprobe_exe(),
             "-v",
             "quiet",
             "-select_streams",

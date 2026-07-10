@@ -27,6 +27,11 @@ except ImportError:
         raise_transcoding_error,
     )
 
+try:
+    from ffmpeg_paths import get_ffmpeg_exe
+except ImportError:
+    from ..ffmpeg_paths import get_ffmpeg_exe
+
 # Import CodecDetector with dual import pattern
 try:
     # Try absolute import first for autocut.py execution context
@@ -531,7 +536,7 @@ class TranscodingService:
         if codec == "h264_nvenc":
             # NVIDIA GPU encoding
             cmd = [
-                "ffmpeg",
+                get_ffmpeg_exe(),
                 "-y",
                 "-hwaccel",
                 "cuda",
@@ -559,7 +564,7 @@ class TranscodingService:
         elif codec == "h264_qsv":
             # Intel QuickSync encoding
             cmd = [
-                "ffmpeg",
+                get_ffmpeg_exe(),
                 "-y",
                 "-hwaccel",
                 "qsv",
@@ -591,7 +596,7 @@ class TranscodingService:
             crf = settings.get("crf", "25")
 
             cmd = [
-                "ffmpeg",
+                get_ffmpeg_exe(),
                 "-y",
                 "-i",
                 input_path,

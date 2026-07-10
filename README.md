@@ -98,6 +98,47 @@ beat-sync accuracy work.
    make setup
    ```
 
+### 🖥️ GUI
+
+```bash
+python autocut_gui.py     # or: python autocut.py gui / make gui
+```
+
+Opens a window for picking videos, music, and output location — no
+command-line knowledge needed.
+
+### 📦 Share as a macOS app
+
+Build a self-contained `AutoCut.app` that runs without Python, Homebrew, or
+FFmpeg installed (for non-technical recipients):
+
+```bash
+make app                  # or: bash scripts/build_app.sh
+```
+
+This fetches static FFmpeg binaries into `vendor/ffmpeg/` (once), runs
+PyInstaller with `autocut.spec`, and produces `dist/AutoCut-mac.zip` — send
+that file.
+
+**Instructions for recipients:**
+
+1. Unzip and drag **AutoCut** to Applications.
+2. First launch: **right-click → Open → Open** (the app is not notarized by
+   Apple, so double-clicking shows a warning instead).
+3. On Apple Silicon (M1/M2/M3...) Macs, macOS may offer to install
+   **Rosetta 2** on first launch — click Install (the app is built for Intel
+   and runs through Rosetta).
+4. The first click on **Generate Video** pauses a few seconds at
+   "Loading processing engine..." — that's normal, once per launch.
+
+**Troubleshooting:** the app writes a log to
+`~/Library/Logs/AutoCut/autocut.log` — if something fails, send that file
+along with the error message. Builds can be verified headlessly with:
+
+```bash
+dist/AutoCut.app/Contents/MacOS/AutoCut --selftest video.mp4 --audio music.wav --output out.mp4
+```
+
 ### 🎯 AutoCut CLI Interface
 
 **Main Commands:**

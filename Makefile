@@ -96,6 +96,14 @@ demo-quick: ## Run quick AutoCut demo with new CLI
 	@echo "$(YELLOW)Running quick AutoCut demo with new CLI...$(NC)"
 	$(VENV_ACTIVATE) && $(PYTHON) autocut.py demo --quick --pattern balanced
 
+gui: ## Launch the AutoCut GUI
+	@echo "$(YELLOW)Launching AutoCut GUI...$(NC)"
+	$(VENV_ACTIVATE) && $(PYTHON) autocut_gui.py
+
+app: ## Build the shareable macOS app (dist/AutoCut.app + zip)
+	@echo "$(YELLOW)Building AutoCut.app...$(NC)"
+	bash scripts/build_app.sh
+
 
 
 validate-video: ## Validate video compatibility using new CLI

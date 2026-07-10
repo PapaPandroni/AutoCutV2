@@ -8,10 +8,11 @@ This module serves as the primary interface for all AutoCut operations.
 import time
 from dataclasses import dataclass
 from pathlib import Path, Path as PathType
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 # Import core AutoCut modules (src is in path, so no relative imports needed)
 from clip_assembler import assemble_clips
+from ffmpeg_paths import get_ffmpeg_exe
 from hardware.detection import HardwareDetector
 from utils import (
     SUPPORTED_VIDEO_FORMATS,
@@ -75,6 +76,7 @@ class AutoCutAPI:
         pattern: str = "balanced",
         memory_safe: bool = False,
         verbose: bool = False,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
     ) -> str:
         """
         Main video processing function
@@ -86,6 +88,8 @@ class AutoCutAPI:
             pattern: Editing pattern ('energetic', 'balanced', 'dramatic', 'buildup')
             memory_safe: Enable memory-safe processing (single worker)
             verbose: Enable verbose logging
+            progress_callback: Optional callback receiving (step, progress 0-1);
+                takes precedence over the verbose terminal progress bar
 
         Returns:
             Path to created video file
@@ -110,9 +114,8 @@ class AutoCutAPI:
         if output_dir != Path():
             output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Set up progress callback for verbose mode
-        progress_callback = None
-        if verbose:
+        # Set up progress callback for verbose mode (external callback wins)
+        if progress_callback is None and verbose:
 
             def progress_callback(step: str, progress: float) -> None:
                 bar_length = 30
@@ -213,7 +216,7 @@ class AutoCutAPI:
             import subprocess
 
             result = subprocess.run(
-                ["ffmpeg", "-version"],
+                [get_ffmpeg_exe(), "-version"],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -254,7 +257,7 @@ class AutoCutAPI:
         ffmpeg_version = "Not available"
         try:
             result = subprocess.run(
-                ["ffmpeg", "-version"],
+                [get_ffmpeg_exe(), "-version"],
                 check=False,
                 capture_output=True,
                 text=True,

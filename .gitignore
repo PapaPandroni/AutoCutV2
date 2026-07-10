@@ -209,6 +209,10 @@ __marimo__/
 # Serena MCP server
 .serena/
 
+# AutoCut specific - packaging
+!autocut.spec
+vendor/
+
 # AutoCut specific - Media files and outputs
 output/
 temp/

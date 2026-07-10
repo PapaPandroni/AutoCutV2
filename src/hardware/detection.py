@@ -17,6 +17,11 @@ from typing import Any, Dict, List, Optional, Tuple
 # Import our custom exceptions with dual import pattern
 # Note: HardwareAccelerationError import removed - not used in current implementation
 
+try:
+    from ffmpeg_paths import get_ffmpeg_exe, get_ffprobe_exe
+except ImportError:
+    from ..ffmpeg_paths import get_ffmpeg_exe, get_ffprobe_exe
+
 
 class HardwareDetector:
     """
@@ -246,7 +251,7 @@ class HardwareDetector:
         """Check if FFmpeg is available and get version information."""
         try:
             result = subprocess.run(
-                ["ffmpeg", "-version"],
+                [get_ffmpeg_exe(), "-version"],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -269,7 +274,7 @@ class HardwareDetector:
         """List available FFmpeg encoders."""
         try:
             result = subprocess.run(
-                ["ffmpeg", "-encoders"],
+                [get_ffmpeg_exe(), "-encoders"],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -327,7 +332,7 @@ class HardwareDetector:
 
             # Combined test: Basic functionality + iPhone parameters
             combined_cmd = [
-                "ffmpeg",
+                get_ffmpeg_exe(),
                 "-y",
                 "-f",
                 "lavfi",
@@ -446,7 +451,7 @@ class HardwareDetector:
 
         try:
             cmd = [
-                "ffprobe",
+                get_ffprobe_exe(),
                 "-v",
                 "quiet",
                 "-select_streams",

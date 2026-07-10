@@ -31,6 +31,11 @@ except ImportError:
     # Fallback for type checking when moviepy not available
     AudioArrayClip = Any
 
+try:
+    from ffmpeg_paths import get_ffmpeg_exe, get_ffprobe_exe
+except ImportError:
+    from .ffmpeg_paths import get_ffmpeg_exe, get_ffprobe_exe
+
 # Setup logging
 logger = logging.getLogger(__name__)
 
@@ -75,7 +80,7 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
     # -ar 44100: Standard sample rate
     # -: Output to stdout for capture
     base_cmd = [
-        "ffmpeg",
+        get_ffmpeg_exe(),
         "-i",
         audio_file,  # Input file
         "-f",
@@ -95,7 +100,7 @@ def load_audio_with_ffmpeg_subprocess(audio_file: str) -> "AudioArrayClip":
     if is_wav_file:
         # Add WAV-optimized parameters to prevent common WAV processing issues
         wav_cmd = [
-            "ffmpeg",
+            get_ffmpeg_exe(),
             "-i",
             audio_file,
             "-f",
@@ -222,7 +227,7 @@ def _fallback_wav_processing(audio_file: str) -> "AudioArrayClip":
 
         # Ultra-simple FFmpeg command that avoids complex parameter parsing
         simple_cmd = [
-            "ffmpeg",
+            get_ffmpeg_exe(),
             "-y",  # Overwrite output
             "-i",
             audio_file,
@@ -408,7 +413,7 @@ def get_audio_info(audio_file: str) -> dict:
     # Try to get additional info with FFmpeg
     try:
         cmd = [
-            "ffprobe",
+            get_ffprobe_exe(),
             "-v",
             "quiet",
             "-print_format",

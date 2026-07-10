@@ -256,6 +256,19 @@ def benchmark(detailed):
 
 
 @cli.command()
+def gui():
+    """
+    Launch the AutoCut graphical interface
+
+    Opens a window for selecting videos, music, and output location -
+    no command-line knowledge required.
+    """
+    from gui import main as gui_main
+
+    gui_main()
+
+
+@cli.command()
 @click.option("--quick", "-q", is_flag=True, help="Quick demo with limited files")
 @click.option(
     "--pattern",

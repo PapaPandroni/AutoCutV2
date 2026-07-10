@@ -139,14 +139,6 @@ class AutoCutGUI:
         )
         tempo_combo.grid(row=0, column=1, sticky=tk.W, padx=(10, 0))
 
-        # Face priority
-        self.face_priority_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            settings_frame,
-            text="Prioritize faces in videos",
-            variable=self.face_priority_var,
-        ).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(10, 0))
-
         # Generate button and progress
         generate_frame = ttk.Frame(main_frame)
         generate_frame.grid(row=11, column=0, columnspan=2, pady=(20, 0))
@@ -255,43 +247,56 @@ class AutoCutGUI:
         return True
 
     def update_progress(self, value: float, status: str = ""):
-        """Update progress bar and status."""
-        self.progress_var.set(value)
-        if status:
-            self.status_var.set(status)
-        self.root.update_idletasks()
+        """Update progress bar and status (safe to call from any thread)."""
+
+        def apply():
+            self.progress_var.set(value)
+            if status:
+                self.status_var.set(status)
+
+        self.root.after(0, apply)
 
     def generate_video_thread(self):
         """Process video generation in separate thread."""
         try:
-            self.update_progress(10, "Analyzing videos...")
+            self.update_progress(2, "Loading processing engine...")
 
-            # TODO: Call actual processing functions
-            # from .clip_assembler import assemble_clips
-            # result = assemble_clips(
-            #     self.video_files,
-            #     self.music_file,
-            #     self.output_path,
-            #     self.tempo_var.get(),
-            #     self.update_progress
-            # )
+            # Imported lazily so the window appears instantly; the heavy
+            # pipeline imports (moviepy, librosa) only load on first use.
+            from api import AutoCutAPI
 
-            # Placeholder processing simulation
-            import time
+            def on_progress(step: str, progress: float):
+                self.update_progress(progress * 100, step)
 
-            for i in range(10, 101, 10):
-                time.sleep(0.5)  # Simulate processing
-                self.update_progress(i, f"Processing... {i}%")
+            self.update_progress(5, "Starting analysis...")
+            result_path = AutoCutAPI().process_videos(
+                video_files=list(self.video_files),
+                audio_file=self.music_file,
+                output_path=self.output_path,
+                pattern=self.tempo_var.get(),
+                progress_callback=on_progress,
+            )
 
             self.update_progress(100, "Complete!")
-            messagebox.showinfo("Success", f"Video saved to: {self.output_path}")
+            self.root.after(
+                0,
+                lambda: messagebox.showinfo(
+                    "Success", f"Video saved to: {result_path}"
+                ),
+            )
 
         except Exception as e:
-            messagebox.showerror("Error", f"Processing failed: {e!s}")
+            error_message = str(e)
             self.update_progress(0, "Error occurred")
+            self.root.after(
+                0,
+                lambda: messagebox.showerror(
+                    "Error", f"Processing failed: {error_message}"
+                ),
+            )
         finally:
             self.is_processing = False
-            self.generate_button.config(state="normal")
+            self.root.after(0, lambda: self.generate_button.config(state="normal"))
 
     def generate_video(self):
         """Start video generation process."""

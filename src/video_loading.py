@@ -16,6 +16,11 @@ try:
 except ImportError:
     from .compatibility.moviepy import import_moviepy_safely
 
+try:
+    from ffmpeg_paths import get_ffmpeg_exe, get_ffprobe_exe
+except ImportError:
+    from .ffmpeg_paths import get_ffmpeg_exe, get_ffprobe_exe
+
 
 class VideoResourceManager:
     """Ensures proper cleanup of VideoFileClip resources with support for delayed cleanup.
@@ -303,7 +308,7 @@ class VideoPreprocessor:
         try:
             # Run ffprobe to get video stream information
             cmd = [
-                "ffprobe",
+                get_ffprobe_exe(),
                 "-v",
                 "quiet",
                 "-print_format",
@@ -435,7 +440,7 @@ class VideoPreprocessor:
 
         try:
             # Build FFmpeg command based on preprocessing needs
-            cmd = ["ffmpeg", "-y", "-i", input_path]  # -y to overwrite
+            cmd = [get_ffmpeg_exe(), "-y", "-i", input_path]  # -y to overwrite
 
             # Video codec settings
             if any(
@@ -907,7 +912,7 @@ class RobustVideoLoader:
         try:
             # Build FFmpeg command for format conversion with intelligent canvas scaling
             cmd = [
-                "ffmpeg",
+                get_ffmpeg_exe(),
                 "-y",
                 "-i",
                 video_file,
@@ -1009,7 +1014,7 @@ class RobustVideoLoader:
         try:
             # Build FFmpeg command for quality reduction with intelligent canvas scaling
             cmd = [
-                "ffmpeg",
+                get_ffmpeg_exe(),
                 "-y",
                 "-i",
                 video_file,
@@ -1118,7 +1123,7 @@ class RobustVideoLoader:
         try:
             # Emergency settings: maximum compatibility, minimal quality, with intelligent canvas scaling
             cmd = [
-                "ffmpeg",
+                get_ffmpeg_exe(),
                 "-y",
                 "-i",
                 video_file,

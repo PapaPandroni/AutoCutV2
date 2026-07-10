@@ -19,6 +19,11 @@ except ImportError:
     # Fallback to relative import for package execution context
     from ..core.exceptions import VideoProcessingError
 
+try:
+    from ffmpeg_paths import get_ffprobe_exe
+except ImportError:
+    from ..ffmpeg_paths import get_ffprobe_exe
+
 
 class CodecDetector:
     """
@@ -81,7 +86,7 @@ class CodecDetector:
         try:
             # Use FFprobe to get comprehensive video stream information
             cmd = [
-                "ffprobe",
+                get_ffprobe_exe(),
                 "-v",
                 "quiet",
                 "-print_format",
